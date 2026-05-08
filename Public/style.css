@@ -1830,3 +1830,40 @@ body.resizing-response {
   margin: 10px 0;
   color: #2e7d32;
 }
+/* ===== SAVED REQUEST INSTANCES ===== */
+.instances-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 8px 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.instances-bar.hidden {
+  display: none;
+}
+
+.instances-bar label {
+  color: var(--color-text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+#instanceSelect {
+  flex: 1;
+  min-width: 180px;
+  padding: 7px 10px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+#instanceSelect:focus {
+  outline: none;
+  border-color: #d1d9d4;
+}

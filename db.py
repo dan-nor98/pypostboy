@@ -76,9 +76,31 @@ class Database:
             )
         """)
         
+        # Create request instances table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS request_instances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                method TEXT NOT NULL DEFAULT 'GET',
+                url TEXT DEFAULT '',
+                headers TEXT DEFAULT '[]',
+                body_type TEXT DEFAULT 'none',
+                body_content TEXT DEFAULT '',
+                body_raw_type TEXT DEFAULT 'application/json',
+                form_data TEXT DEFAULT '[]',
+                auth_type TEXT DEFAULT 'none',
+                auth_data TEXT DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_parent_id ON collections(parent_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_collection_id ON requests(collection_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_instances_request_id ON request_instances(request_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_instances_updated_at ON request_instances(updated_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_sort_order ON collections(sort_order)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_sort_order ON requests(sort_order)")
         
@@ -692,3 +714,153 @@ class Requests:
         )
         
         return Requests.get_by_id(id)
+
+# ═══════════════════════════════════════════
+#  REQUEST INSTANCES / SNAPSHOTS
+# ═══════════════════════════════════════════
+
+class RequestInstances:
+
+    @staticmethod
+    def _row_to_instance(row):
+        """Convert a request_instances row into an API-ready dict."""
+        if not row:
+            return None
+
+        result = dict(row)
+        result['headers'] = safe_parse(result['headers'], [])
+        result['form_data'] = safe_parse(result['form_data'], [])
+        result['auth_data'] = safe_parse(result['auth_data'], {})
+        return result
+
+    @staticmethod
+    def get_by_id(id):
+        """Get a single saved request instance by ID."""
+        row = db.conn.execute(
+            "SELECT * FROM request_instances WHERE id = ?", (id,)
+        ).fetchone()
+        return RequestInstances._row_to_instance(row)
+
+    @staticmethod
+    def get_by_request(request_id):
+        """Get saved instances for a request, newest first."""
+        request_obj = Requests.get_by_id(request_id)
+        if not request_obj:
+            raise ValueError('Request not found')
+
+        rows = db.conn.execute(
+            """SELECT * FROM request_instances
+               WHERE request_id = ?
+               ORDER BY updated_at DESC, id DESC""",
+            (request_id,)
+        ).fetchall()
+        return [RequestInstances._row_to_instance(row) for row in rows]
+
+    @staticmethod
+    def create(request_id, data=None):
+        """Create a saved request instance from editor state."""
+        data = data or {}
+        request_obj = Requests.get_by_id(request_id)
+        if not request_obj:
+            raise ValueError('Request not found')
+
+        name = (data.get('name') or '').strip()
+        if not name:
+            raise ValueError('name is required')
+
+        now = timestamp()
+        cursor = db.conn.execute(
+            """INSERT INTO request_instances (
+                request_id, name, method, url, headers,
+                body_type, body_content, body_raw_type, form_data,
+                auth_type, auth_data, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                request_id,
+                name,
+                data.get('method', request_obj.get('method', 'GET')).upper(),
+                data.get('url', request_obj.get('url', '')),
+                safe_stringify(data.get('headers', request_obj.get('headers', [])), '[]'),
+                data.get('body_type', request_obj.get('body_type', 'none')),
+                data.get('body_content', data.get('body_raw', request_obj.get('body_content', ''))),
+                data.get('body_raw_type', request_obj.get('body_raw_type', 'application/json')),
+                safe_stringify(data.get('form_data', request_obj.get('form_data', [])), '[]'),
+                data.get('auth_type', request_obj.get('auth_type', 'none')),
+                safe_stringify(data.get('auth_data', request_obj.get('auth_data', {})), '{}'),
+                now,
+                now
+            )
+        )
+        db.conn.commit()
+        return RequestInstances.get_by_id(cursor.lastrowid)
+
+    @staticmethod
+    def update(id, data):
+        """Update a saved request instance."""
+        instance = RequestInstances.get_by_id(id)
+        if not instance:
+            raise ValueError('Request instance not found')
+
+        updates = []
+        params = []
+        field_mapping = {
+            'name': 'name',
+            'method': 'method',
+            'url': 'url',
+            'body_type': 'body_type',
+            'body_content': 'body_content',
+            'body_raw': 'body_content',
+            'body_raw_type': 'body_raw_type',
+            'auth_type': 'auth_type'
+        }
+
+        for key, db_field in field_mapping.items():
+            if key in data:
+                value = data[key]
+                if key == 'name':
+                    value = (value or '').strip()
+                    if not value:
+                        raise ValueError('name is required')
+                if key == 'method':
+                    value = value.upper()
+                updates.append(f'{db_field} = ?')
+                params.append(value)
+
+        if 'headers' in data:
+            updates.append('headers = ?')
+            params.append(safe_stringify(data['headers'], '[]'))
+        if 'form_data' in data:
+            updates.append('form_data = ?')
+            params.append(safe_stringify(data['form_data'], '[]'))
+        if 'auth_data' in data:
+            updates.append('auth_data = ?')
+            params.append(safe_stringify(data['auth_data'], '{}'))
+
+        if not updates:
+            return instance
+
+        updates.append('updated_at = ?')
+        params.append(timestamp())
+        params.append(id)
+
+        db.conn.execute(
+            f"UPDATE request_instances SET {', '.join(updates)} WHERE id = ?",
+            params
+        )
+        db.conn.commit()
+        return RequestInstances.get_by_id(id)
+
+    @staticmethod
+    def delete(id):
+        """Delete a saved request instance."""
+        result = db.conn.execute(
+            "SELECT id FROM request_instances WHERE id = ?", (id,)
+        ).fetchone()
+        if not result:
+            return {'deleted': 0}
+
+        db.conn.execute("DELETE FROM request_instances WHERE id = ?", (id,))
+        db.conn.commit()
+        return {'deleted': 1}
+
+
