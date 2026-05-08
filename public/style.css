@@ -1428,15 +1428,9 @@ body.resizing-response {
 }
 
 /* ===== RESPONSIVE ===== */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .app-container {
     overflow: auto;
-  }
-
-  .sidebar {
-    width: 240px !important;
-    min-width: 240px;
-    max-width: 240px;
   }
 
   .resize-handle {
@@ -1447,6 +1441,8 @@ body.resizing-response {
   .response-section {
     height: auto !important;
     max-height: none;
+  }
+
   body {
     overflow: hidden;
   }

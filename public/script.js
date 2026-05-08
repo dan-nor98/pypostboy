@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
     const RESPONSE_HEIGHT_KEY = 'postboy_response_height';
-    const MOBILE_RESIZE_QUERY = '(max-width: 768px)';
+    const MOBILE_RESIZE_QUERY = '(max-width: 1024px)';
 
     // ─── Panel Resizing ───────────────────────────────────
     function isMobileResizeLayout() {
@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.addEventListener('click', function(event) {
-        if (window.innerWidth <= 768 && appContainer && appContainer.classList.contains('sidebar-open')) {
+        if (isMobileResizeLayout() && appContainer && appContainer.classList.contains('sidebar-open')) {
             var target = event.target;
             if (!sidebar.contains(target) && (!sidebarToggleBtn || !sidebarToggleBtn.contains(target))) {
                 setSidebarOpen(false);
@@ -317,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('resize', function() {
-        if (window.innerWidth > 768) setSidebarOpen(false);
+        if (!isMobileResizeLayout()) setSidebarOpen(false);
     });
 
     // ─── Sidebar Tabs ─────────────────────────────────────
