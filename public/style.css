@@ -1678,6 +1678,26 @@ body.resizing-response {
     max-width: 100%;
   }
 
+  .request-tabs-bar {
+    align-items: center;
+    min-height: 56px;
+    padding: 8px;
+  }
+
+  .request-tabs-bar::before,
+  .request-tabs-bar::after {
+    top: 1px;
+    bottom: 1px;
+  }
+
+  .request-tabs-bar::after {
+    right: 52px;
+  }
+
+  .request-tabs {
+    align-items: center;
+    min-height: 44px;
+    padding-bottom: 0;
   .response-section {
     position: fixed;
     left: 0;
@@ -1782,6 +1802,11 @@ body.resizing-response {
     max-width: 220px;
   }
 
+  .btn-new-tab {
+    width: 44px;
+    height: 44px;
+  }
+
   .sidebar-tab,
   .right-sidebar-tab {
     padding: 12px 8px;
@@ -1857,7 +1882,7 @@ body.resizing-response {
   }
 
   .request-tabs-bar {
-    align-items: stretch;
+    align-items: center;
   }
 
   .request-tab-item {
