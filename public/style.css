@@ -1408,6 +1408,7 @@ body.resizing-response {
 .status-badge.s5xx { background: rgba(144, 18, 254, 0.2); color: #9012fe; }
 
 .btn-copy-response {
+  flex: 0 0 auto;
   padding: 4px 10px;
   background: var(--color-border);
   color: var(--color-text);
@@ -1697,6 +1698,8 @@ body.resizing-response {
     align-items: center;
     min-height: 44px;
     padding-bottom: 0;
+  }
+
   .response-section {
     position: fixed;
     left: 0;
@@ -1967,8 +1970,9 @@ body.resizing-response {
     gap: 8px;
   }
 
-  .btn-copy-response {
-    width: 100%;
+  .response-meta .btn-copy-response {
+    flex: 1 1 calc(50% - 4px);
+    width: auto;
   }
 
   #responseBody,

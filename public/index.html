@@ -259,7 +259,8 @@
                         <span id="statusCode" class="status-badge">---</span>
                         <span id="responseTime">0 ms</span>
                         <span id="responseSize">0 B</span>
-                        <button class="btn-copy-response" id="copyResponseBtn">📋 Copy</button>
+                        <button class="btn-copy-response" id="saveResponseSnapshotBtn" type="button">💾 Save</button>
+                        <button class="btn-copy-response" id="copyResponseBtn" type="button">📋 Copy</button>
                         <button class="response-sheet-toggle" id="responseSheetToggle" type="button" aria-label="Collapse response panel" aria-expanded="false">×</button>
                     </div>
                 </div>
@@ -289,9 +290,8 @@
             <div class="right-sidebar-panel active" id="snapshots-panel">
                 <div class="right-sidebar-section">
                     <h3>Snapshot Management</h3>
-                    <p class="right-sidebar-hint">Save snapshots for the active saved request, then click a snapshot to load it immediately.</p>
+                    <p class="right-sidebar-hint">Snapshots saved from the response header appear here. Click a snapshot to load it immediately.</p>
                     <div class="instances-bar hidden" id="instancesBar">
-                        <button class="btn-add-row" id="saveInstanceBtn" type="button">Save Snapshot</button>
                         <div id="snapshotList" class="snapshot-list" aria-label="Snapshots"></div>
                     </div>
                 </div>
