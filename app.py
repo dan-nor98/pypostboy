@@ -13,7 +13,7 @@ from flask_cors import CORS
 import requests as http_requests
 
 from db import (
-    db, Collections, Requests, 
+    db, Collections, Requests, RequestInstances, 
     safe_parse, timestamp
     )
 
@@ -431,6 +431,64 @@ def move_request(id):
             return jsonify({'success': False, 'error': 'collection_id required'}), 400
         req = Requests.move(id, collection_id)
         return jsonify({'success': True, 'data': req})
+    except Exception as err:
+        return jsonify({'success': False, 'error': str(err)}), 400
+
+
+# ═══════════════════════════════════════════════════════════════
+#  REQUEST INSTANCES API
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/api/requests/<int:id>/instances', methods=['GET'])
+def get_request_instances(id):
+    """Get saved instances for a request"""
+    try:
+        instances = RequestInstances.get_by_request(id)
+        return jsonify({'success': True, 'data': instances})
+    except ValueError as err:
+        return jsonify({'success': False, 'error': str(err)}), 404
+    except Exception as err:
+        return jsonify({'success': False, 'error': str(err)}), 500
+
+
+@app.route('/api/requests/<int:id>/instances', methods=['POST'])
+def create_request_instance(id):
+    """Create a saved instance for a request"""
+    try:
+        instance = RequestInstances.create(id, request.get_json(silent=True) or {})
+        return jsonify({'success': True, 'data': instance}), 201
+    except Exception as err:
+        return jsonify({'success': False, 'error': str(err)}), 400
+
+
+@app.route('/api/request-instances/<int:instance_id>', methods=['GET'])
+def get_request_instance(instance_id):
+    """Get a saved request instance"""
+    try:
+        instance = RequestInstances.get_by_id(instance_id)
+        if not instance:
+            return jsonify({'success': False, 'error': 'Request instance not found'}), 404
+        return jsonify({'success': True, 'data': instance})
+    except Exception as err:
+        return jsonify({'success': False, 'error': str(err)}), 500
+
+
+@app.route('/api/request-instances/<int:instance_id>', methods=['PUT'])
+def update_request_instance(instance_id):
+    """Update a saved request instance"""
+    try:
+        instance = RequestInstances.update(instance_id, request.get_json(silent=True) or {})
+        return jsonify({'success': True, 'data': instance})
+    except Exception as err:
+        return jsonify({'success': False, 'error': str(err)}), 400
+
+
+@app.route('/api/request-instances/<int:instance_id>', methods=['DELETE'])
+def delete_request_instance(instance_id):
+    """Delete a saved request instance"""
+    try:
+        result = RequestInstances.delete(instance_id)
+        return jsonify({'success': True, 'data': result})
     except Exception as err:
         return jsonify({'success': False, 'error': str(err)}), 400
 

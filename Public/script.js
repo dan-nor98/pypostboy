@@ -44,7 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addEnvVarBtn      = document.getElementById('addEnvVarBtn');
     const paramsBody        = document.getElementById('paramsBody');
     const addParamBtn       = document.getElementById('addParamBtn');
-    const sidebar          = document.getElementById('sidebar');
     const mainContent      = document.querySelector('.main-content');
     const requestSection   = document.getElementById('requestSection');
     const responseSection  = document.getElementById('responseSection');
@@ -54,6 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebar           = document.getElementById('sidebar');
     const sidebarToggleBtn  = document.getElementById('sidebarToggleBtn');
     const sidebarCloseBtn   = document.getElementById('sidebarCloseBtn');
+    const instancesBar      = document.getElementById('instancesBar');
+    const instanceSelect    = document.getElementById('instanceSelect');
+    const saveInstanceBtn   = document.getElementById('saveInstanceBtn');
+    const loadInstanceBtn   = document.getElementById('loadInstanceBtn');
+    const renameInstanceBtn = document.getElementById('renameInstanceBtn');
+    const deleteInstanceBtn = document.getElementById('deleteInstanceBtn');
 
     // New Collection elements
     const newCollectionBtn     = document.getElementById('newCollectionBtn');
@@ -104,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let collectionsData       = [];
     let dragState             = null;
     let draggedTabId          = null;
+    let activeRequestInstances = [];
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
@@ -1507,6 +1513,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderRequestTabs();
         loadStateIntoEditor(tab.state, tab.method);
         highlightSidebarForTab(tab);
+        refreshInstancesForActiveTab();
         persistOpenTabs(false);
     }
 
@@ -1682,6 +1689,17 @@ document.addEventListener('DOMContentLoaded', () => {
         openNewTab();
     });
 
+    saveInstanceBtn.addEventListener('click', saveCurrentInstance);
+    loadInstanceBtn.addEventListener('click', loadSelectedInstance);
+    renameInstanceBtn.addEventListener('click', renameSelectedInstance);
+    deleteInstanceBtn.addEventListener('click', deleteSelectedInstance);
+    instanceSelect.addEventListener('change', function() {
+        var hasSelected = !!instanceSelect.value;
+        loadInstanceBtn.disabled = !hasSelected;
+        renameInstanceBtn.disabled = !hasSelected;
+        deleteInstanceBtn.disabled = !hasSelected;
+    });
+
     // ─── Tab context menu ──────────────────────────────────
     var tabCtxTarget = null;
 
@@ -1784,7 +1802,8 @@ document.addEventListener('DOMContentLoaded', () => {
             body_content: '',
             form_data:    [],
             auth_type:    'none',
-            auth_data:    {}
+            auth_data:    {},
+            body_raw_type: 'application/json'
         };
     }
 
@@ -1797,7 +1816,8 @@ document.addEventListener('DOMContentLoaded', () => {
             body_content: req.body_content || '',
             form_data:    req.form_data    || [],
             auth_type:    req.auth_type    || 'none',
-            auth_data:    req.auth_data    || {}
+            auth_data:    req.auth_data    || {},
+            body_raw_type: req.body_raw_type || 'application/json'
         };
     }
 
@@ -1909,13 +1929,196 @@ document.addEventListener('DOMContentLoaded', () => {
             body_content: bodyContentVal,
             form_data:    formData,
             auth_type:    authType,
-            auth_data:    authData
+            auth_data:    authData,
+            body_raw_type: 'application/json'
         };
     }
 
     // Keep gatherRequestState as alias for backward compat
     function gatherRequestState() {
         return gatherEditorState();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  REQUEST INSTANCES / SNAPSHOTS
+    // ═══════════════════════════════════════════════════════
+
+    function getActiveSavedTab() {
+        return openTabs.find(function(t) { return t.id === activeTabId && t.requestId; }) || null;
+    }
+
+    function renderInstancesBar(instances) {
+        var tab = getActiveSavedTab();
+        activeRequestInstances = instances || [];
+
+        if (!tab) {
+            instancesBar.classList.add('hidden');
+            instanceSelect.innerHTML = '<option value="">Save this request first</option>';
+            return;
+        }
+
+        instancesBar.classList.remove('hidden');
+        instanceSelect.innerHTML = '';
+
+        if (!activeRequestInstances.length) {
+            var empty = document.createElement('option');
+            empty.value = '';
+            empty.textContent = 'No snapshots yet';
+            instanceSelect.appendChild(empty);
+        } else {
+            activeRequestInstances.forEach(function(instance) {
+                var opt = document.createElement('option');
+                opt.value = instance.id;
+                opt.textContent = instance.name;
+                instanceSelect.appendChild(opt);
+            });
+        }
+
+        var hasSelected = !!instanceSelect.value;
+        loadInstanceBtn.disabled = !hasSelected;
+        renameInstanceBtn.disabled = !hasSelected;
+        deleteInstanceBtn.disabled = !hasSelected;
+    }
+
+    async function refreshInstancesForActiveTab() {
+        var tab = getActiveSavedTab();
+        if (!tab) {
+            renderInstancesBar([]);
+            return;
+        }
+
+        try {
+            var res = await fetch('/api/requests/' + tab.requestId + '/instances');
+            var json = await res.json();
+            if (json.success) {
+                renderInstancesBar(json.data || []);
+            } else {
+                renderInstancesBar([]);
+                showToast('Could not load snapshots: ' + json.error, 'error');
+            }
+        } catch (err) {
+            renderInstancesBar([]);
+            showToast('Could not load snapshots: ' + err.message, 'error');
+        }
+    }
+
+    async function saveCurrentInstance() {
+        var tab = getActiveSavedTab();
+        if (!tab) {
+            showToast('Save the request before creating snapshots', 'error');
+            return;
+        }
+
+        var defaultName = tab.label + ' snapshot';
+        var name = prompt('Snapshot name', defaultName);
+        if (name === null) return;
+        name = name.trim();
+        if (!name) {
+            showToast('Snapshot name is required', 'error');
+            return;
+        }
+
+        var state = gatherEditorState();
+        state.name = name;
+
+        try {
+            var res = await fetch('/api/requests/' + tab.requestId + '/instances', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state)
+            });
+            var json = await res.json();
+            if (json.success) {
+                showToast('Snapshot saved', 'success');
+                await refreshInstancesForActiveTab();
+                instanceSelect.value = String(json.data.id);
+            } else {
+                showToast('Error: ' + json.error, 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
+    }
+
+    async function loadSelectedInstance() {
+        var id = instanceSelect.value;
+        if (!id) return;
+
+        try {
+            var res = await fetch('/api/request-instances/' + id);
+            var json = await res.json();
+            if (json.success) {
+                var tab = getActiveSavedTab();
+                var state = reqToState(json.data);
+                loadStateIntoEditor(state, state.method);
+                if (tab) {
+                    tab.state = state;
+                    tab.method = state.method;
+                    tab.unsaved = true;
+                    renderRequestTabs();
+                    persistOpenTabs(false);
+                }
+                showToast('Snapshot loaded into editor', 'success');
+            } else {
+                showToast('Error: ' + json.error, 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
+    }
+
+    async function renameSelectedInstance() {
+        var id = instanceSelect.value;
+        if (!id) return;
+
+        var selected = activeRequestInstances.find(function(instance) { return String(instance.id) === String(id); });
+        var name = prompt('Rename snapshot', selected ? selected.name : '');
+        if (name === null) return;
+        name = name.trim();
+        if (!name) {
+            showToast('Snapshot name is required', 'error');
+            return;
+        }
+
+        try {
+            var res = await fetch('/api/request-instances/' + id, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name })
+            });
+            var json = await res.json();
+            if (json.success) {
+                showToast('Snapshot renamed', 'success');
+                await refreshInstancesForActiveTab();
+                instanceSelect.value = String(id);
+            } else {
+                showToast('Error: ' + json.error, 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
+    }
+
+    async function deleteSelectedInstance() {
+        var id = instanceSelect.value;
+        if (!id) return;
+
+        var selected = activeRequestInstances.find(function(instance) { return String(instance.id) === String(id); });
+        var name = selected ? selected.name : 'selected snapshot';
+        if (!confirm('Delete snapshot "' + name + '"?')) return;
+
+        try {
+            var res = await fetch('/api/request-instances/' + id, { method: 'DELETE' });
+            var json = await res.json();
+            if (json.success) {
+                showToast('Snapshot deleted', 'success');
+                await refreshInstancesForActiveTab();
+            } else {
+                showToast('Error: ' + json.error, 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
     }
 
     // ─── Save active tab's request ─────────────────────────
@@ -1941,6 +2144,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderRequestTabs();
                 persistOpenTabs(false);
                 showToast('Request saved', 'success');
+                refreshInstancesForActiveTab();
                 loadCollections();
             } else {
                 showToast('Error: ' + json.error, 'error');

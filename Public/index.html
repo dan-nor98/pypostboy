@@ -129,6 +129,18 @@
                 <button class="btn-new-tab" id="newTabBtn" title="New Request">+</button>
             </div>
 
+            <!-- Saved Instances -->
+            <div class="instances-bar hidden" id="instancesBar">
+                <label for="instanceSelect">Snapshots</label>
+                <select id="instanceSelect">
+                    <option value="">No snapshots</option>
+                </select>
+                <button class="btn-add-row" id="saveInstanceBtn" type="button">Save Snapshot</button>
+                <button class="btn-add-row" id="loadInstanceBtn" type="button">Load</button>
+                <button class="btn-add-row" id="renameInstanceBtn" type="button">Rename</button>
+                <button class="btn-remove" id="deleteInstanceBtn" type="button">Delete</button>
+            </div>
+
             <!-- URL Bar -->
             <div class="url-bar">
                 <select id="methodSelect">
