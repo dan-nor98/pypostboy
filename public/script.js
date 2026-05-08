@@ -53,6 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebar           = document.getElementById('sidebar');
     const sidebarToggleBtn  = document.getElementById('sidebarToggleBtn');
     const sidebarCloseBtn   = document.getElementById('sidebarCloseBtn');
+    const rightSidebar      = document.getElementById('rightSidebar');
+    const rightSidebarToggleBtn = document.getElementById('rightSidebarToggleBtn');
+    const rightSidebarCloseBtn  = document.getElementById('rightSidebarCloseBtn');
+    const sidebarCurlOutput = document.getElementById('sidebarCurlOutput');
+    const generateSidebarCurlBtn = document.getElementById('generateSidebarCurlBtn');
+    const copySidebarCurlBtn = document.getElementById('copySidebarCurlBtn');
     const instancesBar      = document.getElementById('instancesBar');
     const instanceSelect    = document.getElementById('instanceSelect');
     const saveInstanceBtn   = document.getElementById('saveInstanceBtn');
@@ -285,12 +291,21 @@ document.addEventListener('DOMContentLoaded', () => {
         tabContextMenu.classList.remove('active');
     });
 
-    // ─── Mobile Sidebar Toggle ────────────────────────────
+    // ─── Mobile Sidebar Toggles ───────────────────────────
     function setSidebarOpen(isOpen) {
         if (!appContainer) return;
 
         appContainer.classList.toggle('sidebar-open', isOpen);
+        if (isOpen) setRightSidebarOpen(false);
         if (sidebarToggleBtn) sidebarToggleBtn.setAttribute('aria-expanded', String(isOpen));
+    }
+
+    function setRightSidebarOpen(isOpen) {
+        if (!appContainer) return;
+
+        appContainer.classList.toggle('right-sidebar-open', isOpen);
+        if (isOpen) setSidebarOpen(false);
+        if (rightSidebarToggleBtn) rightSidebarToggleBtn.setAttribute('aria-expanded', String(isOpen));
     }
 
     if (sidebarToggleBtn) {
@@ -307,17 +322,42 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (rightSidebarToggleBtn) {
+        rightSidebarToggleBtn.addEventListener('click', function(event) {
+            event.stopPropagation();
+            setRightSidebarOpen(!appContainer.classList.contains('right-sidebar-open'));
+        });
+    }
+
+    if (rightSidebarCloseBtn) {
+        rightSidebarCloseBtn.addEventListener('click', function(event) {
+            event.stopPropagation();
+            setRightSidebarOpen(false);
+        });
+    }
+
     document.addEventListener('click', function(event) {
-        if (isMobileResizeLayout() && appContainer && appContainer.classList.contains('sidebar-open')) {
-            var target = event.target;
+        if (!isMobileResizeLayout() || !appContainer) return;
+
+        var target = event.target;
+        if (appContainer.classList.contains('sidebar-open') && sidebar) {
             if (!sidebar.contains(target) && (!sidebarToggleBtn || !sidebarToggleBtn.contains(target))) {
                 setSidebarOpen(false);
+            }
+        }
+
+        if (appContainer.classList.contains('right-sidebar-open') && rightSidebar) {
+            if (!rightSidebar.contains(target) && (!rightSidebarToggleBtn || !rightSidebarToggleBtn.contains(target))) {
+                setRightSidebarOpen(false);
             }
         }
     });
 
     window.addEventListener('resize', function() {
-        if (!isMobileResizeLayout()) setSidebarOpen(false);
+        if (!isMobileResizeLayout()) {
+            setSidebarOpen(false);
+            setRightSidebarOpen(false);
+        }
     });
 
     // ─── Sidebar Tabs ─────────────────────────────────────
@@ -333,6 +373,24 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.sidebar-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
             activateSidebarPanel(tab.dataset.target);
+        });
+    });
+
+    // ─── Right Sidebar Tabs ────────────────────────────────
+    function activateRightSidebarPanel(panelId) {
+        document.querySelectorAll('.right-sidebar-tab').forEach(function(t) {
+            t.classList.toggle('active', t.dataset.target === panelId);
+        });
+        document.querySelectorAll('.right-sidebar-panel').forEach(function(p) {
+            p.classList.toggle('active', p.id === panelId);
+        });
+
+        if (panelId === 'curl-panel') updateSidebarCurlOutput();
+    }
+
+    document.querySelectorAll('.right-sidebar-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            activateRightSidebarPanel(tab.dataset.target);
         });
     });
 
@@ -3154,7 +3212,7 @@ document.addEventListener('DOMContentLoaded', () => {
     //  EXPORT cURL
     // ═══════════════════════════════════════════════════════
 
-    exportCurlBtn.addEventListener('click', function() {
+    function buildCurlCommand() {
         var method = methodSelect.value;
         var url = replaceEnvVars(urlInput.value.trim());
         var parts = ['curl -X ' + method];
@@ -3187,9 +3245,36 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        exportOutput.value = parts.join(' \\\n  ');
+        return parts.join(' \\' + '\n  ');
+    }
+
+    function updateSidebarCurlOutput() {
+        if (!sidebarCurlOutput) return;
+        sidebarCurlOutput.value = buildCurlCommand();
+    }
+
+    exportCurlBtn.addEventListener('click', function() {
+        var curlCommand = buildCurlCommand();
+        exportOutput.value = curlCommand;
+        if (sidebarCurlOutput) sidebarCurlOutput.value = curlCommand;
         exportModal.classList.add('active');
     });
+
+    if (generateSidebarCurlBtn) {
+        generateSidebarCurlBtn.addEventListener('click', function() {
+            updateSidebarCurlOutput();
+            showToast('cURL output generated', 'success');
+        });
+    }
+
+    if (copySidebarCurlBtn) {
+        copySidebarCurlBtn.addEventListener('click', function() {
+            updateSidebarCurlOutput();
+            sidebarCurlOutput.select();
+            document.execCommand('copy');
+            showToast('Copied to clipboard', 'success');
+        });
+    }
 
     exportModalClose.addEventListener('click', function() { exportModal.classList.remove('active'); });
     copyExportBtn.addEventListener('click', function() {

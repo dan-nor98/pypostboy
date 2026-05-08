@@ -121,24 +121,15 @@
 
         <!-- Main Content -->
         <div class="main-content">
-            <button class="mobile-sidebar-toggle" id="sidebarToggleBtn" type="button" aria-controls="sidebar" aria-expanded="false">☰ Menu</button>
+            <div class="mobile-toolbar">
+                <button class="mobile-sidebar-toggle" id="sidebarToggleBtn" type="button" aria-controls="sidebar" aria-expanded="false">☰ Menu</button>
+                <button class="mobile-sidebar-toggle right-sidebar-toggle" id="rightSidebarToggleBtn" type="button" aria-controls="rightSidebar" aria-expanded="false">⚙ Tools</button>
+            </div>
 
             <!-- Request Tabs Bar -->
             <div class="request-tabs-bar" id="requestTabsBar">
                 <div class="request-tabs" id="requestTabs"></div>
                 <button class="btn-new-tab" id="newTabBtn" title="New Request">+</button>
-            </div>
-
-            <!-- Saved Instances -->
-            <div class="instances-bar hidden" id="instancesBar">
-                <label for="instanceSelect">Snapshots</label>
-                <select id="instanceSelect">
-                    <option value="">No snapshots</option>
-                </select>
-                <button class="btn-add-row" id="saveInstanceBtn" type="button">Save Snapshot</button>
-                <button class="btn-add-row" id="loadInstanceBtn" type="button">Load</button>
-                <button class="btn-add-row" id="renameInstanceBtn" type="button">Rename</button>
-                <button class="btn-remove" id="deleteInstanceBtn" type="button">Delete</button>
             </div>
 
             <!-- URL Bar -->
@@ -280,6 +271,45 @@
                 </div>
             </div>
         </div>
+
+        <!-- Right Sidebar -->
+        <aside class="right-sidebar" id="rightSidebar" aria-label="Snapshots and cURL tools">
+            <div class="right-sidebar-header">
+                <h2>Tools</h2>
+                <button class="right-sidebar-close" id="rightSidebarCloseBtn" type="button" aria-label="Close tools sidebar">×</button>
+            </div>
+            <div class="right-sidebar-tabs">
+                <button class="right-sidebar-tab active" data-target="snapshots-panel">Snapshots</button>
+                <button class="right-sidebar-tab" data-target="curl-panel">cURL</button>
+            </div>
+            <div class="right-sidebar-panel active" id="snapshots-panel">
+                <div class="right-sidebar-section">
+                    <h3>Snapshot Management</h3>
+                    <p class="right-sidebar-hint">Save, load, rename, or delete snapshots for the active saved request.</p>
+                    <div class="instances-bar hidden" id="instancesBar">
+                        <label for="instanceSelect">Snapshots</label>
+                        <select id="instanceSelect">
+                            <option value="">No snapshots</option>
+                        </select>
+                        <button class="btn-add-row" id="saveInstanceBtn" type="button">Save Snapshot</button>
+                        <button class="btn-add-row" id="loadInstanceBtn" type="button">Load</button>
+                        <button class="btn-add-row" id="renameInstanceBtn" type="button">Rename</button>
+                        <button class="btn-remove" id="deleteInstanceBtn" type="button">Delete</button>
+                    </div>
+                </div>
+            </div>
+            <div class="right-sidebar-panel" id="curl-panel">
+                <div class="right-sidebar-section">
+                    <h3>cURL Output</h3>
+                    <p class="right-sidebar-hint">Generate the active request as a cURL command without leaving the editor.</p>
+                    <textarea id="sidebarCurlOutput" class="right-sidebar-output" rows="12" readonly placeholder="Generate cURL output for the active request..."></textarea>
+                    <div class="right-sidebar-actions">
+                        <button class="btn-add-row" id="generateSidebarCurlBtn" type="button">Generate cURL</button>
+                        <button class="btn-export" id="copySidebarCurlBtn" type="button">Copy</button>
+                    </div>
+                </div>
+            </div>
+        </aside>
     </div>
 
     <!-- Context Menu -->
