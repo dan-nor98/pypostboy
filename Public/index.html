@@ -116,6 +116,8 @@
             </div>
         </div>
 
+        <div class="resize-handle resize-handle-vertical" id="sidebarResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
+
         <!-- Main Content -->
         <div class="main-content">
             <!-- Request Tabs Bar -->
@@ -150,7 +152,7 @@
             </div>
 
             <!-- Request Config -->
-            <div class="request-section">
+            <div class="request-section" id="requestSection">
                 <div class="tab-bar">
                     <button class="tab active" data-tab="params">Params</button>
                     <button class="tab" data-tab="headers">Headers</button>
@@ -234,6 +236,8 @@
                     <button class="btn-send" id="copyExportBtn">Copy to Clipboard</button>
                 </div>
             </div>
+
+            <div class="resize-handle resize-handle-horizontal" id="responseResizeHandle" role="separator" aria-orientation="horizontal" aria-label="Resize response panel" tabindex="0"></div>
 
             <!-- Response Section -->
             <div class="response-section" id="responseSection">
