@@ -60,11 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const generateSidebarCurlBtn = document.getElementById('generateSidebarCurlBtn');
     const copySidebarCurlBtn = document.getElementById('copySidebarCurlBtn');
     const instancesBar      = document.getElementById('instancesBar');
-    const instanceSelect    = document.getElementById('instanceSelect');
+    const snapshotList      = document.getElementById('snapshotList');
     const saveInstanceBtn   = document.getElementById('saveInstanceBtn');
-    const loadInstanceBtn   = document.getElementById('loadInstanceBtn');
-    const renameInstanceBtn = document.getElementById('renameInstanceBtn');
-    const deleteInstanceBtn = document.getElementById('deleteInstanceBtn');
 
     // New Collection elements
     const newCollectionBtn     = document.getElementById('newCollectionBtn');
@@ -116,6 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let dragState             = null;
     let draggedTabId          = null;
     let activeRequestInstances = [];
+    let selectedSnapshotId     = '';
+    let loadingSnapshotId      = '';
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
@@ -1747,15 +1746,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     saveInstanceBtn.addEventListener('click', saveCurrentInstance);
-    loadInstanceBtn.addEventListener('click', loadSelectedInstance);
-    renameInstanceBtn.addEventListener('click', renameSelectedInstance);
-    deleteInstanceBtn.addEventListener('click', deleteSelectedInstance);
-    instanceSelect.addEventListener('change', function() {
-        var hasSelected = !!instanceSelect.value;
-        loadInstanceBtn.disabled = !hasSelected;
-        renameInstanceBtn.disabled = !hasSelected;
-        deleteInstanceBtn.disabled = !hasSelected;
-    });
 
     // ─── Tab context menu ──────────────────────────────────
     var tabCtxTarget = null;
@@ -2096,33 +2086,54 @@ document.addEventListener('DOMContentLoaded', () => {
         var tab = getActiveSavedTab();
         activeRequestInstances = instances || [];
 
+        instancesBar.classList.remove('hidden');
+        snapshotList.innerHTML = '';
+        saveInstanceBtn.disabled = !tab;
+
         if (!tab) {
-            instancesBar.classList.add('hidden');
-            instanceSelect.innerHTML = '<option value="">Save this request first</option>';
+            selectedSnapshotId = '';
+            loadingSnapshotId = '';
+            var unsaved = document.createElement('div');
+            unsaved.className = 'snapshot-list-item is-disabled';
+            unsaved.textContent = 'Save this request first to create snapshots.';
+            snapshotList.appendChild(unsaved);
             return;
         }
 
-        instancesBar.classList.remove('hidden');
-        instanceSelect.innerHTML = '';
-
         if (!activeRequestInstances.length) {
-            var empty = document.createElement('option');
-            empty.value = '';
-            empty.textContent = 'No snapshots yet';
-            instanceSelect.appendChild(empty);
-        } else {
-            activeRequestInstances.forEach(function(instance) {
-                var opt = document.createElement('option');
-                opt.value = instance.id;
-                opt.textContent = instance.name;
-                instanceSelect.appendChild(opt);
-            });
+            selectedSnapshotId = '';
+            loadingSnapshotId = '';
+            var empty = document.createElement('div');
+            empty.className = 'snapshot-list-item is-disabled';
+            empty.textContent = 'No snapshots yet. Save one to get started.';
+            snapshotList.appendChild(empty);
+            return;
         }
 
-        var hasSelected = !!instanceSelect.value;
-        loadInstanceBtn.disabled = !hasSelected;
-        renameInstanceBtn.disabled = !hasSelected;
-        deleteInstanceBtn.disabled = !hasSelected;
+        var selectedExists = activeRequestInstances.some(function(instance) {
+            return String(instance.id) === String(selectedSnapshotId);
+        });
+        if (!selectedExists) {
+            selectedSnapshotId = String(activeRequestInstances[0].id);
+        }
+
+        activeRequestInstances.forEach(function(instance) {
+            var id = String(instance.id);
+            var item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'snapshot-list-item';
+            if (id === String(selectedSnapshotId)) item.classList.add('is-active');
+            if (id === String(loadingSnapshotId)) {
+                item.classList.add('is-loading');
+                item.setAttribute('aria-busy', 'true');
+            }
+            item.textContent = instance.name || 'Untitled snapshot';
+            item.addEventListener('click', function() {
+                selectedSnapshotId = id;
+                loadSelectedInstance(id);
+            });
+            snapshotList.appendChild(item);
+        });
     }
 
     async function refreshInstancesForActiveTab() {
@@ -2176,7 +2187,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (json.success) {
                 showToast('Snapshot saved', 'success');
                 await refreshInstancesForActiveTab();
-                instanceSelect.value = String(json.data.id);
+                selectedSnapshotId = String(json.data.id);
+                renderInstancesBar(activeRequestInstances);
             } else {
                 showToast('Error: ' + json.error, 'error');
             }
@@ -2185,9 +2197,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function loadSelectedInstance() {
-        var id = instanceSelect.value;
+    async function loadSelectedInstance(snapshotId) {
+        var id = snapshotId || selectedSnapshotId;
         if (!id) return;
+
+        selectedSnapshotId = String(id);
+        loadingSnapshotId = String(id);
+        renderInstancesBar(activeRequestInstances);
 
         try {
             var res = await fetch('/api/request-instances/' + id);
@@ -2210,11 +2226,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
+        } finally {
+            loadingSnapshotId = '';
+            renderInstancesBar(activeRequestInstances);
         }
     }
 
-    async function renameSelectedInstance() {
-        var id = instanceSelect.value;
+    async function renameSelectedInstance(snapshotId) {
+        var id = snapshotId || selectedSnapshotId;
         if (!id) return;
 
         var selected = activeRequestInstances.find(function(instance) { return String(instance.id) === String(id); });
@@ -2236,7 +2255,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (json.success) {
                 showToast('Snapshot renamed', 'success');
                 await refreshInstancesForActiveTab();
-                instanceSelect.value = String(id);
+                selectedSnapshotId = String(id);
+                renderInstancesBar(activeRequestInstances);
             } else {
                 showToast('Error: ' + json.error, 'error');
             }
@@ -2245,8 +2265,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function deleteSelectedInstance() {
-        var id = instanceSelect.value;
+    async function deleteSelectedInstance(snapshotId) {
+        var id = snapshotId || selectedSnapshotId;
         if (!id) return;
 
         var selected = activeRequestInstances.find(function(instance) { return String(instance.id) === String(id); });
