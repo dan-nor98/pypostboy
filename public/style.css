@@ -2126,31 +2126,73 @@ body.resizing-response {
 .snapshot-list-item {
   width: 100%;
   min-height: 36px;
-  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--color-bg);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
+  font: inherit;
+  overflow: hidden;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.snapshot-list-item:hover:not(.is-disabled),
+.snapshot-list-item:focus-within:not(.is-disabled) {
+  background: var(--color-surface);
+  border-color: #d1d9d4;
+  outline: none;
+}
+
+.snapshot-list-label {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 8px 4px 8px 10px;
+  background: transparent;
+  border: 0;
+  color: inherit;
   cursor: pointer;
   font: inherit;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.snapshot-list-item:hover:not(.is-disabled),
-.snapshot-list-item:focus-visible:not(.is-disabled) {
-  background: var(--color-surface);
-  border-color: #d1d9d4;
-  outline: none;
+.snapshot-list-label:focus-visible,
+.snapshot-overflow-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.snapshot-overflow-button {
+  width: 32px;
+  min-height: 34px;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+.snapshot-overflow-button:hover,
+.snapshot-overflow-button[aria-expanded="true"] {
+  background: rgba(61, 163, 122, 0.15);
 }
 
 .snapshot-list-item.is-active {
   background: #0f2e21;
   border-color: var(--color-accent);
   color: var(--color-accent-hover);
+}
+
+.snapshot-list-item.is-active .snapshot-list-label,
+.snapshot-list-item.is-active .snapshot-overflow-button {
   font-weight: 600;
 }
 
@@ -2161,16 +2203,18 @@ body.resizing-response {
 
 .snapshot-list-item.is-loading::after {
   content: 'Loading…';
-  float: right;
   color: var(--color-text-muted);
   font-size: 0.85em;
   font-weight: 400;
+  padding-right: 8px;
 }
 
 .snapshot-list-item.is-disabled {
+  display: block;
   cursor: default;
   color: var(--color-text-muted);
   background: var(--color-surface);
   border-style: dashed;
+  padding: 8px 10px;
   white-space: normal;
 }
