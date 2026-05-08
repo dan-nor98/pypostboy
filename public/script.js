@@ -96,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const contextMenu        = document.getElementById('contextMenu');
     const requestContextMenu = document.getElementById('requestContextMenu');
     const tabContextMenu     = document.getElementById('tabContextMenu');
+    const snapshotContextMenu = document.getElementById('snapshotContextMenu');
 
     // ─── State ─────────────────────────────────────────────
     let loopActive            = false;
@@ -117,6 +118,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeRequestInstances = [];
     let selectedSnapshotId     = '';
     let loadingSnapshotId      = '';
+    let snapshotContextTargetId = '';
+    let snapshotContextTrigger  = null;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
@@ -331,6 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.classList.remove('active');
         requestContextMenu.classList.remove('active');
         tabContextMenu.classList.remove('active');
+        closeSnapshotContextMenu();
     });
 
     // ─── Mobile Sidebar Toggles ───────────────────────────
@@ -1051,6 +1055,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function showCtxMenu(menu, x, y) {
         contextMenu.classList.remove('active');
         requestContextMenu.classList.remove('active');
+        tabContextMenu.classList.remove('active');
+        closeSnapshotContextMenu();
 
         menu.style.left = x + 'px';
         menu.style.top = y + 'px';
@@ -1067,6 +1073,84 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 0);
     }
+
+    function closeSnapshotContextMenu(options) {
+        if (!snapshotContextMenu) return;
+
+        var shouldRestoreFocus = options && options.restoreFocus;
+        snapshotContextMenu.classList.remove('active');
+        snapshotContextTargetId = '';
+
+        if (snapshotContextTrigger) {
+            snapshotContextTrigger.setAttribute('aria-expanded', 'false');
+            if (shouldRestoreFocus) snapshotContextTrigger.focus();
+        }
+        snapshotContextTrigger = null;
+    }
+
+    function showSnapshotContextMenu(snapshotId, x, y, trigger) {
+        if (!snapshotContextMenu || !snapshotId) return;
+
+        contextMenu.classList.remove('active');
+        requestContextMenu.classList.remove('active');
+        tabContextMenu.classList.remove('active');
+        closeSnapshotContextMenu();
+
+        snapshotContextTargetId = String(snapshotId);
+        snapshotContextTrigger = trigger || null;
+        if (snapshotContextTrigger) {
+            snapshotContextTrigger.setAttribute('aria-expanded', 'true');
+        }
+
+        snapshotContextMenu.style.left = x + 'px';
+        snapshotContextMenu.style.top = y + 'px';
+        snapshotContextMenu.classList.add('active');
+
+        setTimeout(function() {
+            var rect = snapshotContextMenu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) {
+                snapshotContextMenu.style.left = (window.innerWidth - rect.width - 10) + 'px';
+            }
+            if (rect.bottom > window.innerHeight) {
+                snapshotContextMenu.style.top = (window.innerHeight - rect.height - 10) + 'px';
+            }
+        }, 0);
+    }
+
+    // ─── Snapshot Context Menu Actions ─────────────────────
+    snapshotContextMenu.querySelectorAll('.context-menu-item').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var action = item.dataset.action;
+            var snapshotId = snapshotContextTargetId;
+            closeSnapshotContextMenu({ restoreFocus: true });
+            if (!snapshotId) return;
+
+            if (action === 'rename') {
+                renameSelectedInstance(snapshotId);
+            } else if (action === 'delete') {
+                deleteSelectedInstance(snapshotId);
+            }
+        });
+
+        item.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                item.click();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeSnapshotContextMenu({ restoreFocus: true });
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                var menuItems = Array.prototype.slice.call(snapshotContextMenu.querySelectorAll('.context-menu-item'));
+                var currentIndex = menuItems.indexOf(item);
+                var nextIndex = e.key === 'ArrowDown' ? currentIndex + 1 : currentIndex - 1;
+                if (nextIndex < 0) nextIndex = menuItems.length - 1;
+                if (nextIndex >= menuItems.length) nextIndex = 0;
+                menuItems[nextIndex].focus();
+            }
+        });
+    });
 
     // ─── Collection Context Menu Actions ───────────────────
     contextMenu.querySelectorAll('.context-menu-item').forEach(function(item) {
@@ -1798,6 +1882,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.classList.remove('active');
         requestContextMenu.classList.remove('active');
         tabContextMenu.classList.remove('active');
+        closeSnapshotContextMenu();
 
         // Show/hide save item based on whether it's a saved request
         var saveItem    = tabContextMenu.querySelector('[data-action="save"]');
@@ -2130,6 +2215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         activeRequestInstances = instances || [];
 
         instancesBar.classList.remove('hidden');
+        closeSnapshotContextMenu();
         snapshotList.innerHTML = '';
         saveInstanceBtn.disabled = !tab;
 
@@ -2162,19 +2248,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
         activeRequestInstances.forEach(function(instance) {
             var id = String(instance.id);
-            var item = document.createElement('button');
-            item.type = 'button';
+            var item = document.createElement('div');
             item.className = 'snapshot-list-item';
             if (id === String(selectedSnapshotId)) item.classList.add('is-active');
             if (id === String(loadingSnapshotId)) {
                 item.classList.add('is-loading');
                 item.setAttribute('aria-busy', 'true');
             }
-            item.textContent = instance.name || 'Untitled snapshot';
-            item.addEventListener('click', function() {
+
+            var loadButton = document.createElement('button');
+            loadButton.type = 'button';
+            loadButton.className = 'snapshot-list-label';
+            loadButton.textContent = instance.name || 'Untitled snapshot';
+            loadButton.addEventListener('click', function() {
                 selectedSnapshotId = id;
                 loadSelectedInstance(id);
             });
+
+            var menuButton = document.createElement('button');
+            menuButton.type = 'button';
+            menuButton.className = 'snapshot-overflow-button';
+            menuButton.setAttribute('aria-label', 'Open actions for ' + (instance.name || 'Untitled snapshot'));
+            menuButton.setAttribute('aria-haspopup', 'menu');
+            menuButton.setAttribute('aria-expanded', 'false');
+            menuButton.setAttribute('aria-controls', 'snapshotContextMenu');
+            menuButton.textContent = '⋮';
+            menuButton.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (snapshotContextMenu.classList.contains('active') && snapshotContextTargetId === id) {
+                    closeSnapshotContextMenu({ restoreFocus: true });
+                    return;
+                }
+
+                var rect = menuButton.getBoundingClientRect();
+                showSnapshotContextMenu(id, rect.left, rect.bottom + 4, menuButton);
+            });
+            menuButton.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    var rect = menuButton.getBoundingClientRect();
+                    showSnapshotContextMenu(id, rect.left, rect.bottom + 4, menuButton);
+                    var firstMenuItem = snapshotContextMenu.querySelector('.context-menu-item');
+                    if (firstMenuItem) firstMenuItem.focus();
+                } else if (e.key === 'Escape') {
+                    closeSnapshotContextMenu({ restoreFocus: true });
+                }
+            });
+
+            item.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                selectedSnapshotId = id;
+                snapshotList.querySelectorAll('.snapshot-list-item.is-active').forEach(function(activeItem) {
+                    activeItem.classList.remove('is-active');
+                });
+                item.classList.add('is-active');
+                showSnapshotContextMenu(id, e.clientX, e.clientY, menuButton);
+            });
+
+            item.appendChild(loadButton);
+            item.appendChild(menuButton);
             snapshotList.appendChild(item);
         });
     }
@@ -2276,7 +2408,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function renameSelectedInstance(snapshotId) {
-        var id = snapshotId || selectedSnapshotId;
+        var id = snapshotId ? String(snapshotId) : '';
         if (!id) return;
 
         var selected = activeRequestInstances.find(function(instance) { return String(instance.id) === String(id); });
@@ -2309,7 +2441,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function deleteSelectedInstance(snapshotId) {
-        var id = snapshotId || selectedSnapshotId;
+        var id = snapshotId ? String(snapshotId) : '';
         if (!id) return;
 
         var selected = activeRequestInstances.find(function(instance) { return String(instance.id) === String(id); });
