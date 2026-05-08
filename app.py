@@ -227,7 +227,10 @@ def _tokenize(cmd):
 #  FLASK APPLICATION
 # ═══════════════════════════════════════════
 
-app = Flask(__name__, static_folder='public', static_url_path='')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
+
+app = Flask(__name__, static_folder=None)
 CORS(app)
 
 # Increase max request size to 10MB
@@ -614,18 +617,18 @@ def proxy_request():
 @app.route('/')
 def index():
     """Serve the main index.html"""
-    return send_from_directory('public', 'index.html')
+    return send_from_directory(PUBLIC_DIR, 'index.html')
 
 
 @app.route('/<path:path>')
 def serve_static(path):
     """Serve static files and fallback to index.html for SPA"""
     # Check if file exists in public folder
-    full_path = os.path.join('public', path)
+    full_path = os.path.join(PUBLIC_DIR, path)
     if os.path.isfile(full_path):
-        return send_from_directory('public', path)
+        return send_from_directory(PUBLIC_DIR, path)
     # SPA fallback
-    return send_from_directory('public', 'index.html')
+    return send_from_directory(PUBLIC_DIR, 'index.html')
 
 
 # ═══════════════════════════════════════════════════════════════
