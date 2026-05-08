@@ -100,8 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let tabCounter            = 0;
     let contextTarget         = null;
     let activeRequestTab      = 'params';
-	let expandedCollections   = new Set();
+    let expandedCollections   = new Set();
     let collectionsData       = [];
+    let dragState             = null;
     let draggedTabId          = null;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
@@ -428,8 +429,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         collectionList.innerHTML = '';
+        collectionList.dataset.parentId = '';
+        attachCollectionContainerDragHandlers(collectionList, null);
         collections.forEach(function(col) {
-            renderCollectionNode(col, collectionList);
+            renderCollectionNode(col, collectionList, null);
         });
 
         // Restore expanded state after rendering
@@ -450,19 +453,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function restoreExpandedState() {
-    expandedCollections.forEach(function(id) {
-        var folder = document.querySelector('.collection-folder[data-id="' + id + '"]');
-        if (folder) {
-            var items = folder.querySelector('.folder-items');
-            var arrow = folder.querySelector('.folder-header .folder-arrow');
-            if (items) {
-                items.classList.add('open');
-                if (arrow) arrow.classList.add('open');
+        expandedCollections.forEach(function(id) {
+            var folder = document.querySelector('.collection-folder[data-id="' + id + '"]');
+            if (folder) {
+                var items = folder.querySelector('.folder-items');
+                var arrow = folder.querySelector('.folder-header .folder-arrow');
+                if (items) {
+                    items.classList.add('open');
+                    if (arrow) arrow.classList.add('open');
+                }
             }
-        }
-    });
-}
+        });
+    }
 
+    function renderCollectionNode(col, container, parentId) {
     function initializeRequestTabs() {
         loadCollections().then(function() {
             if (!restoreSavedTabs()) {
@@ -586,6 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var folder = document.createElement('div');
         folder.className = 'collection-folder';
         folder.dataset.id = col.id;
+        folder.dataset.parentId = parentId == null ? '' : String(parentId);
 
         // Calculate total requests including sub-folders recursively
         // function countTotalRequests(node) {
@@ -602,10 +607,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         var header = document.createElement('div');
         header.className = 'folder-header';
+        header.draggable = true;
+        header.dataset.id = col.id;
+        header.dataset.parentId = parentId == null ? '' : String(parentId);
         header.innerHTML =
         '<span class="folder-arrow">▶</span>' +
         '<span class="folder-name">' + escHtml(col.name) + '</span>' +
         '<span class="folder-count">' + totalRequests + '</span>';
+
+        attachCollectionDragHandlers(header);
 
         // Toggle open/close
         header.addEventListener('click', function(e) {
@@ -628,11 +638,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         var itemsDiv = document.createElement('div');
         itemsDiv.className = 'folder-items';
+        itemsDiv.dataset.parentId = col.id;
+        attachCollectionContainerDragHandlers(itemsDiv, col.id);
+        attachRequestContainerDragHandlers(itemsDiv, col.id);
 
         // Render sub-collections (children)
         if (col.children && col.children.length) {
             col.children.forEach(function(child) {
-                renderCollectionNode(child, itemsDiv);
+                renderCollectionNode(child, itemsDiv, col.id);
             });
         }
 
@@ -642,11 +655,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 var reqEl = document.createElement('div');
                 reqEl.className = 'request-item';
                 if (openTabs.some(function(t){ return t.requestId === req.id && t.id === activeTabId; })) reqEl.classList.add('active');
+                reqEl.draggable = true;
                 reqEl.dataset.id = req.id;
+                reqEl.dataset.collectionId = col.id;
 
                 reqEl.innerHTML =
                 '<span class="method-badge method-' + req.method + '">' + req.method + '</span>' +
                 '<span class="request-item-name">' + escHtml(req.name) + '</span>';
+
+                attachRequestDragHandlers(reqEl);
 
                 reqEl.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -667,6 +684,251 @@ document.addEventListener('DOMContentLoaded', () => {
         folder.appendChild(header);
         folder.appendChild(itemsDiv);
         container.appendChild(folder);
+    }
+
+    function normalizeParentId(value) {
+        return value === null || value === undefined || value === '' ? null : parseInt(value, 10);
+    }
+
+    function sameNullableId(left, right) {
+        return normalizeParentId(left) === normalizeParentId(right);
+    }
+
+    function getCollectionSiblings(parentId) {
+        var selector = parentId == null
+            ? ':scope > .collection-folder'
+            : ':scope > .collection-folder[data-parent-id="' + parentId + '"]';
+        var container = parentId == null
+            ? collectionList
+            : document.querySelector('.folder-items[data-parent-id="' + parentId + '"]');
+        return container ? Array.from(container.querySelectorAll(selector)) : [];
+    }
+
+    function getRequestSiblings(collectionId) {
+        var container = document.querySelector('.folder-items[data-parent-id="' + collectionId + '"]');
+        return container ? Array.from(container.querySelectorAll(':scope > .request-item[data-collection-id="' + collectionId + '"]')) : [];
+    }
+
+    function getDragInsertBefore(container, selector, y) {
+        var siblings = Array.from(container.querySelectorAll(':scope > ' + selector)).filter(function(el) {
+            return !el.classList.contains('dragging');
+        });
+
+        return siblings.reduce(function(closest, child) {
+            var box = child.getBoundingClientRect();
+            var offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            }
+            return closest;
+        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+    }
+
+    function clearDragClasses() {
+        document.querySelectorAll('.dragging, .drag-over').forEach(function(el) {
+            el.classList.remove('dragging', 'drag-over');
+        });
+    }
+
+    function attachCollectionDragHandlers(header) {
+        header.addEventListener('dragstart', function(e) {
+            dragState = {
+                type: 'collection',
+                id: parseInt(header.dataset.id, 10),
+                parentId: normalizeParentId(header.dataset.parentId)
+            };
+            header.closest('.collection-folder').classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', JSON.stringify(dragState));
+        });
+
+        header.addEventListener('dragover', function(e) {
+            if (!dragState || dragState.type !== 'collection') return;
+            if (!sameNullableId(dragState.parentId, header.dataset.parentId)) return;
+            if (dragState.id === parseInt(header.dataset.id, 10)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            header.classList.add('drag-over');
+        });
+
+        header.addEventListener('dragleave', function() {
+            header.classList.remove('drag-over');
+        });
+
+        header.addEventListener('drop', function(e) {
+            if (!dragState || dragState.type !== 'collection') return;
+            e.preventDefault();
+            e.stopPropagation();
+            header.classList.remove('drag-over');
+            var targetId = parseInt(header.dataset.id, 10);
+            if (dragState.id === targetId || !sameNullableId(dragState.parentId, header.dataset.parentId)) return;
+            reorderCollectionElement(header.closest('.collection-folder'), e.clientY);
+        });
+
+        header.addEventListener('dragend', function() {
+            dragState = null;
+            clearDragClasses();
+        });
+    }
+
+    function attachCollectionContainerDragHandlers(container, parentId) {
+        if (container.dataset.collectionDragBound === 'true') return;
+        container.dataset.collectionDragBound = 'true';
+
+        container.addEventListener('dragover', function(e) {
+            if (!dragState || dragState.type !== 'collection') return;
+            if (normalizeParentId(parentId) !== dragState.parentId) return;
+            if (e.target.closest('.request-item')) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            container.classList.add('drag-over');
+        });
+
+        container.addEventListener('dragleave', function(e) {
+            if (!container.contains(e.relatedTarget)) container.classList.remove('drag-over');
+        });
+
+        container.addEventListener('drop', function(e) {
+            if (!dragState || dragState.type !== 'collection') return;
+            if (normalizeParentId(parentId) !== dragState.parentId) return;
+            e.preventDefault();
+            e.stopPropagation();
+            container.classList.remove('drag-over');
+            reorderCollectionElement(null, e.clientY, container);
+        });
+    }
+
+    function attachRequestDragHandlers(reqEl) {
+        reqEl.addEventListener('dragstart', function(e) {
+            dragState = {
+                type: 'request',
+                id: parseInt(reqEl.dataset.id, 10),
+                collectionId: parseInt(reqEl.dataset.collectionId, 10)
+            };
+            reqEl.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', JSON.stringify(dragState));
+        });
+
+        reqEl.addEventListener('dragover', function(e) {
+            if (!dragState || dragState.type !== 'request') return;
+            if (dragState.collectionId !== parseInt(reqEl.dataset.collectionId, 10)) return;
+            if (dragState.id === parseInt(reqEl.dataset.id, 10)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            reqEl.classList.add('drag-over');
+        });
+
+        reqEl.addEventListener('dragleave', function() {
+            reqEl.classList.remove('drag-over');
+        });
+
+        reqEl.addEventListener('drop', function(e) {
+            if (!dragState || dragState.type !== 'request') return;
+            e.preventDefault();
+            e.stopPropagation();
+            reqEl.classList.remove('drag-over');
+            if (dragState.id === parseInt(reqEl.dataset.id, 10)) return;
+            if (dragState.collectionId !== parseInt(reqEl.dataset.collectionId, 10)) return;
+            reorderRequestElement(reqEl, e.clientY);
+        });
+
+        reqEl.addEventListener('dragend', function() {
+            dragState = null;
+            clearDragClasses();
+        });
+    }
+
+    function attachRequestContainerDragHandlers(container, collectionId) {
+        if (container.dataset.requestDragBound === 'true') return;
+        container.dataset.requestDragBound = 'true';
+
+        container.addEventListener('dragover', function(e) {
+            if (!dragState || dragState.type !== 'request') return;
+            if (dragState.collectionId !== parseInt(collectionId, 10)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            container.classList.add('drag-over');
+        });
+
+        container.addEventListener('dragleave', function(e) {
+            if (!container.contains(e.relatedTarget)) container.classList.remove('drag-over');
+        });
+
+        container.addEventListener('drop', function(e) {
+            if (!dragState || dragState.type !== 'request') return;
+            if (dragState.collectionId !== parseInt(collectionId, 10)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            container.classList.remove('drag-over');
+            reorderRequestElement(null, e.clientY, container);
+        });
+    }
+
+    async function reorderCollectionElement(targetFolder, clientY, explicitContainer) {
+        var dragged = document.querySelector('.collection-folder.dragging');
+        if (!dragged || !dragState || dragState.type !== 'collection') return;
+
+        var parentId = dragState.parentId;
+        var container = explicitContainer || (targetFolder ? targetFolder.parentElement : null);
+        if (!container) return;
+
+        var before = getDragInsertBefore(container, '.collection-folder', clientY);
+        if (before === dragged) return;
+        container.insertBefore(dragged, before);
+
+        var orderedIds = getCollectionSiblings(parentId).map(function(el) { return parseInt(el.dataset.id, 10); });
+        await persistCollectionOrder(parentId, orderedIds);
+    }
+
+    async function reorderRequestElement(targetRequest, clientY, explicitContainer) {
+        var dragged = document.querySelector('.request-item.dragging');
+        if (!dragged || !dragState || dragState.type !== 'request') return;
+
+        var collectionId = dragState.collectionId;
+        var container = explicitContainer || (targetRequest ? targetRequest.parentElement : null);
+        if (!container) return;
+
+        var before = getDragInsertBefore(container, '.request-item', clientY);
+        if (before === dragged) return;
+        container.insertBefore(dragged, before);
+
+        var orderedIds = getRequestSiblings(collectionId).map(function(el) { return parseInt(el.dataset.id, 10); });
+        await persistRequestOrder(collectionId, orderedIds);
+    }
+
+    async function persistCollectionOrder(parentId, orderedIds) {
+        try {
+            var res = await fetch('/api/collections/reorder', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parent_id: parentId, ordered_ids: orderedIds })
+            });
+            var json = await res.json();
+            if (!json.success) throw new Error(json.error || 'Failed to reorder collections');
+            showToast('Collection order saved', 'success');
+            loadCollections();
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            loadCollections();
+        }
+    }
+
+    async function persistRequestOrder(collectionId, orderedIds) {
+        try {
+            var res = await fetch('/api/requests/reorder', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collection_id: collectionId, ordered_ids: orderedIds })
+            });
+            var json = await res.json();
+            if (!json.success) throw new Error(json.error || 'Failed to reorder requests');
+            showToast('Request order saved', 'success');
+            loadCollections();
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            loadCollections();
+        }
     }
 
     function countTotalRequests(node) {

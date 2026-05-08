@@ -510,6 +510,20 @@ body.resizing-response {
   border-left: 2px solid #d1d9d4;
 }
 
+.collection-folder.dragging,
+.request-item.dragging {
+  opacity: 0.45;
+}
+
+.folder-header.drag-over,
+.request-item.drag-over,
+.folder-items.drag-over,
+.collection-list.drag-over {
+  outline: 1px dashed var(--color-accent-hover);
+  outline-offset: 2px;
+}
+
+
 .request-item-name {
   flex: 1;
   white-space: nowrap;

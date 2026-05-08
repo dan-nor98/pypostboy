@@ -301,6 +301,51 @@ class Collections:
         return Collections.get_by_id(id)
     
     @staticmethod
+    def reorder(parent_id, ordered_ids):
+        """Reorder sibling collections under a parent."""
+        if not isinstance(ordered_ids, list):
+            raise ValueError('ordered_ids must be a list')
+
+        try:
+            normalized_ids = [int(item) for item in ordered_ids]
+        except (TypeError, ValueError):
+            raise ValueError('ordered_ids must contain only collection IDs')
+
+        if len(normalized_ids) != len(set(normalized_ids)):
+            raise ValueError('ordered_ids must not contain duplicates')
+
+        if parent_id is not None:
+            parent_id = int(parent_id)
+            parent = db.conn.execute(
+                "SELECT id FROM collections WHERE id = ?",
+                (parent_id,)
+            ).fetchone()
+            if not parent:
+                raise ValueError('Parent collection not found')
+            sibling_rows = db.conn.execute(
+                "SELECT id FROM collections WHERE parent_id = ? ORDER BY sort_order ASC, id ASC",
+                (parent_id,)
+            ).fetchall()
+        else:
+            sibling_rows = db.conn.execute(
+                "SELECT id FROM collections WHERE parent_id IS NULL ORDER BY sort_order ASC, id ASC"
+            ).fetchall()
+
+        sibling_ids = [row['id'] for row in sibling_rows]
+        if set(normalized_ids) != set(sibling_ids):
+            raise ValueError('ordered_ids must include exactly the sibling collections for the parent')
+
+        now = timestamp()
+        with db.conn:
+            for index, collection_id in enumerate(normalized_ids):
+                db.conn.execute(
+                    "UPDATE collections SET sort_order = ?, updated_at = ? WHERE id = ?",
+                    (index, now, collection_id)
+                )
+
+        return {'updated': len(normalized_ids)}
+
+    @staticmethod
     def delete(id):
         """Delete a collection and all its children recursively"""
         # Get all child collection IDs
@@ -557,6 +602,44 @@ class Requests:
         
         return Requests.get_by_id(id)
     
+    @staticmethod
+    def reorder(collection_id, ordered_ids):
+        """Reorder requests within a collection."""
+        if not isinstance(ordered_ids, list):
+            raise ValueError('ordered_ids must be a list')
+
+        try:
+            collection_id = int(collection_id)
+            normalized_ids = [int(item) for item in ordered_ids]
+        except (TypeError, ValueError):
+            raise ValueError('ordered_ids must contain only request IDs')
+
+        if len(normalized_ids) != len(set(normalized_ids)):
+            raise ValueError('ordered_ids must not contain duplicates')
+
+        collection = Collections.get_by_id(collection_id)
+        if not collection:
+            raise ValueError('Collection not found')
+
+        sibling_rows = db.conn.execute(
+            "SELECT id FROM requests WHERE collection_id = ? ORDER BY sort_order ASC, id ASC",
+            (collection_id,)
+        ).fetchall()
+        sibling_ids = [row['id'] for row in sibling_rows]
+
+        if set(normalized_ids) != set(sibling_ids):
+            raise ValueError('ordered_ids must include exactly the requests for the collection')
+
+        now = timestamp()
+        with db.conn:
+            for index, request_id in enumerate(normalized_ids):
+                db.conn.execute(
+                    "UPDATE requests SET sort_order = ?, updated_at = ? WHERE id = ?",
+                    (index, now, request_id)
+                )
+
+        return {'updated': len(normalized_ids)}
+
     @staticmethod
     def delete(id):
         """Delete a request"""
