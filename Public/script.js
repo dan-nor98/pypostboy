@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loopCount         = document.getElementById('loopCount');
     const loopStatus        = document.getElementById('loopStatus');
     const bodyContent       = document.getElementById('bodyContent');
+    const prettifyJsonBtn   = document.getElementById('prettifyJsonBtn');
     const responseBody      = document.getElementById('responseBody');
     const responseHeaders   = document.getElementById('responseHeaders');
     const statusCode        = document.getElementById('statusCode');
@@ -1463,6 +1464,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     bodyContent.addEventListener('input', function() { markActiveTabUnsaved(); });
+
+    prettifyJsonBtn.addEventListener('click', function() {
+        var originalBody = bodyContent.value;
+        var parsedBody;
+
+        try {
+            parsedBody = JSON.parse(originalBody);
+        } catch (err) {
+            showToast('Invalid JSON: ' + err.message, 'error');
+            return;
+        }
+
+        var jsonRadio = document.querySelector('input[name="bodyType"][value="json"]');
+        if (jsonRadio) jsonRadio.checked = true;
+
+        bodyContent.value = JSON.stringify(parsedBody, null, 2);
+        bodyContent.style.display = '';
+        formDataContainer.style.display = 'none';
+        markActiveTabUnsaved();
+    });
 
     // ─── Utility: escape for HTML attributes ───────────────
     function escAttr(str) {
