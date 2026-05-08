@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loopCount         = document.getElementById('loopCount');
     const loopStatus        = document.getElementById('loopStatus');
     const bodyContent       = document.getElementById('bodyContent');
+    const prettifyJsonBtn   = document.getElementById('prettifyJsonBtn');
     const responseBody      = document.getElementById('responseBody');
     const responseHeaders   = document.getElementById('responseHeaders');
     const statusCode        = document.getElementById('statusCode');
@@ -49,6 +50,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const responseSection  = document.getElementById('responseSection');
     const sidebarResizeHandle  = document.getElementById('sidebarResizeHandle');
     const responseResizeHandle = document.getElementById('responseResizeHandle');
+    const appContainer      = document.getElementById('appContainer');
+    const sidebar           = document.getElementById('sidebar');
+    const sidebarToggleBtn  = document.getElementById('sidebarToggleBtn');
+    const sidebarCloseBtn   = document.getElementById('sidebarCloseBtn');
 
     // New Collection elements
     const newCollectionBtn     = document.getElementById('newCollectionBtn');
@@ -97,6 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeRequestTab      = 'params';
 	let expandedCollections   = new Set();
     let collectionsData       = [];
+    let draggedTabId          = null;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
@@ -257,19 +263,54 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('resize', syncResizeHandlesForViewport);
         syncResizeHandlesForViewport();
     }
+    const OPEN_TABS_STORAGE_KEY = 'postboy_open_tabs';
 
     // ─── Init ──────────────────────────────────────────────
     initPanelResizing();
     renderHistory();
     renderEnvVars();
-    loadCollections();
-    openNewTab();
+    initializeRequestTabs();
 
     // ─── Close context menus on click elsewhere ────────────
     document.addEventListener('click', function() {
         contextMenu.classList.remove('active');
         requestContextMenu.classList.remove('active');
         tabContextMenu.classList.remove('active');
+    });
+
+    // ─── Mobile Sidebar Toggle ────────────────────────────
+    function setSidebarOpen(isOpen) {
+        if (!appContainer) return;
+
+        appContainer.classList.toggle('sidebar-open', isOpen);
+        if (sidebarToggleBtn) sidebarToggleBtn.setAttribute('aria-expanded', String(isOpen));
+    }
+
+    if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', function(event) {
+            event.stopPropagation();
+            setSidebarOpen(!appContainer.classList.contains('sidebar-open'));
+        });
+    }
+
+    if (sidebarCloseBtn) {
+        sidebarCloseBtn.addEventListener('click', function(event) {
+            event.stopPropagation();
+            setSidebarOpen(false);
+        });
+    }
+
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth <= 768 && appContainer && appContainer.classList.contains('sidebar-open')) {
+            var target = event.target;
+            if (!sidebar.contains(target) && (!sidebarToggleBtn || !sidebarToggleBtn.contains(target))) {
+                setSidebarOpen(false);
+            }
+        }
+    });
+
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) setSidebarOpen(false);
     });
 
     // ─── Sidebar Tabs ─────────────────────────────────────
@@ -421,6 +462,125 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 }
+
+    function initializeRequestTabs() {
+        loadCollections().then(function() {
+            if (!restoreSavedTabs()) {
+                openNewTab();
+            }
+        });
+    }
+
+    function findRequestById(requestId) {
+        var id = parseInt(requestId, 10);
+        var found = null;
+
+        function visit(collections) {
+            if (!collections || found) return;
+            collections.forEach(function(col) {
+                if (found) return;
+                (col.requests || []).forEach(function(req) {
+                    if (!found && parseInt(req.id, 10) === id) found = req;
+                });
+                if (!found && col.children && col.children.length) visit(col.children);
+            });
+        }
+
+        visit(collectionsData);
+        return found;
+    }
+
+    function normalizeSavedTab(savedTab) {
+        if (!savedTab || typeof savedTab !== 'object') return null;
+
+        var state = savedTab.state || getBlankState();
+        var requestId = savedTab.requestId !== null && typeof savedTab.requestId !== 'undefined'
+            ? parseInt(savedTab.requestId, 10)
+            : null;
+        if (Number.isNaN(requestId)) requestId = null;
+
+        var request = requestId ? findRequestById(requestId) : null;
+        var staleSavedRequest = requestId && !request;
+
+        // If a saved request no longer exists in the collection tree, keep the
+        // user's last editor draft but detach it so it can be saved again.
+        if (staleSavedRequest && !savedTab.state) return null;
+
+        return {
+            id:           savedTab.id || makeTabId(),
+            label:        staleSavedRequest
+                ? ((savedTab.label || 'Recovered Request') + ' (unsaved)')
+                : (savedTab.label || (request && request.name) || 'New Request'),
+            method:       savedTab.method || state.method || (request && request.method) || 'GET',
+            requestId:    staleSavedRequest ? null : requestId,
+            collectionId: staleSavedRequest ? null : (savedTab.collectionId || (request && request.collection_id) || null),
+            unsaved:      staleSavedRequest ? true : !!savedTab.unsaved,
+            state:        state
+        };
+    }
+
+    function restoreSavedTabs() {
+        var raw = localStorage.getItem(OPEN_TABS_STORAGE_KEY);
+        if (!raw) return false;
+
+        try {
+            var saved = JSON.parse(raw);
+            if (!saved || !Array.isArray(saved.openTabs)) return false;
+
+            var restoredTabs = saved.openTabs
+                .map(normalizeSavedTab)
+                .filter(function(tab) { return !!tab; });
+
+            if (!restoredTabs.length) return false;
+
+            openTabs = restoredTabs;
+            activeTabId = openTabs.some(function(tab) { return tab.id === saved.activeTabId; })
+                ? saved.activeTabId
+                : openTabs[0].id;
+
+            var activeTab = openTabs.find(function(tab) { return tab.id === activeTabId; });
+            renderRequestTabs();
+            if (activeTab) {
+                loadStateIntoEditor(activeTab.state, activeTab.method);
+                highlightSidebarForTab(activeTab);
+            }
+            persistOpenTabs(false);
+            return true;
+        } catch (err) {
+            console.warn('Failed to restore saved tabs:', err);
+            localStorage.removeItem(OPEN_TABS_STORAGE_KEY);
+            return false;
+        }
+    }
+
+    function persistOpenTabs(includeEditorState) {
+        if (includeEditorState !== false && activeTabId) {
+            var activeTab = openTabs.find(function(tab) { return tab.id === activeTabId; });
+            if (activeTab) {
+                activeTab.state = gatherEditorState();
+                activeTab.method = methodSelect.value || activeTab.method || 'GET';
+            }
+        }
+
+        try {
+            localStorage.setItem(OPEN_TABS_STORAGE_KEY, JSON.stringify({
+                activeTabId: activeTabId,
+                openTabs: openTabs.map(function(tab) {
+                    return {
+                        id:           tab.id,
+                        label:        tab.label,
+                        method:       tab.method,
+                        requestId:    tab.requestId,
+                        collectionId: tab.collectionId,
+                        unsaved:      !!tab.unsaved,
+                        state:        tab.state || getBlankState()
+                    };
+                })
+            }));
+        } catch (err) {
+            console.warn('Failed to persist tabs:', err);
+        }
+    }
 
     function renderCollectionNode(col, container) {
         var folder = document.createElement('div');
@@ -701,6 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     openNewTab();
                 } else {
                     renderRequestTabs();
+                    persistOpenTabs();
                 }
                 loadCollections();
             } else {
@@ -904,6 +1065,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (renamedTab) {
                         renamedTab.label = name;
                         renderRequestTabs();
+                        persistOpenTabs();
                     }
                     loadCollections();
                 } else {
@@ -947,7 +1109,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             createdTab.collectionId = parseInt(collectionId);
                             createdTab.label = name;
                             createdTab.unsaved = false;
+                            createdTab.state = gatherEditorState();
                             renderRequestTabs();
+                            persistOpenTabs(false);
                         }
 
                         // Reload collections to show the new request
@@ -1038,6 +1202,7 @@ document.addEventListener('DOMContentLoaded', () => {
         openTabs.push(tab);
         renderRequestTabs();
         switchToTab(tab.id);
+        persistOpenTabs(false);
     }
 
     function openRequestInTab(req) {
@@ -1069,6 +1234,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (current) {
                 current.state = gatherEditorState();
                 current.method = methodSelect.value;
+                persistOpenTabs(false);
             }
         }
 
@@ -1079,6 +1245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderRequestTabs();
         loadStateIntoEditor(tab.state, tab.method);
         highlightSidebarForTab(tab);
+        persistOpenTabs(false);
     }
 
     function closeTab(tabId) {
@@ -1099,6 +1266,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         renderRequestTabs();
+        persistOpenTabs();
     }
 
     function markActiveTabUnsaved() {
@@ -1107,6 +1275,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tab.unsaved = true;
             renderRequestTabs();
         }
+        persistOpenTabs();
     }
 
     function renderRequestTabs() {
@@ -1115,6 +1284,7 @@ document.addEventListener('DOMContentLoaded', () => {
             var item = document.createElement('div');
             item.className = 'request-tab-item' + (tab.id === activeTabId ? ' active' : '') + (tab.unsaved ? ' unsaved' : '');
             item.dataset.tabId = tab.id;
+            item.draggable = true;
 
             var methodSpan = document.createElement('span');
             methodSpan.className = 'tab-method method-' + tab.method;
@@ -1163,12 +1333,64 @@ document.addEventListener('DOMContentLoaded', () => {
                 showTabContextMenu(tab, e.clientX, e.clientY);
             });
 
+            item.addEventListener('dragstart', function(e) {
+                draggedTabId = tab.id;
+                item.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', tab.id);
+            });
+
+            item.addEventListener('dragover', function(e) {
+                if (!draggedTabId || draggedTabId === tab.id) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                item.classList.add('drag-over');
+            });
+
+            item.addEventListener('dragleave', function() {
+                item.classList.remove('drag-over');
+            });
+
+            item.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                item.classList.remove('drag-over');
+                var sourceId = draggedTabId || e.dataTransfer.getData('text/plain');
+                if (!sourceId || sourceId === tab.id) return;
+                var rect = item.getBoundingClientRect();
+                reorderTabs(sourceId, tab.id, e.clientX > rect.left + rect.width / 2);
+                draggedTabId = null;
+            });
+
+            item.addEventListener('dragend', function() {
+                draggedTabId = null;
+                requestTabsEl.querySelectorAll('.request-tab-item').forEach(function(el) {
+                    el.classList.remove('dragging', 'drag-over');
+                });
+            });
+
             requestTabsEl.appendChild(item);
         });
 
         // Scroll active tab into view
         var activeEl = requestTabsEl.querySelector('.request-tab-item.active');
         if (activeEl) activeEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    function reorderTabs(sourceId, targetId, placeAfterTarget) {
+        var sourceIndex = openTabs.findIndex(function(tab) { return tab.id === sourceId; });
+        if (sourceIndex === -1) return;
+
+        var movedTab = openTabs.splice(sourceIndex, 1)[0];
+        var targetIndex = openTabs.findIndex(function(tab) { return tab.id === targetId; });
+        if (targetIndex === -1) {
+            openTabs.splice(sourceIndex, 0, movedTab);
+            return;
+        }
+
+        openTabs.splice(targetIndex + (placeAfterTarget ? 1 : 0), 0, movedTab);
+        renderRequestTabs();
+        persistOpenTabs();
     }
 
     function highlightSidebarForTab(tab) {
@@ -1455,6 +1677,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (json.success) {
                 tab.unsaved = false;
                 renderRequestTabs();
+                persistOpenTabs(false);
                 showToast('Request saved', 'success');
                 loadCollections();
             } else {
@@ -1596,6 +1819,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tr.remove();
             syncUrlFromParams();
             ensureEmptyLastParamRow();
+            markActiveTabUnsaved();
         });
 
         paramsBody.appendChild(tr);
@@ -1615,7 +1839,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    addParamBtn.addEventListener('click', function() { addParamRow(); });
+    addParamBtn.addEventListener('click', function() { addParamRow(); markActiveTabUnsaved(); });
+    paramsBody.addEventListener('input', markActiveTabUnsaved);
+    paramsBody.addEventListener('change', markActiveTabUnsaved);
 
     urlInput.addEventListener('input', function() {
         syncParamsFromUrl();
@@ -1628,6 +1854,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     bodyContent.addEventListener('input', function() { markActiveTabUnsaved(); });
+
+    prettifyJsonBtn.addEventListener('click', function() {
+        var originalBody = bodyContent.value;
+        var parsedBody;
+
+        try {
+            parsedBody = JSON.parse(originalBody);
+        } catch (err) {
+            showToast('Invalid JSON: ' + err.message, 'error');
+            return;
+        }
+
+        var jsonRadio = document.querySelector('input[name="bodyType"][value="json"]');
+        if (jsonRadio) jsonRadio.checked = true;
+
+        bodyContent.value = JSON.stringify(parsedBody, null, 2);
+        bodyContent.style.display = '';
+        formDataContainer.style.display = 'none';
+        markActiveTabUnsaved();
+    });
 
     // ─── Utility: escape for HTML attributes ───────────────
     function escAttr(str) {
@@ -1797,7 +2043,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    addFormDataBtn.addEventListener('click', function() { addFormDataRow(); });
+    addFormDataBtn.addEventListener('click', function() { addFormDataRow(); markActiveTabUnsaved(); });
+    formDataRows.addEventListener('input', markActiveTabUnsaved);
 
     function addFormDataRow(key, value) {
         key = key || '';
@@ -1808,7 +2055,7 @@ document.addEventListener('DOMContentLoaded', () => {
             '<input type="text" placeholder="Key" value="' + escAttr(key) + '">' +
             '<input type="text" placeholder="Value" value="' + escAttr(value) + '">' +
             '<button class="btn-remove">&times;</button>';
-        row.querySelector('.btn-remove').addEventListener('click', function() { row.remove(); });
+        row.querySelector('.btn-remove').addEventListener('click', function() { row.remove(); markActiveTabUnsaved(); });
         formDataRows.appendChild(row);
     }
 
@@ -1816,7 +2063,10 @@ document.addEventListener('DOMContentLoaded', () => {
     //  HEADERS
     // ═══════════════════════════════════════════════════════
 
-    addHeaderBtn.addEventListener('click', function() { addHeaderRow(); });
+    addHeaderBtn.addEventListener('click', function() { addHeaderRow(); markActiveTabUnsaved(); });
+    headersContainer.addEventListener('input', markActiveTabUnsaved);
+    authFields.addEventListener('input', markActiveTabUnsaved);
+    authFields.addEventListener('change', markActiveTabUnsaved);
 
     function addHeaderRow(key, value) {
         key = key || '';
@@ -1827,7 +2077,7 @@ document.addEventListener('DOMContentLoaded', () => {
             '<input type="text" placeholder="Header name" class="header-key" value="' + escAttr(key) + '">' +
             '<input type="text" placeholder="Header value" class="header-value" value="' + escAttr(value) + '">' +
             '<button class="btn-remove">&times;</button>';
-        row.querySelector('.btn-remove').addEventListener('click', function() { row.remove(); });
+        row.querySelector('.btn-remove').addEventListener('click', function() { row.remove(); markActiveTabUnsaved(); });
         headersContainer.appendChild(row);
     }
 

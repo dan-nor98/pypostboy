@@ -8,11 +8,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app-container">
+    <div class="app-container" id="appContainer">
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2>📮 PostBoy</h2>
+                <button class="sidebar-close" id="sidebarCloseBtn" type="button" aria-label="Close sidebar">×</button>
             </div>
             <div class="sidebar-tabs">
                 <button class="sidebar-tab active" data-target="collections-panel">Collections</button>
@@ -120,6 +121,8 @@
 
         <!-- Main Content -->
         <div class="main-content">
+            <button class="mobile-sidebar-toggle" id="sidebarToggleBtn" type="button" aria-controls="sidebar" aria-expanded="false">☰ Menu</button>
+
             <!-- Request Tabs Bar -->
             <div class="request-tabs-bar" id="requestTabsBar">
                 <div class="request-tabs" id="requestTabs"></div>
@@ -202,6 +205,9 @@
                         <label><input type="radio" name="bodyType" value="xml"> XML</label>
                         <label><input type="radio" name="bodyType" value="form-urlencoded"> x-www-form-urlencoded</label>
                         <label><input type="radio" name="bodyType" value="form-data"> Form Data</label>
+                    </div>
+                    <div class="body-actions">
+                        <button class="btn-add-row" id="prettifyJsonBtn" type="button">Prettify JSON</button>
                     </div>
                     <textarea id="bodyContent" placeholder="Enter request body..." rows="8"></textarea>
                     <div id="formDataContainer" class="form-data-container" style="display:none;">
