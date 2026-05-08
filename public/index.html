@@ -289,16 +289,10 @@
             <div class="right-sidebar-panel active" id="snapshots-panel">
                 <div class="right-sidebar-section">
                     <h3>Snapshot Management</h3>
-                    <p class="right-sidebar-hint">Save, load, rename, or delete snapshots for the active saved request.</p>
+                    <p class="right-sidebar-hint">Save snapshots for the active saved request, then click a snapshot to load it immediately.</p>
                     <div class="instances-bar hidden" id="instancesBar">
-                        <label for="instanceSelect">Snapshots</label>
-                        <select id="instanceSelect">
-                            <option value="">No snapshots</option>
-                        </select>
                         <button class="btn-add-row" id="saveInstanceBtn" type="button">Save Snapshot</button>
-                        <button class="btn-add-row" id="loadInstanceBtn" type="button">Load</button>
-                        <button class="btn-add-row" id="renameInstanceBtn" type="button">Rename</button>
-                        <button class="btn-remove" id="deleteInstanceBtn" type="button">Delete</button>
+                        <div id="snapshotList" class="snapshot-list" aria-label="Snapshots"></div>
                     </div>
                 </div>
             </div>
