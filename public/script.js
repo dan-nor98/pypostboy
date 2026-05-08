@@ -47,6 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainContent      = document.querySelector('.main-content');
     const requestSection   = document.getElementById('requestSection');
     const responseSection  = document.getElementById('responseSection');
+    const responseSheetHandle = document.getElementById('responseSheetHandle');
+    const responseSheetToggle = document.getElementById('responseSheetToggle');
     const sidebarResizeHandle  = document.getElementById('sidebarResizeHandle');
     const responseResizeHandle = document.getElementById('responseResizeHandle');
     const appContainer      = document.getElementById('appContainer');
@@ -121,6 +123,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
     const RESPONSE_HEIGHT_KEY = 'postboy_response_height';
     const MOBILE_RESIZE_QUERY = '(max-width: 1024px)';
+
+    // ─── Mobile Response Bottom Sheet ─────────────────────
+    function setResponseSheetState(state) {
+        if (!responseSection) return;
+
+        responseSection.classList.toggle('is-open', state === 'open');
+        responseSection.classList.toggle('is-collapsed', state === 'collapsed');
+        responseSection.classList.toggle('is-closed', state === 'closed');
+
+        var isOpen = state === 'open';
+        [responseSheetHandle, responseSheetToggle].forEach(function(control) {
+            if (!control) return;
+            control.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+
+        if (responseSheetHandle) {
+            responseSheetHandle.setAttribute('aria-label', isOpen ? 'Collapse response panel' : 'Open response panel');
+        }
+
+        if (responseSheetToggle) {
+            responseSheetToggle.textContent = isOpen ? '×' : '⌃';
+            responseSheetToggle.setAttribute('aria-label', isOpen ? 'Collapse response panel' : 'Open response panel');
+        }
+    }
+
+    function openResponseSheetForMobile() {
+        if (isMobileResizeLayout()) setResponseSheetState('open');
+    }
+
+    function toggleResponseSheet() {
+        if (!responseSection || !isMobileResizeLayout()) return;
+
+        setResponseSheetState(responseSection.classList.contains('is-open') ? 'collapsed' : 'open');
+    }
+
+    function initResponseSheetControls() {
+        if (responseSheetHandle) responseSheetHandle.addEventListener('click', toggleResponseSheet);
+        if (responseSheetToggle) responseSheetToggle.addEventListener('click', toggleResponseSheet);
+        setResponseSheetState(responseSection && responseSection.classList.contains('is-open') ? 'open' : 'collapsed');
+    }
 
     // ─── Panel Resizing ───────────────────────────────────
     function isMobileResizeLayout() {
@@ -279,6 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const OPEN_TABS_STORAGE_KEY = 'postboy_open_tabs';
 
     // ─── Init ──────────────────────────────────────────────
+    initResponseSheetControls();
     initPanelResizing();
     renderHistory();
     renderEnvVars();
@@ -2809,6 +2852,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             addHistory(method, urlInput.value.trim(), sc);
+            openResponseSheetForMobile();
         } catch (err) {
             var errorElapsed = Math.round(performance.now() - start);
             var errorBody = 'Error: ' + err.message + '\n\nMake sure the proxy server is running (npm start).';
