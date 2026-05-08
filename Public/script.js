@@ -44,6 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const addEnvVarBtn      = document.getElementById('addEnvVarBtn');
     const paramsBody        = document.getElementById('paramsBody');
     const addParamBtn       = document.getElementById('addParamBtn');
+    const appContainer      = document.getElementById('appContainer');
+    const sidebar           = document.getElementById('sidebar');
+    const sidebarToggleBtn  = document.getElementById('sidebarToggleBtn');
+    const sidebarCloseBtn   = document.getElementById('sidebarCloseBtn');
 
     // New Collection elements
     const newCollectionBtn     = document.getElementById('newCollectionBtn');
@@ -107,6 +111,41 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.classList.remove('active');
         requestContextMenu.classList.remove('active');
         tabContextMenu.classList.remove('active');
+    });
+
+    // ─── Mobile Sidebar Toggle ────────────────────────────
+    function setSidebarOpen(isOpen) {
+        if (!appContainer) return;
+
+        appContainer.classList.toggle('sidebar-open', isOpen);
+        if (sidebarToggleBtn) sidebarToggleBtn.setAttribute('aria-expanded', String(isOpen));
+    }
+
+    if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', function(event) {
+            event.stopPropagation();
+            setSidebarOpen(!appContainer.classList.contains('sidebar-open'));
+        });
+    }
+
+    if (sidebarCloseBtn) {
+        sidebarCloseBtn.addEventListener('click', function(event) {
+            event.stopPropagation();
+            setSidebarOpen(false);
+        });
+    }
+
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth <= 768 && appContainer && appContainer.classList.contains('sidebar-open')) {
+            var target = event.target;
+            if (!sidebar.contains(target) && (!sidebarToggleBtn || !sidebarToggleBtn.contains(target))) {
+                setSidebarOpen(false);
+            }
+        }
+    });
+
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) setSidebarOpen(false);
     });
 
     // ─── Sidebar Tabs ─────────────────────────────────────
