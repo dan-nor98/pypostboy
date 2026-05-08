@@ -1893,11 +1893,15 @@ body.resizing-response {
     gap: 10px;
   }
 
-  #methodSelect,
-  .url-bar .btn-send,
-  .url-bar .btn-loop {
+  #methodSelect {
     flex-basis: 100%;
     width: 100%;
+  }
+
+  .url-bar .btn-send,
+  .url-bar .btn-loop {
+    flex: 1 1 calc(50% - 5px);
+    width: auto;
   }
 
   .loop-controls {
