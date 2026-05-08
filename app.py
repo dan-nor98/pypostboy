@@ -272,6 +272,20 @@ def get_collections():
         return jsonify({'success': False, 'error': str(err)}), 500
 
 
+@app.route('/api/collections/reorder', methods=['PUT'])
+def reorder_collections():
+    """Reorder collections that share the same parent."""
+    try:
+        body = request.get_json(silent=True) or {}
+        if 'ordered_ids' not in body:
+            return jsonify({'success': False, 'error': 'ordered_ids required'}), 400
+
+        result = Collections.reorder(body.get('parent_id'), body.get('ordered_ids'))
+        return jsonify({'success': True, 'data': result})
+    except Exception as err:
+        return jsonify({'success': False, 'error': str(err)}), 400
+
+
 @app.route('/api/collections/<int:id>', methods=['GET'])
 def get_collection(id):
     """Get single collection with requests"""
@@ -327,6 +341,23 @@ def duplicate_collection(id):
 # ═══════════════════════════════════════════════════════════════
 #  REQUESTS API
 # ═══════════════════════════════════════════════════════════════
+
+@app.route('/api/requests/reorder', methods=['PUT'])
+def reorder_requests():
+    """Reorder requests within a collection."""
+    try:
+        body = request.get_json(silent=True) or {}
+        collection_id = body.get('collection_id')
+        if not collection_id:
+            return jsonify({'success': False, 'error': 'collection_id required'}), 400
+        if 'ordered_ids' not in body:
+            return jsonify({'success': False, 'error': 'ordered_ids required'}), 400
+
+        result = Requests.reorder(collection_id, body.get('ordered_ids'))
+        return jsonify({'success': True, 'data': result})
+    except Exception as err:
+        return jsonify({'success': False, 'error': str(err)}), 400
+
 
 @app.route('/api/requests/<int:id>', methods=['GET'])
 def get_request(id):
