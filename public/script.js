@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportOutput      = document.getElementById('exportOutput');
     const copyExportBtn     = document.getElementById('copyExportBtn');
     const copyResponseBtn   = document.getElementById('copyResponseBtn');
+    const saveResponseSnapshotBtn = document.getElementById('saveResponseSnapshotBtn');
     const authFields        = document.getElementById('authFields');
     const formDataRows      = document.getElementById('formDataRows');
     const addFormDataBtn    = document.getElementById('addFormDataBtn');
@@ -1872,7 +1873,8 @@ document.addEventListener('DOMContentLoaded', () => {
         openNewTab();
     });
 
-    saveInstanceBtn.addEventListener('click', saveCurrentInstance);
+    if (saveInstanceBtn) saveInstanceBtn.addEventListener('click', saveCurrentInstance);
+    saveResponseSnapshotBtn.addEventListener('click', saveCurrentInstance);
 
     // ─── Tab context menu ──────────────────────────────────
     var tabCtxTarget = null;
@@ -2210,6 +2212,34 @@ document.addEventListener('DOMContentLoaded', () => {
         return openTabs.find(function(t) { return t.id === activeTabId && t.requestId; }) || null;
     }
 
+
+    function padSnapshotTimestampPart(value) {
+        return String(value).padStart(2, '0');
+    }
+
+    function buildSnapshotDefaultName() {
+        var now = new Date();
+        return 'Snapshot ' +
+            now.getFullYear() + '-' +
+            padSnapshotTimestampPart(now.getMonth() + 1) + '-' +
+            padSnapshotTimestampPart(now.getDate()) + ' ' +
+            padSnapshotTimestampPart(now.getHours()) + ':' +
+            padSnapshotTimestampPart(now.getMinutes()) + ':' +
+            padSnapshotTimestampPart(now.getSeconds());
+    }
+
+    function highlightSnapshotRow(snapshotId) {
+        if (!snapshotList || !snapshotId) return;
+        var id = String(snapshotId);
+        snapshotList.querySelectorAll('.snapshot-list-item.is-active').forEach(function(activeItem) {
+            activeItem.classList.remove('is-active');
+        });
+        var activeRow = snapshotList.querySelector('.snapshot-list-item[data-snapshot-id="' + id + '"]');
+        if (!activeRow) return;
+        activeRow.classList.add('is-active');
+        activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
     function renderInstancesBar(instances) {
         var tab = getActiveSavedTab();
         activeRequestInstances = instances || [];
@@ -2217,7 +2247,8 @@ document.addEventListener('DOMContentLoaded', () => {
         instancesBar.classList.remove('hidden');
         closeSnapshotContextMenu();
         snapshotList.innerHTML = '';
-        saveInstanceBtn.disabled = !tab;
+        if (saveInstanceBtn) saveInstanceBtn.disabled = !tab;
+        saveResponseSnapshotBtn.disabled = !tab;
 
         if (!tab) {
             selectedSnapshotId = '';
@@ -2250,6 +2281,7 @@ document.addEventListener('DOMContentLoaded', () => {
             var id = String(instance.id);
             var item = document.createElement('div');
             item.className = 'snapshot-list-item';
+            item.dataset.snapshotId = id;
             if (id === String(selectedSnapshotId)) item.classList.add('is-active');
             if (id === String(loadingSnapshotId)) {
                 item.classList.add('is-loading');
@@ -2340,7 +2372,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        var defaultName = tab.label + ' snapshot';
+        var defaultName = buildSnapshotDefaultName();
         var name = prompt('Snapshot name', defaultName);
         if (name === null) return;
         name = name.trim();
@@ -2361,9 +2393,9 @@ document.addEventListener('DOMContentLoaded', () => {
             var json = await res.json();
             if (json.success) {
                 showToast('Snapshot saved', 'success');
-                await refreshInstancesForActiveTab();
                 selectedSnapshotId = String(json.data.id);
-                renderInstancesBar(activeRequestInstances);
+                await refreshInstancesForActiveTab();
+                highlightSnapshotRow(selectedSnapshotId);
             } else {
                 showToast('Error: ' + json.error, 'error');
             }
