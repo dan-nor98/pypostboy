@@ -249,7 +249,10 @@
             <div class="resize-handle resize-handle-horizontal" id="responseResizeHandle" role="separator" aria-orientation="horizontal" aria-label="Resize response panel" tabindex="0"></div>
 
             <!-- Response Section -->
-            <div class="response-section" id="responseSection">
+            <div class="response-section is-collapsed" id="responseSection">
+                <button class="response-sheet-handle" id="responseSheetHandle" type="button" aria-label="Open response panel" aria-expanded="false">
+                    <span aria-hidden="true"></span>
+                </button>
                 <div class="response-header">
                     <h3>Response</h3>
                     <div class="response-meta">
@@ -257,6 +260,7 @@
                         <span id="responseTime">0 ms</span>
                         <span id="responseSize">0 B</span>
                         <button class="btn-copy-response" id="copyResponseBtn">📋 Copy</button>
+                        <button class="response-sheet-toggle" id="responseSheetToggle" type="button" aria-label="Collapse response panel" aria-expanded="false">×</button>
                     </div>
                 </div>
                 <div class="response-tabs">
