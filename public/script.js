@@ -472,7 +472,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderCollectionNode(col, container, parentId) {
     function initializeRequestTabs() {
         loadCollections().then(function() {
             if (!restoreSavedTabs()) {
@@ -592,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderCollectionNode(col, container) {
+    function renderCollectionNode(col, container, parentId) {
         var folder = document.createElement('div');
         folder.className = 'collection-folder';
         folder.dataset.id = col.id;
