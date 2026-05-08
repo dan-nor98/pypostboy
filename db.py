@@ -14,7 +14,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'postboy-data.db')
 class Database:
     _instance = None
     _lock = Lock()
-    
+
     def __new__(cls):
         if cls._instance is None:
             with cls._lock:
@@ -23,7 +23,7 @@ class Database:
                     instance._initialized = False
                     cls._instance = instance
         return cls._instance
-    
+
     def __init__(self):
         if self._initialized:
             return
@@ -31,7 +31,7 @@ class Database:
         self.conn = None
         self._ready = False
         self.init_database()
-    
+
     def init_database(self):
         """Initialize database and create tables"""
         # Use WAL mode for better concurrent access
@@ -39,9 +39,9 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
-        
+
         cursor = self.conn.cursor()
-        
+
         # Create collections table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS collections (
@@ -54,7 +54,7 @@ class Database:
                 updated_at TEXT NOT NULL
             )
         """)
-        
+
         # Create requests table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS requests (
@@ -75,7 +75,7 @@ class Database:
                 updated_at TEXT NOT NULL
             )
         """)
-        
+
         # Create request instances table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS request_instances (
@@ -91,11 +91,19 @@ class Database:
                 form_data TEXT DEFAULT '[]',
                 auth_type TEXT DEFAULT 'none',
                 auth_data TEXT DEFAULT '{}',
+                response_status INTEGER,
+                response_status_text TEXT DEFAULT '',
+                response_headers TEXT DEFAULT '{}',
+                response_body TEXT,
+                response_time_ms INTEGER,
+                response_size TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         """)
-        
+
+        self._migrate_request_instances(cursor)
+
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_parent_id ON collections(parent_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_collection_id ON requests(collection_id)")
@@ -103,14 +111,32 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_instances_updated_at ON request_instances(updated_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_sort_order ON collections(sort_order)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_sort_order ON requests(sort_order)")
-        
+
         self.conn.commit()
         self._ready = True
         print(f'[DB] SQLite database initialized at {DB_PATH}')
-    
+
+    def _migrate_request_instances(self, cursor):
+        """Add request instance columns introduced after initial SQLite releases."""
+        existing_columns = {
+            row['name'] for row in cursor.execute("PRAGMA table_info(request_instances)").fetchall()
+        }
+        migrations = {
+            'response_status': 'INTEGER',
+            'response_status_text': "TEXT DEFAULT ''",
+            'response_headers': "TEXT DEFAULT '{}'",
+            'response_body': 'TEXT',
+            'response_time_ms': 'INTEGER',
+            'response_size': "TEXT DEFAULT ''",
+        }
+
+        for column, definition in migrations.items():
+            if column not in existing_columns:
+                cursor.execute(f"ALTER TABLE request_instances ADD COLUMN {column} {definition}")
+
     def is_ready(self):
         return self._ready
-    
+
     def save(self):
         """Commit changes (sqlite3 auto-commits but this ensures it)"""
         if self.conn:
@@ -152,6 +178,36 @@ def safe_stringify(val, fallback='[]'):
     except (TypeError, ValueError):
         return fallback
 
+def stringify_response_body(val):
+    """Store response body while preserving plain text and JSON values."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    try:
+        return json.dumps(val)
+    except (TypeError, ValueError):
+        return str(val)
+
+
+def parse_response_body(val):
+    """Parse response body JSON when possible, otherwise return stored text."""
+    if val is None:
+        return None
+    if not isinstance(val, str):
+        return val
+    try:
+        return json.loads(val)
+    except (json.JSONDecodeError, TypeError):
+        return val
+
+def parse_json_or_text(val, fallback=None):
+    """Parse JSON text when possible, otherwise return the original text."""
+    if val is None:
+        return fallback
+    parsed = safe_parse(val, None)
+    return parsed if parsed is not None else val
+
 def row_to_dict(row):
     """Convert sqlite3.Row to dict"""
     if row is None:
@@ -175,14 +231,14 @@ db = Database()
 # ═══════════════════════════════════════════
 
 class Collections:
-    
+
     @staticmethod
     def get_all():
         """Get all collections in tree structure"""
         all_cols = db.conn.execute(
             "SELECT * FROM collections ORDER BY sort_order ASC, id ASC"
         ).fetchall()
-        
+
         # Build map
         col_map = {}
         for c in all_cols:
@@ -190,12 +246,12 @@ class Collections:
             c_dict['children'] = []
             c_dict['requests'] = []
             col_map[c_dict['id']] = c_dict
-        
+
         # Get all requests
         all_reqs = db.conn.execute(
             "SELECT * FROM requests ORDER BY sort_order ASC, id ASC"
         ).fetchall()
-        
+
         for r in all_reqs:
             r_dict = dict(r)
             r_dict['headers'] = safe_parse(r_dict['headers'], [])
@@ -203,7 +259,7 @@ class Collections:
             r_dict['auth_data'] = safe_parse(r_dict['auth_data'], {})
             if r_dict['collection_id'] in col_map:
                 col_map[r_dict['collection_id']]['requests'].append(r_dict)
-        
+
         # Build tree
         tree = []
         for c_dict in col_map.values():
@@ -211,50 +267,50 @@ class Collections:
                 col_map[c_dict['parent_id']]['children'].append(c_dict)
             elif not c_dict['parent_id']:
                 tree.append(c_dict)
-        
+
         return tree
-    
+
     @staticmethod
     def get_by_id(id):
         """Get single collection by ID with children and requests"""
         col = db.conn.execute(
             "SELECT * FROM collections WHERE id = ?", (id,)
         ).fetchone()
-        
+
         if not col:
             return None
-        
+
         result = dict(col)
         result['children'] = []
         result['requests'] = []
-        
+
         # Get children
         children = db.conn.execute(
-            """SELECT * FROM collections 
-               WHERE parent_id = ? 
+            """SELECT * FROM collections
+               WHERE parent_id = ?
                ORDER BY sort_order ASC, id ASC""",
             (id,)
         ).fetchall()
-        
+
         result['children'] = rows_to_list(children)
-        
+
         # Get requests
         reqs = db.conn.execute(
-            """SELECT * FROM requests 
-               WHERE collection_id = ? 
+            """SELECT * FROM requests
+               WHERE collection_id = ?
                ORDER BY sort_order ASC, id ASC""",
             (id,)
         ).fetchall()
-        
+
         for r in reqs:
             r_dict = dict(r)
             r_dict['headers'] = safe_parse(r_dict['headers'], [])
             r_dict['form_data'] = safe_parse(r_dict['form_data'], [])
             r_dict['auth_data'] = safe_parse(r_dict['auth_data'], {})
             result['requests'].append(r_dict)
-        
+
         return result
-    
+
     @staticmethod
     def create(data=None):
         """Create a new collection"""
@@ -262,42 +318,42 @@ class Collections:
         name = data.get('name', 'New Collection')
         parent_id = data.get('parent_id', None)
         description = data.get('description', '')
-        
+
         # Get max sort order
         if parent_id is not None:
             max_order_row = db.conn.execute(
-                """SELECT COALESCE(MAX(sort_order), -1) as max_order 
+                """SELECT COALESCE(MAX(sort_order), -1) as max_order
                    FROM collections WHERE parent_id = ?""",
                 (parent_id,)
             ).fetchone()
         else:
             max_order_row = db.conn.execute(
-                """SELECT COALESCE(MAX(sort_order), -1) as max_order 
+                """SELECT COALESCE(MAX(sort_order), -1) as max_order
                    FROM collections WHERE parent_id IS NULL"""
             ).fetchone()
-        
+
         max_order = max_order_row['max_order'] if max_order_row else -1
-        
+
         cursor = db.conn.execute(
             """INSERT INTO collections (name, description, parent_id, sort_order, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (name, description, parent_id, max_order + 1, timestamp(), timestamp())
         )
-        
+
         new_id = cursor.lastrowid
-        
+
         return Collections.get_by_id(new_id)
-    
+
     @staticmethod
     def update(id, data):
         """Update a collection"""
         col = Collections.get_by_id(id)
         if not col:
             raise ValueError('Collection not found')
-        
+
         updates = []
         params = []
-        
+
         if 'name' in data:
             updates.append('name = ?')
             params.append(data['name'])
@@ -310,18 +366,18 @@ class Collections:
         if 'sort_order' in data:
             updates.append('sort_order = ?')
             params.append(data['sort_order'])
-        
+
         updates.append('updated_at = ?')
         params.append(timestamp())
         params.append(id)
-        
+
         db.conn.execute(
             f"UPDATE collections SET {', '.join(updates)} WHERE id = ?",
             params
         )
-        
+
         return Collections.get_by_id(id)
-    
+
     @staticmethod
     def reorder(parent_id, ordered_ids):
         """Reorder sibling collections under a parent."""
@@ -373,49 +429,49 @@ class Collections:
         # Get all child collection IDs
         ids_to_delete = [id]
         to_process = [id]
-        
+
         while to_process:
             current_id = to_process.pop()
             children = db.conn.execute(
                 "SELECT id FROM collections WHERE parent_id = ?",
                 (current_id,)
             ).fetchall()
-            
+
             for child in children:
                 child_id = child['id']
                 ids_to_delete.append(child_id)
                 to_process.append(child_id)
-        
+
         # Delete requests for all affected collections
         for col_id in ids_to_delete:
             db.conn.execute("DELETE FROM requests WHERE collection_id = ?", (col_id,))
-        
+
         # Delete collections
         for col_id in ids_to_delete:
             db.conn.execute("DELETE FROM collections WHERE id = ?", (col_id,))
-        
+
         db.save()
-        
+
         return {'deleted': len(ids_to_delete)}
-    
+
     @staticmethod
     def duplicate(id):
         """Duplicate a collection including all children and requests"""
         original = Collections.get_by_id(id)
         if not original:
             raise ValueError('Collection not found')
-        
+
         new_col = Collections.create({
             'name': original['name'] + ' (copy)',
             'parent_id': original['parent_id'],
             'description': original['description'] or ''
         })
-        
+
         # Duplicate requests
         reqs = db.conn.execute(
             "SELECT * FROM requests WHERE collection_id = ?", (id,)
         ).fetchall()
-        
+
         for r in reqs:
             Requests.create({
                 'collection_id': new_col['id'],
@@ -430,15 +486,15 @@ class Collections:
                 'auth_type': r['auth_type'],
                 'auth_data': safe_parse(r['auth_data'], {})
             })
-        
+
         # Duplicate children recursively
         children = db.conn.execute(
             "SELECT * FROM collections WHERE parent_id = ?", (id,)
         ).fetchall()
-        
+
         for child in children:
             _duplicate_collection_recursive(child['id'], new_col['id'])
-        
+
         return Collections.get_by_id(new_col['id'])
 
 
@@ -447,21 +503,21 @@ def _duplicate_collection_recursive(original_id, new_parent_id):
     original = db.conn.execute(
         "SELECT * FROM collections WHERE id = ?", (original_id,)
     ).fetchone()
-    
+
     if not original:
         return
-    
+
     new_col = Collections.create({
         'name': original['name'],
         'parent_id': new_parent_id,
         'description': original['description'] or ''
     })
-    
+
     # Duplicate requests
     reqs = db.conn.execute(
         "SELECT * FROM requests WHERE collection_id = ?", (original_id,)
     ).fetchall()
-    
+
     for r in reqs:
         Requests.create({
             'collection_id': new_col['id'],
@@ -476,12 +532,12 @@ def _duplicate_collection_recursive(original_id, new_parent_id):
             'auth_type': r['auth_type'],
             'auth_data': safe_parse(r['auth_data'], {})
         })
-    
+
     # Process children
     children = db.conn.execute(
         "SELECT * FROM collections WHERE parent_id = ?", (original_id,)
     ).fetchall()
-    
+
     for child in children:
         _duplicate_collection_recursive(child['id'], new_col['id'])
 
@@ -491,33 +547,33 @@ def _duplicate_collection_recursive(original_id, new_parent_id):
 # ═══════════════════════════════════════════
 
 class Requests:
-    
+
     @staticmethod
     def get_by_id(id):
         """Get a single request by ID"""
         req = db.conn.execute(
             "SELECT * FROM requests WHERE id = ?", (id,)
         ).fetchone()
-        
+
         if not req:
             return None
-        
+
         result = dict(req)
         result['headers'] = safe_parse(result['headers'], [])
         result['form_data'] = safe_parse(result['form_data'], [])
         result['auth_data'] = safe_parse(result['auth_data'], {})
         return result
-    
+
     @staticmethod
     def get_by_collection(collection_id):
         """Get all requests in a collection"""
         reqs = db.conn.execute(
-            """SELECT * FROM requests 
-               WHERE collection_id = ? 
+            """SELECT * FROM requests
+               WHERE collection_id = ?
                ORDER BY sort_order ASC, id ASC""",
             (collection_id,)
         ).fetchall()
-        
+
         result = []
         for r in reqs:
             r_dict = dict(r)
@@ -525,25 +581,25 @@ class Requests:
             r_dict['form_data'] = safe_parse(r_dict['form_data'], [])
             r_dict['auth_data'] = safe_parse(r_dict['auth_data'], {})
             result.append(r_dict)
-        
+
         return result
-    
+
     @staticmethod
     def create(data=None):
         """Create a new request"""
         data = data or {}
         if 'collection_id' not in data:
             raise ValueError('collection_id is required')
-        
+
         # Get max sort order
         max_order_row = db.conn.execute(
-            """SELECT COALESCE(MAX(sort_order), -1) as max_order 
+            """SELECT COALESCE(MAX(sort_order), -1) as max_order
                FROM requests WHERE collection_id = ?""",
             (data['collection_id'],)
         ).fetchone()
-        
+
         max_order = max_order_row['max_order'] if max_order_row else -1
-        
+
         cursor = db.conn.execute(
             """INSERT INTO requests (
                 collection_id, name, method, url, headers,
@@ -567,21 +623,21 @@ class Requests:
                 timestamp()
             )
         )
-        
+
         new_id = cursor.lastrowid
-        
+
         return Requests.get_by_id(new_id)
-    
+
     @staticmethod
     def update(id, data):
         """Update a request"""
         req = Requests.get_by_id(id)
         if not req:
             raise ValueError('Request not found')
-        
+
         updates = []
         params = []
-        
+
         field_mapping = {
             'name': 'name',
             'method': 'method',
@@ -594,7 +650,7 @@ class Requests:
             'sort_order': 'sort_order',
             'auth_type': 'auth_type'
         }
-        
+
         for key, db_field in field_mapping.items():
             if key in data:
                 value = data[key]
@@ -602,7 +658,7 @@ class Requests:
                     value = value.upper()
                 updates.append(f'{db_field} = ?')
                 params.append(value)
-        
+
         if 'headers' in data:
             updates.append('headers = ?')
             params.append(safe_stringify(data['headers'], '[]'))
@@ -612,18 +668,18 @@ class Requests:
         if 'auth_data' in data:
             updates.append('auth_data = ?')
             params.append(safe_stringify(data['auth_data'], '{}'))
-        
+
         updates.append('updated_at = ?')
         params.append(timestamp())
         params.append(id)
-        
+
         db.conn.execute(
             f"UPDATE requests SET {', '.join(updates)} WHERE id = ?",
             params
         )
-        
+
         return Requests.get_by_id(id)
-    
+
     @staticmethod
     def reorder(collection_id, ordered_ids):
         """Reorder requests within a collection."""
@@ -668,21 +724,21 @@ class Requests:
         result = db.conn.execute(
             "SELECT id FROM requests WHERE id = ?", (id,)
         ).fetchone()
-        
+
         if not result:
             return {'deleted': 0}
-        
+
         db.conn.execute("DELETE FROM requests WHERE id = ?", (id,))
-        
+
         return {'deleted': 1}
-    
+
     @staticmethod
     def duplicate(id):
         """Duplicate a request"""
         original = Requests.get_by_id(id)
         if not original:
             raise ValueError('Request not found')
-        
+
         return Requests.create({
             'collection_id': original['collection_id'],
             'name': original['name'] + ' (copy)',
@@ -696,23 +752,23 @@ class Requests:
             'auth_type': original['auth_type'],
             'auth_data': original['auth_data']
         })
-    
+
     @staticmethod
     def move(id, new_collection_id):
         """Move request to another collection"""
         req = Requests.get_by_id(id)
         if not req:
             raise ValueError('Request not found')
-        
+
         target_col = Collections.get_by_id(new_collection_id)
         if not target_col:
             raise ValueError('Target collection not found')
-        
+
         db.conn.execute(
             "UPDATE requests SET collection_id = ?, updated_at = ? WHERE id = ?",
             (new_collection_id, timestamp(), id)
         )
-        
+
         return Requests.get_by_id(id)
 
 # ═══════════════════════════════════════════
@@ -731,6 +787,8 @@ class RequestInstances:
         result['headers'] = safe_parse(result['headers'], [])
         result['form_data'] = safe_parse(result['form_data'], [])
         result['auth_data'] = safe_parse(result['auth_data'], {})
+        result['response_headers'] = parse_json_or_text(result.get('response_headers'), {})
+        result['response_body'] = parse_response_body(result.get('response_body'))
         return result
 
     @staticmethod
@@ -773,8 +831,10 @@ class RequestInstances:
             """INSERT INTO request_instances (
                 request_id, name, method, url, headers,
                 body_type, body_content, body_raw_type, form_data,
-                auth_type, auth_data, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                auth_type, auth_data, response_status, response_status_text,
+                response_headers, response_body, response_time_ms, response_size,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 request_id,
                 name,
@@ -787,6 +847,12 @@ class RequestInstances:
                 safe_stringify(data.get('form_data', request_obj.get('form_data', [])), '[]'),
                 data.get('auth_type', request_obj.get('auth_type', 'none')),
                 safe_stringify(data.get('auth_data', request_obj.get('auth_data', {})), '{}'),
+                data.get('response_status'),
+                data.get('response_status_text', ''),
+                stringify_response_body(data.get('response_headers', {})),
+                stringify_response_body(data.get('response_body')),
+                data.get('response_time_ms'),
+                data.get('response_size', ''),
                 now,
                 now
             )
@@ -835,6 +901,24 @@ class RequestInstances:
         if 'auth_data' in data:
             updates.append('auth_data = ?')
             params.append(safe_stringify(data['auth_data'], '{}'))
+
+        response_field_mapping = {
+            'response_status': 'response_status',
+            'response_status_text': 'response_status_text',
+            'response_time_ms': 'response_time_ms',
+            'response_size': 'response_size',
+        }
+        for key, db_field in response_field_mapping.items():
+            if key in data:
+                updates.append(f'{db_field} = ?')
+                params.append(data[key])
+
+        if 'response_headers' in data:
+            updates.append('response_headers = ?')
+            params.append(stringify_response_body(data['response_headers']))
+        if 'response_body' in data:
+            updates.append('response_body = ?')
+            params.append(stringify_response_body(data['response_body']))
 
         if not updates:
             return instance

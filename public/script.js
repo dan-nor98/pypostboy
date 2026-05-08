@@ -451,7 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
             var header = folder.querySelector('.folder-header');
             var items = folder.querySelector('.folder-items');
             var arrow = header.querySelector('.folder-arrow');
-            
+
             if (items && items.classList.contains('open')) {
                 expandedCollections.add(folder.dataset.id);
             }
@@ -1802,7 +1802,13 @@ document.addEventListener('DOMContentLoaded', () => {
             form_data:    [],
             auth_type:    'none',
             auth_data:    {},
-            body_raw_type: 'application/json'
+            body_raw_type: 'application/json',
+            response_status: null,
+            response_status_text: '',
+            response_headers: '',
+            response_body: '',
+            response_time_ms: null,
+            response_size: ''
         };
     }
 
@@ -1816,7 +1822,13 @@ document.addEventListener('DOMContentLoaded', () => {
             form_data:    req.form_data    || [],
             auth_type:    req.auth_type    || 'none',
             auth_data:    req.auth_data    || {},
-            body_raw_type: req.body_raw_type || 'application/json'
+            body_raw_type: req.body_raw_type || 'application/json',
+            response_status: req.response_status != null ? req.response_status : null,
+            response_status_text: req.response_status_text || '',
+            response_headers: req.response_headers != null ? req.response_headers : '',
+            response_body: req.response_body != null ? req.response_body : '',
+            response_time_ms: req.response_time_ms != null ? req.response_time_ms : null,
+            response_size: req.response_size || ''
         };
     }
 
@@ -1880,6 +1892,79 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (inEl)  inEl.value  = authData.addTo || 'header';
             }
         }, 60);
+
+        restoreResponsePane(state);
+    }
+
+    function parseResponseTimeMs(value) {
+        var match = String(value || '').match(/-?\d+/);
+        return match ? parseInt(match[0], 10) : null;
+    }
+
+    function stringifyHeadersForDisplay(headers) {
+        if (!headers) return '';
+        if (typeof headers === 'string') return headers;
+        return Object.keys(headers).map(function(k) {
+            return k + ': ' + headers[k];
+        }).join('\n');
+    }
+
+    function hasHeaderContent(headers) {
+        if (!headers) return false;
+        if (typeof headers === 'string') return headers.trim() !== '';
+        return Object.keys(headers).length > 0;
+    }
+
+    function hasResponseState(state) {
+        return !!state && (
+            state.response_status != null ||
+            !!state.response_status_text ||
+            hasHeaderContent(state.response_headers) ||
+            (state.response_body != null && state.response_body !== '') ||
+            state.response_time_ms != null ||
+            !!state.response_size
+        );
+    }
+
+    function clearResponsePane() {
+        statusCode.textContent = '---';
+        statusCode.className = 'status-badge';
+        statusCode.dataset.statusText = '';
+        responseTime.textContent = '0 ms';
+        responseSize.textContent = '0 B';
+        responseHeaders.textContent = '';
+        responseBody.textContent = 'Send a request to see the response here.';
+    }
+
+    function restoreResponsePane(state) {
+        if (!hasResponseState(state)) {
+            clearResponsePane();
+            return;
+        }
+
+        var sc = state.response_status;
+        statusCode.textContent = sc != null && sc !== '' ? sc : '---';
+        statusCode.className = sc != null && sc !== '' ? 'status-badge ' + getStatusClass(sc) : 'status-badge';
+        statusCode.dataset.statusText = state.response_status_text || '';
+        responseTime.textContent = state.response_time_ms != null && state.response_time_ms !== ''
+            ? state.response_time_ms + ' ms'
+            : '0 ms';
+        responseSize.textContent = state.response_size || '0 B';
+        responseHeaders.textContent = stringifyHeadersForDisplay(state.response_headers);
+        displayResponse(state.response_body != null ? state.response_body : '');
+    }
+
+    function gatherResponseState() {
+        var statusText = statusCode.textContent.trim();
+        var parsedStatus = /^\d+$/.test(statusText) ? parseInt(statusText, 10) : null;
+        return {
+            response_status: parsedStatus,
+            response_status_text: statusCode.dataset.statusText || '',
+            response_headers: responseHeaders.textContent || '',
+            response_body: responseBody.textContent || '',
+            response_time_ms: parseResponseTimeMs(responseTime.textContent),
+            response_size: responseSize.textContent || ''
+        };
     }
 
     // ═══════════════════════════════════════════════════════
@@ -1920,7 +2005,7 @@ document.addEventListener('DOMContentLoaded', () => {
             authData = { key: ak ? ak.value : '', value: av ? av.value : '', addTo: ai ? ai.value : 'header' };
         }
 
-        return {
+        var state = {
             method:       methodSelect.value,
             url:          urlInput.value.trim(),
             headers:      headers,
@@ -1931,6 +2016,9 @@ document.addEventListener('DOMContentLoaded', () => {
             auth_data:    authData,
             body_raw_type: 'application/json'
         };
+
+        Object.assign(state, gatherResponseState());
+        return state;
     }
 
     // Keep gatherRequestState as alias for backward compat
@@ -2050,6 +2138,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 var tab = getActiveSavedTab();
                 var state = reqToState(json.data);
                 loadStateIntoEditor(state, state.method);
+                restoreResponsePane(state);
                 if (tab) {
                     tab.state = state;
                     tab.method = state.method;
@@ -2555,6 +2644,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') sendRequest();
     });
 
+    function storeResponseOnActiveTab(responseState) {
+        var tab = openTabs.find(function(t) { return t.id === activeTabId; });
+        if (!tab) return;
+
+        var state = gatherEditorState();
+        Object.assign(state, responseState);
+        tab.state = state;
+        tab.method = state.method;
+        persistOpenTabs(false);
+    }
+
     async function sendRequest() {
         var url = replaceEnvVars(urlInput.value.trim());
         if (!url) { alert('Please enter a URL'); return; }
@@ -2629,25 +2729,46 @@ document.addEventListener('DOMContentLoaded', () => {
             var sc = data.status || res.status;
             statusCode.textContent = sc;
             statusCode.className = 'status-badge ' + getStatusClass(sc);
+            statusCode.dataset.statusText = data.statusText || '';
             responseTime.textContent = elapsed + ' ms';
 
             var raw = typeof data.body === 'object' ? JSON.stringify(data.body) : String(data.body || '');
-            responseSize.textContent = formatBytes(new Blob([raw]).size);
+            var sizeText = formatBytes(new Blob([raw]).size);
+            responseSize.textContent = sizeText;
 
             displayResponse(data.body);
 
-            if (data.headers) {
-                responseHeaders.textContent = Object.keys(data.headers).map(function(k) {
-                    return k + ': ' + data.headers[k];
-                }).join('\n');
-            }
+            var responseHeadersValue = data.headers || {};
+            responseHeaders.textContent = stringifyHeadersForDisplay(responseHeadersValue);
+
+            storeResponseOnActiveTab({
+                response_status: sc,
+                response_status_text: data.statusText || '',
+                response_headers: responseHeadersValue,
+                response_body: data.body,
+                response_time_ms: elapsed,
+                response_size: sizeText
+            });
 
             addHistory(method, urlInput.value.trim(), sc);
         } catch (err) {
+            var errorElapsed = Math.round(performance.now() - start);
+            var errorBody = 'Error: ' + err.message + '\n\nMake sure the proxy server is running (npm start).';
             statusCode.textContent = 'ERR';
             statusCode.className = 'status-badge s5xx';
-            responseTime.textContent = Math.round(performance.now() - start) + ' ms';
-            responseBody.textContent = 'Error: ' + err.message + '\n\nMake sure the proxy server is running (npm start).';
+            statusCode.dataset.statusText = 'Error';
+            responseTime.textContent = errorElapsed + ' ms';
+            responseSize.textContent = formatBytes(new Blob([errorBody]).size);
+            responseHeaders.textContent = '';
+            responseBody.textContent = errorBody;
+            storeResponseOnActiveTab({
+                response_status: null,
+                response_status_text: 'Error',
+                response_headers: '',
+                response_body: errorBody,
+                response_time_ms: errorElapsed,
+                response_size: responseSize.textContent
+            });
         }
 
         showLoading(false);
@@ -2693,20 +2814,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const importFileInput = document.getElementById('importFileInput');
     const browseFileBtn = document.getElementById('browseFileBtn');
     const selectedFileName = document.getElementById('selectedFileName');
-    
+
     let importedFileContent = null;
     let currentImportTab = 'text';
 
     // Import tab switching
     document.querySelectorAll('.import-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
-            document.querySelectorAll('.import-tab').forEach(function(t) { 
-                t.classList.remove('active'); 
+            document.querySelectorAll('.import-tab').forEach(function(t) {
+                t.classList.remove('active');
             });
-            document.querySelectorAll('.import-panel').forEach(function(p) { 
-                p.classList.remove('active'); 
+            document.querySelectorAll('.import-panel').forEach(function(p) {
+                p.classList.remove('active');
             });
-            
+
             tab.classList.add('active');
             currentImportTab = tab.dataset.importTab;
             document.getElementById('import-' + currentImportTab + '-panel').classList.add('active');
@@ -2714,12 +2835,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Open import modal
-    importBtn.addEventListener('click', function() { 
+    importBtn.addEventListener('click', function() {
         importModal.classList.add('active');
         resetImportModal();
     });
-    
-    modalClose.addEventListener('click', function() { 
+
+    modalClose.addEventListener('click', function() {
         importModal.classList.remove('active');
         resetImportModal();
     });
@@ -2773,7 +2894,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         e.stopPropagation();
         fileDropZone.classList.remove('drag-over');
-        
+
         var files = e.dataTransfer.files;
         if (files.length > 0) {
             handleFileSelect(files[0]);
@@ -2782,15 +2903,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleFileSelect(file) {
         if (!file) return;
-        
+
         // Validate file type
         if (!file.name.endsWith('.json') && file.type !== 'application/json') {
             showToast('Please select a JSON file', 'error');
             return;
         }
-        
+
         selectedFileName.textContent = '📄 ' + file.name;
-        
+
         var reader = new FileReader();
         reader.onload = function(e) {
             try {
@@ -2824,7 +2945,7 @@ document.addEventListener('DOMContentLoaded', () => {
     importConfirmBtn.addEventListener('click', async function() {
         var raw = '';
         var isFileImport = false;
-        
+
         if (currentImportTab === 'file') {
             if (!importedFileContent) {
                 showToast('Please select a file first', 'error');
@@ -2843,7 +2964,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show loading
         importProgress.style.display = 'flex';
         importConfirmBtn.disabled = true;
-        
+
         // Remove previous messages
         var prevMessages = importModal.querySelectorAll('.import-errors, .import-success');
         prevMessages.forEach(function(el) { el.remove(); });
@@ -2857,20 +2978,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (parseErr) {
                     throw new Error('Invalid JSON format: ' + parseErr.message);
                 }
-                
+
                 // Validate Postman format
                 if (!data.info && !Array.isArray(data) && !data.item) {
                     throw new Error('This JSON file doesn\'t appear to be a valid Postman collection');
                 }
-                
+
                 var res = await fetch('/api/import', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ type: 'postman', data: data })
                 });
-                
+
                 var json = await res.json();
-                
+
                 if (json.success) {
                     showImportSuccess('Postman collection imported successfully!');
                     loadCollections();
@@ -2890,9 +3011,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ type: 'curl', data: raw })
                     });
-                    
+
                     var json2 = await res2.json();
-                    
+
                     if (json2.success) {
                         var parsed = json2.data;
                         methodSelect.value = parsed.method || 'GET';
@@ -2901,8 +3022,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         headersContainer.innerHTML = '';
                         if (parsed.headers && Array.isArray(parsed.headers)) {
-                            parsed.headers.forEach(function(h) { 
-                                addHeaderRow(h.key, h.value); 
+                            parsed.headers.forEach(function(h) {
+                                addHeaderRow(h.key, h.value);
                             });
                         }
                         if (!headersContainer.children.length) addHeaderRow();
@@ -2959,7 +3080,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function importCurlLocal(cmd) {
         try {
             cmd = cmd.replace(/\\\n/g, ' ').replace(/\\\r\n/g, ' ').trim();
-            
+
             // Enhanced parsing with support for more curl options
             var method = 'GET';
             var url = '';
@@ -2967,19 +3088,19 @@ document.addEventListener('DOMContentLoaded', () => {
             var bodyData = '';
             var formFields = [];
             var isMultipart = false;
-            
+
             var tokens = tokenize(cmd);
-            
+
             for (var i = 0; i < tokens.length; i++) {
                 var t = tokens[i];
                 if (t === 'curl') continue;
-                
+
                 // Method
-                if (t === '-X' || t === '--request') { 
-                    method = (tokens[++i] || '').toUpperCase(); 
-                    continue; 
+                if (t === '-X' || t === '--request') {
+                    method = (tokens[++i] || '').toUpperCase();
+                    continue;
                 }
-                
+
                 // Headers
                 if (t === '-H' || t === '--header') {
                     var hdr = tokens[++i] || '';
@@ -2992,13 +3113,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     continue;
                 }
-                
+
                 // Data/Body
                 if (['-d', '--data', '--data-raw', '--data-binary'].includes(t)) {
                     bodyData = tokens[++i] || '';
                     continue;
                 }
-                
+
                 // URL-encoded data
                 if (t === '--data-urlencode') {
                     var encodedData = tokens[++i] || '';
@@ -3011,7 +3132,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     continue;
                 }
-                
+
                 // Form fields
                 if (t === '-F' || t === '--form') {
                     isMultipart = true;
@@ -3025,7 +3146,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     continue;
                 }
-                
+
                 // Basic auth
                 if (t === '-u' || t === '--user') {
                     var cred = tokens[++i] || '';
@@ -3035,22 +3156,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                     continue;
                 }
-                
+
                 // URL
-                if (t === '--url') { 
-                    url = tokens[++i] || ''; 
-                    continue; 
+                if (t === '--url') {
+                    url = tokens[++i] || '';
+                    continue;
                 }
-                
+
                 // Skip common flags
-                if (['--compressed', '-k', '--insecure', '-s', '--silent', 
+                if (['--compressed', '-k', '--insecure', '-s', '--silent',
                      '-S', '-L', '--location', '-v', '--verbose'].includes(t)) {
                     continue;
                 }
-                
+
                 // Assume any non-flag token is the URL
-                if (t.charAt(0) !== '-' && !url) { 
-                    url = t; 
+                if (t.charAt(0) !== '-' && !url) {
+                    url = t;
                 }
             }
 
@@ -3058,7 +3179,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if ((bodyData || formFields.length > 0) && method === 'GET') {
                 method = 'POST';
             }
-            
+
             // Populate editor
             methodSelect.value = method;
             urlInput.value = url;
@@ -3066,8 +3187,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Clear and populate headers
             headersContainer.innerHTML = '';
-            headers.forEach(function(h) { 
-                addHeaderRow(h.key, h.value); 
+            headers.forEach(function(h) {
+                addHeaderRow(h.key, h.value);
             });
             if (!headersContainer.children.length) addHeaderRow();
 
@@ -3078,7 +3199,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 formFields.forEach(function(f) {
                     addFormDataRow(f.key, f.value);
                 });
-                
+
                 var bodyType = isMultipart ? 'form-data' : 'form-urlencoded';
                 var radio = document.querySelector('input[name="bodyType"][value="' + bodyType + '"]');
                 if (radio) {
@@ -3089,7 +3210,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (bodyData) {
                 // Regular body
                 bodyContent.value = bodyData;
-                
+
                 // Auto-detect content type
                 var detectedType = 'text';
                 try {
@@ -3100,15 +3221,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         detectedType = 'xml';
                     }
                 }
-                
+
                 var bodyRadio = document.querySelector('input[name="bodyType"][value="' + detectedType + '"]');
                 if (bodyRadio) bodyRadio.checked = true;
                 bodyContent.style.display = '';
                 formDataContainer.style.display = 'none';
             }
-            
+
             showToast('cURL command parsed successfully', 'success');
-            
+
         } catch (err) {
             console.error('cURL parse error:', err);
             showToast('Failed to parse cURL command', 'error');
