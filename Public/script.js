@@ -44,6 +44,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const addEnvVarBtn      = document.getElementById('addEnvVarBtn');
     const paramsBody        = document.getElementById('paramsBody');
     const addParamBtn       = document.getElementById('addParamBtn');
+    const sidebar          = document.getElementById('sidebar');
+    const mainContent      = document.querySelector('.main-content');
+    const requestSection   = document.getElementById('requestSection');
+    const responseSection  = document.getElementById('responseSection');
+    const sidebarResizeHandle  = document.getElementById('sidebarResizeHandle');
+    const responseResizeHandle = document.getElementById('responseResizeHandle');
     const appContainer      = document.getElementById('appContainer');
     const sidebar           = document.getElementById('sidebar');
     const sidebarToggleBtn  = document.getElementById('sidebarToggleBtn');
@@ -99,9 +105,168 @@ document.addEventListener('DOMContentLoaded', () => {
     let draggedTabId          = null;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
+    const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
+    const RESPONSE_HEIGHT_KEY = 'postboy_response_height';
+    const MOBILE_RESIZE_QUERY = '(max-width: 768px)';
+
+    // ─── Panel Resizing ───────────────────────────────────
+    function isMobileResizeLayout() {
+        return window.matchMedia(MOBILE_RESIZE_QUERY).matches;
+    }
+
+    function cssLengthToPx(value, fallback) {
+        if (!value) return fallback;
+
+        value = value.trim();
+        var parsed = parseFloat(value);
+        if (Number.isNaN(parsed)) return fallback;
+
+        if (value.endsWith('vh')) return window.innerHeight * parsed / 100;
+        if (value.endsWith('vw')) return window.innerWidth * parsed / 100;
+        if (value.endsWith('%')) return fallback;
+        return parsed;
+    }
+
+    function getCssLength(name, fallback) {
+        return cssLengthToPx(getComputedStyle(document.documentElement).getPropertyValue(name), fallback);
+    }
+
+    function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+    }
+
+    function getSidebarWidthBounds() {
+        return {
+            min: getCssLength('--sidebar-min-width', 220),
+            max: Math.min(getCssLength('--sidebar-max-width', 520), Math.max(260, window.innerWidth - 360))
+        };
+    }
+
+    function getResponseHeightBounds() {
+        var mainHeight = mainContent ? mainContent.getBoundingClientRect().height : window.innerHeight;
+
+        return {
+            min: getCssLength('--response-section-min-height', 180),
+            max: Math.min(getCssLength('--response-section-max-height', 0.7 * window.innerHeight), Math.max(220, mainHeight - 220))
+        };
+    }
+
+    function applySidebarWidth(width, persist) {
+        if (!sidebar || isMobileResizeLayout()) return;
+
+        var bounds = getSidebarWidthBounds();
+        var clampedWidth = clamp(width, bounds.min, bounds.max);
+        sidebar.style.width = clampedWidth + 'px';
+
+        if (persist) localStorage.setItem(SIDEBAR_WIDTH_KEY, String(Math.round(clampedWidth)));
+    }
+
+    function applyResponseHeight(height, persist) {
+        if (!responseSection || isMobileResizeLayout()) return;
+
+        var bounds = getResponseHeightBounds();
+        var clampedHeight = clamp(height, bounds.min, bounds.max);
+        responseSection.style.height = clampedHeight + 'px';
+        responseSection.style.flex = '0 0 auto';
+
+        if (persist) localStorage.setItem(RESPONSE_HEIGHT_KEY, String(Math.round(clampedHeight)));
+    }
+
+    function restorePanelSizes() {
+        if (isMobileResizeLayout()) return;
+
+        var storedSidebarWidth = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY), 10);
+        var storedResponseHeight = parseInt(localStorage.getItem(RESPONSE_HEIGHT_KEY), 10);
+
+        if (!Number.isNaN(storedSidebarWidth)) applySidebarWidth(storedSidebarWidth, false);
+        if (!Number.isNaN(storedResponseHeight)) applyResponseHeight(storedResponseHeight, false);
+    }
+
+    function clearInlinePanelSizesForMobile() {
+        if (sidebar) sidebar.style.width = '';
+        if (responseSection) {
+            responseSection.style.height = '';
+            responseSection.style.flex = '';
+        }
+    }
+
+    function syncResizeHandlesForViewport() {
+        var disabled = isMobileResizeLayout();
+
+        [sidebarResizeHandle, responseResizeHandle].forEach(function(handle) {
+            if (!handle) return;
+            handle.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        });
+
+        if (disabled) {
+            clearInlinePanelSizesForMobile();
+        } else {
+            restorePanelSizes();
+        }
+    }
+
+    function stopPanelResize(handle, moveHandler, upHandler, bodyClass) {
+        document.removeEventListener('pointermove', moveHandler);
+        document.removeEventListener('pointerup', upHandler);
+        document.removeEventListener('pointercancel', upHandler);
+        document.body.classList.remove('resizing-panels', bodyClass);
+        if (handle) handle.classList.remove('active');
+    }
+
+    function initPanelResizing() {
+        if (sidebarResizeHandle && sidebar) {
+            sidebarResizeHandle.addEventListener('pointerdown', function(event) {
+                if (isMobileResizeLayout()) return;
+
+                event.preventDefault();
+                sidebarResizeHandle.classList.add('active');
+                document.body.classList.add('resizing-panels', 'resizing-sidebar');
+
+                function onMove(moveEvent) {
+                    var appLeft = document.querySelector('.app-container').getBoundingClientRect().left;
+                    applySidebarWidth(moveEvent.clientX - appLeft, true);
+                }
+
+                function onUp() {
+                    stopPanelResize(sidebarResizeHandle, onMove, onUp, 'resizing-sidebar');
+                }
+
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+                document.addEventListener('pointercancel', onUp);
+            });
+        }
+
+        if (responseResizeHandle && responseSection && requestSection) {
+            responseResizeHandle.addEventListener('pointerdown', function(event) {
+                if (isMobileResizeLayout()) return;
+
+                event.preventDefault();
+                responseResizeHandle.classList.add('active');
+                document.body.classList.add('resizing-panels', 'resizing-response');
+
+                function onMove(moveEvent) {
+                    var responseBottom = responseSection.getBoundingClientRect().bottom;
+                    applyResponseHeight(responseBottom - moveEvent.clientY, true);
+                }
+
+                function onUp() {
+                    stopPanelResize(responseResizeHandle, onMove, onUp, 'resizing-response');
+                }
+
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+                document.addEventListener('pointercancel', onUp);
+            });
+        }
+
+        window.addEventListener('resize', syncResizeHandlesForViewport);
+        syncResizeHandlesForViewport();
+    }
     const OPEN_TABS_STORAGE_KEY = 'postboy_open_tabs';
 
     // ─── Init ──────────────────────────────────────────────
+    initPanelResizing();
     renderHistory();
     renderEnvVars();
     initializeRequestTabs();
