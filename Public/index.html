@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostBoy - API Testing Client</title>
+    <link rel="icon" type="image/png" href="/favicon.ico">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>📮 PostBoy</h2>
+            </div>
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab active" data-target="collections-panel">Collections</button>
+                <button class="sidebar-tab" data-target="history-panel">History</button>
+                <button class="sidebar-tab" data-target="env-panel">Environ</button>
+            </div>
+            <div class="sidebar-panel active" id="collections-panel">
+                <div class="sidebar-section sidebar-actions">
+                    <button class="btn-import" id="newCollectionBtn">📁 New Collection</button>
+                    <button class="btn-import" id="importBtn">📥 Import (Postman/cURL)</button>
+                </div>
+
+                <!-- New Collection Modal -->
+                <div id="newCollectionModal" class="modal">
+                    <div class="modal-content">
+                        <span class="modal-close" id="newColModalClose">&times;</span>
+                        <h3 id="collectionModalTitle">New Collection</h3>
+                        <input type="hidden" id="editCollectionId" value="">
+                        <label class="modal-label">Name</label>
+                        <input type="text" id="newColName" placeholder="My Collection" class="modal-input">
+                        <label class="modal-label">Description (optional)</label>
+                        <textarea id="newColDesc" placeholder="Describe this collection..." rows="3" class="modal-textarea"></textarea>
+                        <div class="modal-buttons">
+                            <button class="btn-cancel" id="newColCancelBtn">Cancel</button>
+                            <button class="btn-send" id="newColSaveBtn">Save</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- New/Edit Request Modal -->
+                <div id="requestModal" class="modal">
+                    <div class="modal-content">
+                        <span class="modal-close" id="reqModalClose">&times;</span>
+                        <h3 id="requestModalTitle">New Request</h3>
+                        <input type="hidden" id="editRequestId" value="">
+                        <input type="hidden" id="editRequestCollectionId" value="">
+                        <label class="modal-label">Name</label>
+                        <input type="text" id="reqNameInput" placeholder="Get Users" class="modal-input">
+                        <div id="reqCollectionPickerWrap" style="display:none;">
+                            <label class="modal-label">Collection</label>
+                            <select id="reqCollectionSelect" class="modal-input"></select>
+                        </div>
+                        <div class="modal-buttons">
+                            <button class="btn-cancel" id="reqCancelBtn">Cancel</button>
+                            <button class="btn-send" id="reqSaveBtn">Save</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Import Modal -->
+                <div id="importModal" class="modal">
+                    <div class="modal-content">
+                        <span class="modal-close" id="modalClose">&times;</span>
+                        <h3>Import Request</h3>
+                        <div class="import-tabs">
+                            <button class="import-tab active" data-import-tab="text">Paste Text</button>
+                            <button class="import-tab" data-import-tab="file">Upload File</button>
+                        </div>
+                        
+                        <!-- Text Import -->
+                        <div class="import-panel active" id="import-text-panel">
+                            <textarea id="importInput" placeholder="Paste Postman JSON collection or cURL command here..." rows="10"></textarea>
+                        </div>
+                        
+                        <!-- File Import -->
+                        <div class="import-panel" id="import-file-panel">
+                            <div class="file-upload-area" id="fileDropZone">
+                                <p>📁 Drag & drop a Postman collection JSON file here</p>
+                                <p>or</p>
+                                <input type="file" id="importFileInput" accept=".json" style="display: none;">
+                                <button class="btn-import" id="browseFileBtn">Browse Files</button>
+                                <p id="selectedFileName" class="file-name"></p>
+                            </div>
+                        </div>
+                        
+                        <div class="import-progress" id="importProgress" style="display: none;">
+                            <div class="spinner"></div>
+                            <span>Importing...</span>
+                        </div>
+                        
+                        <button class="btn-send" id="importConfirmBtn">Import</button>
+                    </div>
+                </div>
+
+                <div class="collection-list" id="collectionList">
+                    <p class="empty-state">No collections yet. Create one or import a Postman collection.</p>
+                </div>
+            </div>
+            <div class="sidebar-panel" id="history-panel">
+                <div class="history-list" id="historyList">
+                    <p class="empty-state">No history yet.</p>
+                </div>
+            </div>
+            <div class="sidebar-panel" id="env-panel">
+                <div class="env-editor">
+                    <h4>Environment Variables</h4>
+                    <p class="env-hint">Use <code>{{key}}</code> in URL, headers, or body.</p>
+                    <div id="envVarsList"></div>
+                    <button class="btn-add-row" id="addEnvVarBtn">+ Add Variable</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Request Tabs Bar -->
+            <div class="request-tabs-bar" id="requestTabsBar">
+                <div class="request-tabs" id="requestTabs"></div>
+                <button class="btn-new-tab" id="newTabBtn" title="New Request">+</button>
+            </div>
+
+            <!-- URL Bar -->
+            <div class="url-bar">
+                <select id="methodSelect">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="HEAD">HEAD</option>
+                    <option value="OPTIONS">OPTIONS</option>
+                </select>
+                <input type="text" id="urlInput" placeholder="Enter request URL or paste cURL command...">
+                <button class="btn-send" id="sendBtn">Send</button>
+                <button class="btn-loop" id="loopBtn" title="Loop Request">🔁</button>
+            </div>
+
+            <!-- Loop Controls -->
+            <div class="loop-controls" id="loopControls">
+                <label>Interval (ms):</label>
+                <input type="number" id="loopInterval" value="1000" min="100">
+                <label>Count (0=∞):</label>
+                <input type="number" id="loopCount" value="0" min="0">
+                <span id="loopStatus"></span>
+            </div>
+
+            <!-- Request Config -->
+            <div class="request-section">
+                <div class="tab-bar">
+                    <button class="tab active" data-tab="params">Params</button>
+                    <button class="tab" data-tab="headers">Headers</button>
+                    <button class="tab" data-tab="body">Body</button>
+                    <button class="tab" data-tab="auth">Auth</button>
+                </div>
+
+                <!-- Params Tab -->
+                <div class="tab-content active" id="params-tab">
+                    <div class="params-auto-hint">
+                        <span>💡 Query parameters are auto-detected from the URL and kept in sync.</span>
+                    </div>
+                    <table class="params-table" id="paramsTable">
+                        <thead>
+                            <tr>
+                                <th class="col-check"></th>
+                                <th>Key</th>
+                                <th>Value</th>
+                                <th>Description</th>
+                                <th class="col-action"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="paramsBody">
+                        </tbody>
+                    </table>
+                    <button class="btn-add-row" id="addParamBtn">+ Add Parameter</button>
+                </div>
+
+                <!-- Headers Tab -->
+                <div class="tab-content" id="headers-tab">
+                    <div id="headersContainer">
+                        <div class="header-row">
+                            <input type="text" placeholder="Header name" class="header-key">
+                            <input type="text" placeholder="Header value" class="header-value">
+                            <button class="btn-remove" onclick="this.parentElement.remove()">×</button>
+                        </div>
+                    </div>
+                    <button class="btn-add-row" id="addHeaderBtn">+ Add Header</button>
+                </div>
+
+                <!-- Body Tab -->
+                <div class="tab-content" id="body-tab">
+                    <div class="body-type-selector">
+                        <label><input type="radio" name="bodyType" value="none" checked> none</label>
+                        <label><input type="radio" name="bodyType" value="json"> JSON</label>
+                        <label><input type="radio" name="bodyType" value="text"> Text</label>
+                        <label><input type="radio" name="bodyType" value="xml"> XML</label>
+                        <label><input type="radio" name="bodyType" value="form-urlencoded"> x-www-form-urlencoded</label>
+                        <label><input type="radio" name="bodyType" value="form-data"> Form Data</label>
+                    </div>
+                    <textarea id="bodyContent" placeholder="Enter request body..." rows="8"></textarea>
+                    <div id="formDataContainer" class="form-data-container" style="display:none;">
+                        <div id="formDataRows"></div>
+                        <button class="btn-add-row" id="addFormDataBtn">+ Add Field</button>
+                    </div>
+                </div>
+
+                <!-- Auth Tab -->
+                <div class="tab-content" id="auth-tab">
+                    <div class="auth-type-selector">
+                        <label><input type="radio" name="authType" value="none" checked> No Auth</label>
+                        <label><input type="radio" name="authType" value="bearer"> Bearer Token</label>
+                        <label><input type="radio" name="authType" value="basic"> Basic Auth</label>
+                        <label><input type="radio" name="authType" value="apikey"> API Key</label>
+                    </div>
+                    <div class="auth-fields" id="authFields"></div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button class="btn-export" id="exportCurlBtn">📋 Export as cURL</button>
+            </div>
+
+            <!-- Export Modal -->
+            <div id="exportModal" class="modal">
+                <div class="modal-content">
+                    <span class="modal-close" id="exportModalClose">&times;</span>
+                    <h3>cURL Command</h3>
+                    <textarea id="exportOutput" rows="8" readonly></textarea>
+                    <button class="btn-send" id="copyExportBtn">Copy to Clipboard</button>
+                </div>
+            </div>
+
+            <!-- Response Section -->
+            <div class="response-section" id="responseSection">
+                <div class="response-header">
+                    <h3>Response</h3>
+                    <div class="response-meta">
+                        <span id="statusCode" class="status-badge">---</span>
+                        <span id="responseTime">0 ms</span>
+                        <span id="responseSize">0 B</span>
+                        <button class="btn-copy-response" id="copyResponseBtn">📋 Copy</button>
+                    </div>
+                </div>
+                <div class="response-tabs">
+                    <button class="response-tab active" data-rtab="body">Body</button>
+                    <button class="response-tab" data-rtab="headers">Headers</button>
+                </div>
+                <div class="response-tab-content active" id="response-body-tab">
+                    <pre id="responseBody">Send a request to see the response here.</pre>
+                </div>
+                <div class="response-tab-content" id="response-headers-tab">
+                    <pre id="responseHeaders"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" data-action="edit">✏️ Rename</div>
+        <div class="context-menu-item" data-action="duplicate">📋 Duplicate</div>
+        <div class="context-menu-item" data-action="add-request">➕ Add Request</div>
+        <div class="context-menu-item" data-action="add-folder">📁 Add Sub-folder</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="export-json">📦 Export as JSON</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item danger" data-action="delete">🗑️ Delete</div>
+    </div>
+
+    <!-- Request Context Menu -->
+    <div class="context-menu" id="requestContextMenu">
+        <div class="context-menu-item" data-action="edit">✏️ Rename</div>
+        <div class="context-menu-item" data-action="duplicate">📋 Duplicate</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item danger" data-action="delete">🗑️ Delete</div>
+    </div>
+
+    <!-- Tab Context Menu -->
+    <div class="context-menu" id="tabContextMenu">
+        <div class="context-menu-item" data-action="save">💾 Save</div>
+        <div class="context-menu-item" data-action="save-as">📁 Save to Collection…</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="close">✕ Close Tab</div>
+        <div class="context-menu-item" data-action="close-others">✕ Close Other Tabs</div>
+        <div class="context-menu-item" data-action="close-all">✕ Close All Tabs</div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
