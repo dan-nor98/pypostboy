@@ -17,11 +17,19 @@ class Collections:
         return ensure_default_local_user(conn.cursor())
 
     @staticmethod
-    def get_all():
-        """Get all collections in tree structure."""
+    def _resolve_user_id(conn, user_id=None):
+        return int(user_id) if user_id is not None else Collections._default_user_id(conn)
+
+    @staticmethod
+    def get_all(user_id=None):
+        """Get all collections owned by a user in tree structure."""
         conn = Collections._conn()
+        user_id = Collections._resolve_user_id(conn, user_id)
         all_cols = conn.execute(
-            "SELECT * FROM collections ORDER BY sort_order ASC, id ASC"
+            """SELECT * FROM collections
+               WHERE user_id = ?
+               ORDER BY sort_order ASC, id ASC""",
+            (user_id,)
         ).fetchall()
 
         col_map = {}
@@ -32,7 +40,10 @@ class Collections:
             col_map[c_dict['id']] = c_dict
 
         all_reqs = conn.execute(
-            "SELECT * FROM requests ORDER BY sort_order ASC, id ASC"
+            """SELECT * FROM requests
+               WHERE user_id = ?
+               ORDER BY sort_order ASC, id ASC""",
+            (user_id,)
         ).fetchall()
 
         for r in all_reqs:
@@ -53,11 +64,13 @@ class Collections:
         return tree
 
     @staticmethod
-    def get_by_id(id):
-        """Get single collection by ID with children and requests."""
+    def get_by_id(id, user_id=None):
+        """Get single collection owned by a user with children and requests."""
         conn = Collections._conn()
+        user_id = Collections._resolve_user_id(conn, user_id)
         col = conn.execute(
-            "SELECT * FROM collections WHERE id = ?", (id,)
+            "SELECT * FROM collections WHERE id = ? AND user_id = ?",
+            (id, user_id)
         ).fetchone()
 
         if not col:
@@ -69,18 +82,18 @@ class Collections:
 
         children = conn.execute(
             """SELECT * FROM collections
-               WHERE parent_id = ?
+               WHERE parent_id = ? AND user_id = ?
                ORDER BY sort_order ASC, id ASC""",
-            (id,)
+            (id, user_id)
         ).fetchall()
 
         result['children'] = rows_to_list(children)
 
         reqs = conn.execute(
             """SELECT * FROM requests
-               WHERE collection_id = ?
+               WHERE collection_id = ? AND user_id = ?
                ORDER BY sort_order ASC, id ASC""",
-            (id,)
+            (id, user_id)
         ).fetchall()
 
         for r in reqs:
@@ -93,35 +106,37 @@ class Collections:
         return result
 
     @staticmethod
-    def create(data=None):
-        """Create a new collection."""
+    def create(user_id=None, data=None):
+        """Create a new collection for a user."""
         conn = Collections._conn()
+        if isinstance(user_id, dict) and data is None:
+            data = user_id
+            user_id = data.get('user_id')
         data = data or {}
+        user_id = Collections._resolve_user_id(conn, user_id)
         name = data.get('name', 'New Collection')
         parent_id = data.get('parent_id', None)
         description = data.get('description', '')
-        user_id = data.get('user_id')
-        if user_id is None and parent_id is not None:
+
+        if parent_id is not None:
             parent = conn.execute(
-                "SELECT user_id FROM collections WHERE id = ?",
-                (parent_id,)
+                "SELECT id FROM collections WHERE id = ? AND user_id = ?",
+                (parent_id, user_id)
             ).fetchone()
             if not parent:
                 raise ValueError('Parent collection not found')
-            user_id = parent['user_id']
-        if user_id is None:
-            user_id = Collections._default_user_id(conn)
 
         if parent_id is not None:
             max_order_row = conn.execute(
                 """SELECT COALESCE(MAX(sort_order), -1) as max_order
-                   FROM collections WHERE parent_id = ?""",
-                (parent_id,)
+                   FROM collections WHERE parent_id = ? AND user_id = ?""",
+                (parent_id, user_id)
             ).fetchone()
         else:
             max_order_row = conn.execute(
                 """SELECT COALESCE(MAX(sort_order), -1) as max_order
-                   FROM collections WHERE parent_id IS NULL"""
+                   FROM collections WHERE parent_id IS NULL AND user_id = ?""",
+                (user_id,)
             ).fetchone()
 
         max_order = max_order_row['max_order'] if max_order_row else -1
@@ -134,13 +149,17 @@ class Collections:
             (user_id, name, description, parent_id, max_order + 1, now, now)
         )
 
-        return Collections.get_by_id(cursor.lastrowid)
+        return Collections.get_by_id(cursor.lastrowid, user_id)
 
     @staticmethod
-    def update(id, data):
-        """Update a collection."""
+    def update(id, user_id=None, data=None):
+        """Update a user-owned collection."""
         conn = Collections._conn()
-        col = Collections.get_by_id(id)
+        if data is None:
+            data = user_id or {}
+            user_id = None
+        user_id = Collections._resolve_user_id(conn, user_id)
+        col = Collections.get_by_id(id, user_id)
         if not col:
             raise ValueError('Collection not found')
 
@@ -154,27 +173,39 @@ class Collections:
             updates.append('description = ?')
             params.append(data['description'])
         if 'parent_id' in data:
+            parent_id = data['parent_id'] or None
+            if parent_id is not None:
+                parent = conn.execute(
+                    "SELECT id FROM collections WHERE id = ? AND user_id = ?",
+                    (parent_id, user_id)
+                ).fetchone()
+                if not parent:
+                    raise ValueError('Parent collection not found')
             updates.append('parent_id = ?')
-            params.append(data['parent_id'] or None)
+            params.append(parent_id)
         if 'sort_order' in data:
             updates.append('sort_order = ?')
             params.append(data['sort_order'])
 
         updates.append('updated_at = ?')
         params.append(timestamp())
-        params.append(id)
+        params.extend([id, user_id])
 
         conn.execute(
-            f"UPDATE collections SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE collections SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
             params
         )
 
-        return Collections.get_by_id(id)
+        return Collections.get_by_id(id, user_id)
 
     @staticmethod
-    def reorder(parent_id, ordered_ids):
-        """Reorder sibling collections under a parent."""
+    def reorder(parent_id, user_id=None, ordered_ids=None):
+        """Reorder sibling collections owned by a user under a parent."""
         conn = Collections._conn()
+        if ordered_ids is None:
+            ordered_ids = user_id
+            user_id = None
+        user_id = Collections._resolve_user_id(conn, user_id)
         if not isinstance(ordered_ids, list):
             raise ValueError('ordered_ids must be a list')
 
@@ -189,18 +220,23 @@ class Collections:
         if parent_id is not None:
             parent_id = int(parent_id)
             parent = conn.execute(
-                "SELECT id FROM collections WHERE id = ?",
-                (parent_id,)
+                "SELECT id FROM collections WHERE id = ? AND user_id = ?",
+                (parent_id, user_id)
             ).fetchone()
             if not parent:
                 raise ValueError('Parent collection not found')
             sibling_rows = conn.execute(
-                "SELECT id FROM collections WHERE parent_id = ? ORDER BY sort_order ASC, id ASC",
-                (parent_id,)
+                """SELECT id FROM collections
+                   WHERE parent_id = ? AND user_id = ?
+                   ORDER BY sort_order ASC, id ASC""",
+                (parent_id, user_id)
             ).fetchall()
         else:
             sibling_rows = conn.execute(
-                "SELECT id FROM collections WHERE parent_id IS NULL ORDER BY sort_order ASC, id ASC"
+                """SELECT id FROM collections
+                   WHERE parent_id IS NULL AND user_id = ?
+                   ORDER BY sort_order ASC, id ASC""",
+                (user_id,)
             ).fetchall()
 
         sibling_ids = [row['id'] for row in sibling_rows]
@@ -211,24 +247,28 @@ class Collections:
         with conn:
             for index, collection_id in enumerate(normalized_ids):
                 conn.execute(
-                    "UPDATE collections SET sort_order = ?, updated_at = ? WHERE id = ?",
-                    (index, now, collection_id)
+                    "UPDATE collections SET sort_order = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                    (index, now, collection_id, user_id)
                 )
 
         return {'updated': len(normalized_ids)}
 
     @staticmethod
-    def delete(id):
-        """Delete a collection and all its children recursively."""
+    def delete(id, user_id=None):
+        """Delete a user-owned collection and all its children recursively."""
         conn = Collections._conn()
+        user_id = Collections._resolve_user_id(conn, user_id)
+        if not Collections.get_by_id(id, user_id):
+            return {'deleted': 0}
+
         ids_to_delete = [id]
         to_process = [id]
 
         while to_process:
             current_id = to_process.pop()
             children = conn.execute(
-                "SELECT id FROM collections WHERE parent_id = ?",
-                (current_id,)
+                "SELECT id FROM collections WHERE parent_id = ? AND user_id = ?",
+                (current_id, user_id)
             ).fetchall()
 
             for child in children:
@@ -237,37 +277,45 @@ class Collections:
                 to_process.append(child_id)
 
         for col_id in ids_to_delete:
-            conn.execute("DELETE FROM requests WHERE collection_id = ?", (col_id,))
+            conn.execute(
+                "DELETE FROM requests WHERE collection_id = ? AND user_id = ?",
+                (col_id, user_id)
+            )
 
         for col_id in ids_to_delete:
-            conn.execute("DELETE FROM collections WHERE id = ?", (col_id,))
+            conn.execute(
+                "DELETE FROM collections WHERE id = ? AND user_id = ?",
+                (col_id, user_id)
+            )
 
         db.save()
 
         return {'deleted': len(ids_to_delete)}
 
     @staticmethod
-    def duplicate(id):
-        """Duplicate a collection including all children and requests."""
+    def duplicate(id, user_id=None):
+        """Duplicate a user-owned collection including children and requests."""
         from pypostboy.repositories.requests import Requests
 
         conn = Collections._conn()
-        original = Collections.get_by_id(id)
+        user_id = Collections._resolve_user_id(conn, user_id)
+        original = Collections.get_by_id(id, user_id)
         if not original:
             raise ValueError('Collection not found')
 
-        new_col = Collections.create({
+        new_col = Collections.create(user_id, {
             'name': original['name'] + ' (copy)',
             'parent_id': original['parent_id'],
             'description': original['description'] or ''
         })
 
         reqs = conn.execute(
-            "SELECT * FROM requests WHERE collection_id = ?", (id,)
+            "SELECT * FROM requests WHERE collection_id = ? AND user_id = ?",
+            (id, user_id)
         ).fetchall()
 
         for r in reqs:
-            Requests.create({
+            Requests.create(user_id, {
                 'collection_id': new_col['id'],
                 'name': r['name'],
                 'method': r['method'],
@@ -282,39 +330,42 @@ class Collections:
             })
 
         children = conn.execute(
-            "SELECT * FROM collections WHERE parent_id = ?", (id,)
+            "SELECT * FROM collections WHERE parent_id = ? AND user_id = ?",
+            (id, user_id)
         ).fetchall()
 
         for child in children:
-            _duplicate_collection_recursive(child['id'], new_col['id'])
+            _duplicate_collection_recursive(child['id'], new_col['id'], user_id)
 
-        return Collections.get_by_id(new_col['id'])
+        return Collections.get_by_id(new_col['id'], user_id)
 
 
-def _duplicate_collection_recursive(original_id, new_parent_id):
+def _duplicate_collection_recursive(original_id, new_parent_id, user_id):
     """Recursive helper for collection duplication."""
     from pypostboy.repositories.requests import Requests
 
     conn = Collections._conn()
     original = conn.execute(
-        "SELECT * FROM collections WHERE id = ?", (original_id,)
+        "SELECT * FROM collections WHERE id = ? AND user_id = ?",
+        (original_id, user_id)
     ).fetchone()
 
     if not original:
         return
 
-    new_col = Collections.create({
+    new_col = Collections.create(user_id, {
         'name': original['name'],
         'parent_id': new_parent_id,
         'description': original['description'] or ''
     })
 
     reqs = conn.execute(
-        "SELECT * FROM requests WHERE collection_id = ?", (original_id,)
+        "SELECT * FROM requests WHERE collection_id = ? AND user_id = ?",
+        (original_id, user_id)
     ).fetchall()
 
     for r in reqs:
-        Requests.create({
+        Requests.create(user_id, {
             'collection_id': new_col['id'],
             'name': r['name'],
             'method': r['method'],
@@ -329,8 +380,9 @@ def _duplicate_collection_recursive(original_id, new_parent_id):
         })
 
     children = conn.execute(
-        "SELECT * FROM collections WHERE parent_id = ?", (original_id,)
+        "SELECT * FROM collections WHERE parent_id = ? AND user_id = ?",
+        (original_id, user_id)
     ).fetchall()
 
     for child in children:
-        _duplicate_collection_recursive(child['id'], new_col['id'])
+        _duplicate_collection_recursive(child['id'], new_col['id'], user_id)

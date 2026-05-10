@@ -3,13 +3,13 @@
 from db import Collections, Requests
 
 
-def import_postman_to_db(data):
-    """Import Postman collection into database."""
+def import_postman_to_db(data, user_id=None):
+    """Import Postman collection into database for a user."""
     info = data.get('info', {})
     collection_name = info.get('name', 'Imported Collection')
     items = data.get('item', [])
 
-    root_col = Collections.create({
+    root_col = Collections.create(user_id, {
         'name': collection_name,
         'description': info.get('description', '')
     })
@@ -17,7 +17,7 @@ def import_postman_to_db(data):
     def process_items(items, parent_collection_id):
         for item in items:
             if 'item' in item and isinstance(item['item'], list):
-                sub_col = Collections.create({
+                sub_col = Collections.create(user_id, {
                     'name': item.get('name', 'Folder'),
                     'description': item.get('description', ''),
                     'parent_id': parent_collection_id
@@ -86,7 +86,7 @@ def import_postman_to_db(data):
                             'password': pass_entry['value'] if pass_entry else ''
                         }
 
-                Requests.create({
+                Requests.create(user_id, {
                     'collection_id': parent_collection_id,
                     'name': item.get('name', url or 'Untitled'),
                     'method': method,
@@ -100,4 +100,4 @@ def import_postman_to_db(data):
                 })
 
     process_items(items, root_col['id'])
-    return Collections.get_by_id(root_col['id'])
+    return Collections.get_by_id(root_col['id'], user_id)

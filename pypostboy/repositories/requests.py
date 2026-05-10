@@ -1,6 +1,7 @@
 """Request repository methods."""
 
 from pypostboy.db.connection import get_connection
+from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import safe_parse, safe_stringify, timestamp
 
 
@@ -12,67 +13,77 @@ class Requests:
         return cls.connection or get_connection()
 
     @staticmethod
-    def get_by_id(id):
-        """Get a single request by ID."""
-        conn = Requests._conn()
-        req = conn.execute(
-            "SELECT * FROM requests WHERE id = ?", (id,)
-        ).fetchone()
+    def _resolve_user_id(conn, user_id=None):
+        return int(user_id) if user_id is not None else ensure_default_local_user(conn.cursor())
 
-        if not req:
+    @staticmethod
+    def _row_to_request(row):
+        if not row:
             return None
-
-        result = dict(req)
+        result = dict(row)
         result['headers'] = safe_parse(result['headers'], [])
         result['form_data'] = safe_parse(result['form_data'], [])
         result['auth_data'] = safe_parse(result['auth_data'], {})
         return result
 
     @staticmethod
-    def get_by_collection(collection_id):
-        """Get all requests in a collection."""
+    def get_by_id(id, user_id=None):
+        """Get a single user-owned request by ID."""
         conn = Requests._conn()
-        reqs = conn.execute(
-            """SELECT * FROM requests
-               WHERE collection_id = ?
-               ORDER BY sort_order ASC, id ASC""",
-            (collection_id,)
-        ).fetchall()
-
-        result = []
-        for r in reqs:
-            r_dict = dict(r)
-            r_dict['headers'] = safe_parse(r_dict['headers'], [])
-            r_dict['form_data'] = safe_parse(r_dict['form_data'], [])
-            r_dict['auth_data'] = safe_parse(r_dict['auth_data'], {})
-            result.append(r_dict)
-
-        return result
+        user_id = Requests._resolve_user_id(conn, user_id)
+        req = conn.execute(
+            "SELECT * FROM requests WHERE id = ? AND user_id = ?",
+            (id, user_id)
+        ).fetchone()
+        return Requests._row_to_request(req)
 
     @staticmethod
-    def create(data=None):
-        """Create a new request."""
+    def get_by_collection(collection_id, user_id=None):
+        """Get all user-owned requests in a user-owned collection."""
         conn = Requests._conn()
+        user_id = Requests._resolve_user_id(conn, user_id)
+        collection = conn.execute(
+            "SELECT id FROM collections WHERE id = ? AND user_id = ?",
+            (collection_id, user_id)
+        ).fetchone()
+        if not collection:
+            raise ValueError('Collection not found')
+
+        reqs = conn.execute(
+            """SELECT * FROM requests
+               WHERE collection_id = ? AND user_id = ?
+               ORDER BY sort_order ASC, id ASC""",
+            (collection_id, user_id)
+        ).fetchall()
+        return [Requests._row_to_request(row) for row in reqs]
+
+    @staticmethod
+    def create(user_id=None, data=None):
+        """Create a new request for a user."""
+        conn = Requests._conn()
+        if isinstance(user_id, dict) and data is None:
+            data = user_id
+            user_id = data.get('user_id')
         data = data or {}
+        user_id = Requests._resolve_user_id(conn, user_id)
         if 'collection_id' not in data:
             raise ValueError('collection_id is required')
 
         collection = conn.execute(
-            "SELECT user_id FROM collections WHERE id = ?",
-            (data['collection_id'],)
+            "SELECT id FROM collections WHERE id = ? AND user_id = ?",
+            (data['collection_id'], user_id)
         ).fetchone()
         if not collection:
             raise ValueError('Collection not found')
-        user_id = data.get('user_id') or collection['user_id']
 
         max_order_row = conn.execute(
             """SELECT COALESCE(MAX(sort_order), -1) as max_order
-               FROM requests WHERE collection_id = ?""",
-            (data['collection_id'],)
+               FROM requests WHERE collection_id = ? AND user_id = ?""",
+            (data['collection_id'], user_id)
         ).fetchone()
 
         max_order = max_order_row['max_order'] if max_order_row else -1
-
+        now = timestamp()
         cursor = conn.execute(
             """INSERT INTO requests (
                 user_id, collection_id, name, method, url, headers,
@@ -93,18 +104,22 @@ class Requests:
                 data.get('auth_type', 'none'),
                 safe_stringify(data.get('auth_data'), '{}'),
                 max_order + 1,
-                timestamp(),
-                timestamp()
+                now,
+                now
             )
         )
 
-        return Requests.get_by_id(cursor.lastrowid)
+        return Requests.get_by_id(cursor.lastrowid, user_id)
 
     @staticmethod
-    def update(id, data):
-        """Update a request."""
+    def update(id, user_id=None, data=None):
+        """Update a user-owned request."""
         conn = Requests._conn()
-        req = Requests.get_by_id(id)
+        if data is None:
+            data = user_id or {}
+            user_id = None
+        user_id = Requests._resolve_user_id(conn, user_id)
+        req = Requests.get_by_id(id, user_id)
         if not req:
             raise ValueError('Request not found')
 
@@ -113,15 +128,13 @@ class Requests:
 
         if 'collection_id' in data:
             target_collection = conn.execute(
-                "SELECT user_id FROM collections WHERE id = ?",
-                (data['collection_id'],)
+                "SELECT id FROM collections WHERE id = ? AND user_id = ?",
+                (data['collection_id'], user_id)
             ).fetchone()
             if not target_collection:
                 raise ValueError('Target collection not found')
             updates.append('collection_id = ?')
             params.append(data['collection_id'])
-            updates.append('user_id = ?')
-            params.append(target_collection['user_id'])
 
         field_mapping = {
             'name': 'name',
@@ -155,21 +168,25 @@ class Requests:
 
         updates.append('updated_at = ?')
         params.append(timestamp())
-        params.append(id)
+        params.extend([id, user_id])
 
         conn.execute(
-            f"UPDATE requests SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE requests SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
             params
         )
 
-        return Requests.get_by_id(id)
+        return Requests.get_by_id(id, user_id)
 
     @staticmethod
-    def reorder(collection_id, ordered_ids):
-        """Reorder requests within a collection."""
+    def reorder(collection_id, user_id=None, ordered_ids=None):
+        """Reorder user-owned requests within a user-owned collection."""
         from pypostboy.repositories.collections import Collections
 
         conn = Requests._conn()
+        if ordered_ids is None:
+            ordered_ids = user_id
+            user_id = None
+        user_id = Requests._resolve_user_id(conn, user_id)
         if not isinstance(ordered_ids, list):
             raise ValueError('ordered_ids must be a list')
 
@@ -182,13 +199,15 @@ class Requests:
         if len(normalized_ids) != len(set(normalized_ids)):
             raise ValueError('ordered_ids must not contain duplicates')
 
-        collection = Collections.get_by_id(collection_id)
+        collection = Collections.get_by_id(collection_id, user_id)
         if not collection:
             raise ValueError('Collection not found')
 
         sibling_rows = conn.execute(
-            "SELECT id FROM requests WHERE collection_id = ? ORDER BY sort_order ASC, id ASC",
-            (collection_id,)
+            """SELECT id FROM requests
+               WHERE collection_id = ? AND user_id = ?
+               ORDER BY sort_order ASC, id ASC""",
+            (collection_id, user_id)
         ).fetchall()
         sibling_ids = [row['id'] for row in sibling_rows]
 
@@ -199,35 +218,36 @@ class Requests:
         with conn:
             for index, request_id in enumerate(normalized_ids):
                 conn.execute(
-                    "UPDATE requests SET sort_order = ?, updated_at = ? WHERE id = ?",
-                    (index, now, request_id)
+                    "UPDATE requests SET sort_order = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                    (index, now, request_id, user_id)
                 )
 
         return {'updated': len(normalized_ids)}
 
     @staticmethod
-    def delete(id):
-        """Delete a request."""
+    def delete(id, user_id=None):
+        """Delete a user-owned request."""
         conn = Requests._conn()
+        user_id = Requests._resolve_user_id(conn, user_id)
         result = conn.execute(
-            "SELECT id FROM requests WHERE id = ?", (id,)
+            "SELECT id FROM requests WHERE id = ? AND user_id = ?",
+            (id, user_id)
         ).fetchone()
 
         if not result:
             return {'deleted': 0}
 
-        conn.execute("DELETE FROM requests WHERE id = ?", (id,))
-
+        conn.execute("DELETE FROM requests WHERE id = ? AND user_id = ?", (id, user_id))
         return {'deleted': 1}
 
     @staticmethod
-    def duplicate(id):
-        """Duplicate a request."""
-        original = Requests.get_by_id(id)
+    def duplicate(id, user_id=None):
+        """Duplicate a user-owned request."""
+        original = Requests.get_by_id(id, user_id)
         if not original:
             raise ValueError('Request not found')
 
-        return Requests.create({
+        return Requests.create(user_id, {
             'collection_id': original['collection_id'],
             'name': original['name'] + ' (copy)',
             'method': original['method'],
@@ -242,22 +262,26 @@ class Requests:
         })
 
     @staticmethod
-    def move(id, new_collection_id):
-        """Move request to another collection."""
+    def move(id, user_id=None, new_collection_id=None):
+        """Move a user-owned request to another user-owned collection."""
         from pypostboy.repositories.collections import Collections
 
         conn = Requests._conn()
-        req = Requests.get_by_id(id)
+        if new_collection_id is None:
+            new_collection_id = user_id
+            user_id = None
+        user_id = Requests._resolve_user_id(conn, user_id)
+        req = Requests.get_by_id(id, user_id)
         if not req:
             raise ValueError('Request not found')
 
-        target_col = Collections.get_by_id(new_collection_id)
+        target_col = Collections.get_by_id(new_collection_id, user_id)
         if not target_col:
             raise ValueError('Target collection not found')
 
         conn.execute(
-            "UPDATE requests SET collection_id = ?, user_id = ?, updated_at = ? WHERE id = ?",
-            (new_collection_id, target_col['user_id'], timestamp(), id)
+            "UPDATE requests SET collection_id = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+            (new_collection_id, timestamp(), id, user_id)
         )
 
-        return Requests.get_by_id(id)
+        return Requests.get_by_id(id, user_id)

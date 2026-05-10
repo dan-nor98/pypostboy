@@ -7,7 +7,9 @@ from flask_cors import CORS
 from werkzeug.utils import import_string
 
 from pypostboy.config import DevelopmentConfig, ProductionConfig, TestingConfig
+from pypostboy.auth import AuthenticationError, get_current_user
 from pypostboy.db.connection import configure_database
+from pypostboy.http.responses import error
 
 CONFIG_BY_NAME = {
     'development': DevelopmentConfig,
@@ -26,6 +28,16 @@ def create_app(config=None):
     CORS(app)
 
     configure_database(app.config)
+
+    @app.before_request
+    def load_current_user():
+        if not request_is_api():
+            return None
+        try:
+            get_current_user()
+        except AuthenticationError as err:
+            return error(err, 401)
+        return None
 
     @app.after_request
     def remove_csp_headers(response):
@@ -76,3 +88,10 @@ def register_blueprints(app):
     app.register_blueprint(imports_bp)
     app.register_blueprint(proxy_bp)
     app.register_blueprint(static_bp)
+
+
+def request_is_api():
+    """Return whether the current request targets API routes."""
+    from flask import request
+
+    return request.path.startswith('/api/')

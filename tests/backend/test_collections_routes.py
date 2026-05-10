@@ -59,7 +59,7 @@ def test_collections_crud_duplicate_and_reorder_contract(client):
 
     deleted = assert_success(client.delete(f"/api/collections/{created['id']}"))
     assert deleted == {"deleted": 2}
-    assert_success(client.delete("/api/collections/999"))["deleted"] == 1
+    assert_error(client.delete("/api/collections/999"), 404, "Collection not found")
 
 
 def test_collections_error_contracts(client):

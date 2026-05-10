@@ -60,4 +60,4 @@ def test_request_instances_crud_contract(client, request_record):
 def test_request_instances_error_contracts(client):
     assert_error(client.get("/api/requests/404/instances"), 404, "Request not found")
     assert_error(client.get("/api/request-instances/404"), 404, "Request instance not found")
-    assert_error(client.post("/api/requests/404/instances", json={"name": "Nope"}), 400, "Request not found")
+    assert_error(client.post("/api/requests/404/instances", json={"name": "Nope"}), 404, "Request not found")
