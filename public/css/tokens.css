@@ -1,0 +1,30 @@
+/* ===== CSS CUSTOM PROPERTIES (THEME TOKENS) ===== */
+:root {
+  /* Colors */
+  --color-bg: #080c0a;
+  --color-surface: #0f1613;
+  --color-sidebar: #0f1613;
+  --color-border: #0f2e21;
+  --color-border-light: #1e2b25;
+  --color-text: #e2e8f0;
+  --color-text-muted: #a0a0a0;
+  --color-text-dim: #666;
+  --color-accent: #3da37a;
+  --color-accent-hover: #49cc90;
+
+  /* Resizing */
+  --sidebar-min-width: 220px;
+  --sidebar-max-width: 520px;
+  --right-sidebar-width: 300px;
+  --right-sidebar-min-width: 260px;
+  --right-sidebar-max-width: 360px;
+  --request-section-min-height: 180px;
+  --request-section-max-height: 55vh;
+  --response-section-min-height: 180px;
+  --response-section-max-height: 70vh;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
