@@ -7,9 +7,17 @@ function isGuestUser(user) {
     return !user || user.is_guest === true;
 }
 
-function historyStorageKey(user) {
+function storageKey(prefix, user) {
     if (isGuestUser(user) || user.id === undefined || user.id === null) return null;
-    return HISTORY_STORAGE_PREFIX + String(user.id);
+    return prefix + String(user.id);
+}
+
+function envStorageKey(user) {
+    return storageKey(ENV_STORAGE_PREFIX, user);
+}
+
+function historyStorageKey(user) {
+    return storageKey(HISTORY_STORAGE_PREFIX, user);
 }
 
 function safeParseJson(value, fallback) {
@@ -20,13 +28,16 @@ function safeParseJson(value, fallback) {
     }
 }
 
-export function loadEnvVars() {
-    return safeParseJson(localStorage.getItem(ENV_STORAGE_KEY), {});
+export function loadEnvVars(user) {
+    var key = envStorageKey(user);
+    if (!key) return {};
+    return safeParseJson(localStorage.getItem(key), {});
 }
 
-function userStorageKey(prefix, user) {
-    if (isGuestUser(user) || user.id === undefined || user.id === null) return null;
-    return prefix + String(user.id);
+export function saveEnvVarsToStorage(envVars, user) {
+    var key = envStorageKey(user);
+    if (!key) return;
+    localStorage.setItem(key, JSON.stringify(envVars));
 }
 
 export function loadHistory(user) {

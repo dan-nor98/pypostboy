@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let loopTimer             = null;
     let loopRun               = 0;
     let history               = [];
-    let envVars               = loadEnvVars();
+    let envVars               = loadEnvVars(userState.currentUser);
     let updatingUrlFromParams = false;
     let updatingParamsFromUrl = false;
     let openTabs              = [];   // [{id, label, method, requestId, collectionId, state, unsaved}]
@@ -534,7 +534,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function clearUserScopedUiState() {
         history = loadHistory(userState.currentUser);
+        envVars = loadEnvVars(userState.currentUser);
         renderHistory();
+        renderEnvVars();
         collectionsData = [];
         expandedCollections.clear();
         activeRequestInstances = [];
@@ -609,7 +611,9 @@ document.addEventListener('DOMContentLoaded', () => {
         await initializeCurrentUser();
         clearLegacyGuestHistory();
         history = loadHistory(userState.currentUser);
+        envVars = loadEnvVars(userState.currentUser);
         renderHistory();
+        renderEnvVars();
         await initializeRequestTabs();
     }
 
