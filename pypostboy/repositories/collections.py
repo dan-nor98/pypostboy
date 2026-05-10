@@ -309,46 +309,39 @@ class Collections:
             'description': original['description'] or ''
         })
 
-        reqs = conn.execute(
-            "SELECT * FROM requests WHERE collection_id = ? AND user_id = ?",
-            (id, user_id)
-        ).fetchall()
+        for request in Requests.get_by_collection(id, user_id):
+            _copy_request_to_collection(request, new_col['id'], user_id)
 
-        for r in reqs:
-            Requests.create(user_id, {
-                'collection_id': new_col['id'],
-                'name': r['name'],
-                'method': r['method'],
-                'url': r['url'],
-                'headers': safe_parse(r['headers'], []),
-                'body_type': r['body_type'],
-                'body_content': r['body_content'],
-                'body_raw_type': r['body_raw_type'],
-                'form_data': safe_parse(r['form_data'], []),
-                'auth_type': r['auth_type'],
-                'auth_data': safe_parse(r['auth_data'], {})
-            })
-
-        children = conn.execute(
-            "SELECT * FROM collections WHERE parent_id = ? AND user_id = ?",
-            (id, user_id)
-        ).fetchall()
-
-        for child in children:
+        for child in original['children']:
             _duplicate_collection_recursive(child['id'], new_col['id'], user_id)
 
         return Collections.get_by_id(new_col['id'], user_id)
+
+
+def _copy_request_to_collection(request, collection_id, user_id):
+    """Copy a user-scoped request into a user-owned collection."""
+    from pypostboy.repositories.requests import Requests
+
+    Requests.create(user_id, {
+        'collection_id': collection_id,
+        'name': request['name'],
+        'method': request['method'],
+        'url': request['url'],
+        'headers': request['headers'],
+        'body_type': request['body_type'],
+        'body_content': request['body_content'],
+        'body_raw_type': request['body_raw_type'],
+        'form_data': request['form_data'],
+        'auth_type': request['auth_type'],
+        'auth_data': request['auth_data']
+    })
 
 
 def _duplicate_collection_recursive(original_id, new_parent_id, user_id):
     """Recursive helper for collection duplication."""
     from pypostboy.repositories.requests import Requests
 
-    conn = Collections._conn()
-    original = conn.execute(
-        "SELECT * FROM collections WHERE id = ? AND user_id = ?",
-        (original_id, user_id)
-    ).fetchone()
+    original = Collections.get_by_id(original_id, user_id)
 
     if not original:
         return
@@ -359,30 +352,8 @@ def _duplicate_collection_recursive(original_id, new_parent_id, user_id):
         'description': original['description'] or ''
     })
 
-    reqs = conn.execute(
-        "SELECT * FROM requests WHERE collection_id = ? AND user_id = ?",
-        (original_id, user_id)
-    ).fetchall()
+    for request in Requests.get_by_collection(original_id, user_id):
+        _copy_request_to_collection(request, new_col['id'], user_id)
 
-    for r in reqs:
-        Requests.create(user_id, {
-            'collection_id': new_col['id'],
-            'name': r['name'],
-            'method': r['method'],
-            'url': r['url'],
-            'headers': safe_parse(r['headers'], []),
-            'body_type': r['body_type'],
-            'body_content': r['body_content'],
-            'body_raw_type': r['body_raw_type'],
-            'form_data': safe_parse(r['form_data'], []),
-            'auth_type': r['auth_type'],
-            'auth_data': safe_parse(r['auth_data'], {})
-        })
-
-    children = conn.execute(
-        "SELECT * FROM collections WHERE parent_id = ? AND user_id = ?",
-        (original_id, user_id)
-    ).fetchall()
-
-    for child in children:
+    for child in original['children']:
         _duplicate_collection_recursive(child['id'], new_col['id'], user_id)
