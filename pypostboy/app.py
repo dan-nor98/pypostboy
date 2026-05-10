@@ -25,7 +25,7 @@ def create_app(config=None):
     """Create and configure the PostBoy Flask app."""
     app = Flask(__name__, static_folder=None)
     load_config(app, config)
-    CORS(app)
+    CORS(app, supports_credentials=True)
 
     configure_database(app.config)
 
@@ -75,6 +75,7 @@ def load_config(app, config=None):
 
 def register_blueprints(app):
     """Register route blueprints while preserving existing URL paths."""
+    from pypostboy.routes.auth import bp as auth_bp
     from pypostboy.routes.collections import bp as collections_bp
     from pypostboy.routes.imports import bp as imports_bp
     from pypostboy.routes.instances import bp as instances_bp
@@ -82,6 +83,7 @@ def register_blueprints(app):
     from pypostboy.routes.requests import bp as requests_bp
     from pypostboy.routes.static import bp as static_bp
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(collections_bp)
     app.register_blueprint(requests_bp)
     app.register_blueprint(instances_bp)

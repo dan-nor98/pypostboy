@@ -6,6 +6,10 @@ function buildJsonOptions(method, payload) {
     };
 }
 
+function withCredentials(options) {
+    return Object.assign({ credentials: 'same-origin' }, options || {});
+}
+
 function createApiError(message, status, payload) {
     var err = new Error(message || 'API request failed');
     err.name = 'ApiError';
@@ -24,7 +28,7 @@ async function requestJson(path, options, allowRawSuccess) {
     var json;
 
     try {
-        response = await fetch(path, options);
+        response = await fetch(path, withCredentials(options));
     } catch (err) {
         throw createApiError(err.message, 0, null);
     }
@@ -51,6 +55,10 @@ async function requestJson(path, options, allowRawSuccess) {
 }
 
 export const apiClient = {
+    login(payload) { return request('/api/auth/login', buildJsonOptions('POST', payload)); },
+    logout() { return request('/api/auth/logout', { method: 'POST' }); },
+    register(payload) { return request('/api/auth/register', buildJsonOptions('POST', payload)); },
+    getCurrentUser() { return request('/api/auth/me'); },
     getCollections() { return request('/api/collections'); },
     getCollection(id) { return request('/api/collections/' + id); },
     reorderCollections(parentId, orderedIds) {
