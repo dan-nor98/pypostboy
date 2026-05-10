@@ -29,6 +29,8 @@ class BaseConfig:
     PUBLIC_DIR = os.path.abspath(
         os.environ.get('POSTBOY_STATIC_FOLDER', DEFAULT_STATIC_FOLDER)
     )
+    SECRET_KEY = os.environ.get('POSTBOY_SECRET_KEY', 'postboy-dev-secret-key')
+    SESSION_COOKIE_SAMESITE = 'Lax'
     TESTING = False
 
 

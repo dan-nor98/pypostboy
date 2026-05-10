@@ -2,6 +2,7 @@ import { getDomElements } from './dom.js';
 import { apiClient } from './api/client.js';
 import { loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
 import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot } from './state/tabs.js';
+import { initializeCurrentUser, loginUser, logoutUser, registerUser, subscribeToUserState, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
 import { loadPanelSizes, savePanelSize } from './state/panels.js';
 import { createToast } from './ui/toast.js';
@@ -31,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newColCancelBtn, editCollectionId, collectionModalTitle, requestModal, reqModalClose, reqNameInput,
         reqSaveBtn, reqCancelBtn, editRequestId, editRequestCollectionId, requestModalTitle,
         reqCollectionPickerWrap, reqCollectionSelect, requestTabsEl, newTabBtn, contextMenu, requestContextMenu,
-        tabContextMenu, snapshotContextMenu
+        tabContextMenu, snapshotContextMenu, authStatus, authUsername, authPassword, loginBtn, registerBtn, logoutBtn
     } = getDomElements();
 
     // ─── State ─────────────────────────────────────────────
@@ -350,7 +351,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initPanelResizing();
     renderHistory();
     renderEnvVars();
-    initializeRequestTabs();
+    initAuthControls();
+    initializeAuthenticatedWorkspace();
 
     // ─── Close context menus on click elsewhere ────────────
     document.addEventListener('click', function() {
@@ -502,12 +504,116 @@ document.addEventListener('DOMContentLoaded', () => {
         createToast(message, type);
     }
 
+
+    function renderAuthControls(state) {
+        if (!authStatus) return;
+
+        var user = state.currentUser;
+        var isLoading = !!state.loading;
+        var username = user && user.username ? user.username : 'Guest';
+        authStatus.textContent = isLoading ? 'Checking account…' : ('Signed in as ' + username);
+        authStatus.classList.toggle('auth-error', !!state.error);
+        if (state.error) authStatus.textContent = state.error;
+
+        [authUsername, authPassword, loginBtn, registerBtn, logoutBtn].forEach(function(control) {
+            if (control) control.disabled = isLoading;
+        });
+    }
+
+    function getAuthCredentials() {
+        return {
+            username: authUsername ? authUsername.value.trim() : '',
+            password: authPassword ? authPassword.value : ''
+        };
+    }
+
+    function clearAuthInputs() {
+        if (authPassword) authPassword.value = '';
+    }
+
+    function clearUserScopedUiState() {
+        collectionsData = [];
+        expandedCollections.clear();
+        activeRequestInstances = [];
+        selectedSnapshotId = '';
+        loadingSnapshotId = '';
+        snapshotContextTargetId = '';
+        contextTarget = null;
+        clearOpenTabsSnapshot();
+        openTabs = [];
+        activeTabId = null;
+        collectionList.innerHTML = '<p class="empty-state">Loading your collections…</p>';
+        renderCollections([]);
+        renderRequestTabs();
+        renderInstancesBar([]);
+        openNewTab();
+    }
+
+    async function reloadUserScopedData() {
+        clearUserScopedUiState();
+        await loadCollections();
+        renderRequestTabs();
+        persistOpenTabs(false);
+    }
+
+    function initAuthControls() {
+        subscribeToUserState(renderAuthControls);
+
+        async function submitAuth(action) {
+            var credentials = getAuthCredentials();
+            if (!credentials.username || !credentials.password) {
+                showToast('Enter a username and password', 'error');
+                return;
+            }
+
+            try {
+                if (action === 'register') {
+                    await registerUser(credentials);
+                    showToast('Account created', 'success');
+                } else {
+                    await loginUser(credentials);
+                    showToast('Signed in', 'success');
+                }
+                clearAuthInputs();
+                await reloadUserScopedData();
+            } catch (err) {
+                showToast('Auth error: ' + err.message, 'error');
+            }
+        }
+
+        if (loginBtn) loginBtn.addEventListener('click', function() { submitAuth('login'); });
+        if (registerBtn) registerBtn.addEventListener('click', function() { submitAuth('register'); });
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', async function() {
+                try {
+                    await logoutUser();
+                    showToast('Signed out', 'success');
+                    await reloadUserScopedData();
+                } catch (err) {
+                    showToast('Logout failed: ' + err.message, 'error');
+                }
+            });
+        }
+        [authUsername, authPassword].forEach(function(input) {
+            if (!input) return;
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') submitAuth('login');
+            });
+        });
+    }
+
+    async function initializeAuthenticatedWorkspace() {
+        await initializeCurrentUser();
+        await initializeRequestTabs();
+    }
+
     // ═══════════════════════════════════════════════════════
     //  COLLECTIONS CRUD (Frontend ↔ API)
     // ═══════════════════════════════════════════════════════
 
     async function loadCollections() {
         try {
+            await waitForAuth();
             console.log('Loading collections...');
             saveExpandedState(); // Save current expanded state
 
@@ -570,12 +676,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function initializeRequestTabs() {
-        loadCollections().then(function() {
-            if (!restoreSavedTabs()) {
-                openNewTab();
-            }
-        });
+    async function initializeRequestTabs() {
+        await loadCollections();
+        if (!restoreSavedTabs()) {
+            openNewTab();
+        }
     }
 
     function findRequestById(requestId) {

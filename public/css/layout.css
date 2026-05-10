@@ -67,3 +67,73 @@
   flex-direction: column;
   gap: 6px;
 }
+
+/* ===== ACCOUNT AREA ===== */
+.account-area {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-status {
+  color: var(--color-text-muted);
+  font-size: 0.82em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-status.auth-error {
+  color: #ff8a80;
+  white-space: normal;
+}
+
+.account-fields,
+.account-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.account-fields {
+  flex-direction: column;
+}
+
+.account-fields input {
+  width: 100%;
+  padding: 7px 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.82em;
+}
+
+.account-fields input:focus {
+  outline: none;
+  border-color: #d1d9d4;
+}
+
+.btn-account {
+  flex: 1;
+  padding: 7px 8px;
+  background: var(--color-border);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.78em;
+  transition: all 0.2s;
+}
+
+.btn-account:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn-account:disabled,
+.account-fields input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
