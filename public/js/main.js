@@ -1,8 +1,8 @@
 import { getDomElements } from './dom.js';
 import { apiClient } from './api/client.js';
-import { loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
+import { clearLegacyGuestHistory, loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
 import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot } from './state/tabs.js';
-import { initializeCurrentUser, loginUser, logoutUser, registerUser, subscribeToUserState, waitForAuth } from './state/user.js';
+import { initializeCurrentUser, loginUser, logoutUser, registerUser, subscribeToUserState, userState, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
 import { loadPanelSizes, savePanelSize } from './state/panels.js';
 import { createToast } from './ui/toast.js';
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let loopActive            = false;
     let loopTimer             = null;
     let loopRun               = 0;
-    let history               = loadHistory();
+    let history               = [];
     let envVars               = loadEnvVars();
     let updatingUrlFromParams = false;
     let updatingParamsFromUrl = false;
@@ -511,7 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
         var user = state.currentUser;
         var isLoading = !!state.loading;
         var username = user && user.username ? user.username : 'Guest';
-        authStatus.textContent = isLoading ? 'Checking account…' : ('Signed in as ' + username);
+        var statusText = user && user.is_guest ? 'Guest mode — log in to save history' : ('Signed in as ' + username);
+        authStatus.textContent = isLoading ? 'Checking account…' : statusText;
         authStatus.classList.toggle('auth-error', !!state.error);
         if (state.error) authStatus.textContent = state.error;
 
@@ -532,6 +533,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearUserScopedUiState() {
+        history = loadHistory(userState.currentUser);
+        renderHistory();
         collectionsData = [];
         expandedCollections.clear();
         activeRequestInstances = [];
@@ -604,6 +607,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initializeAuthenticatedWorkspace() {
         await initializeCurrentUser();
+        clearLegacyGuestHistory();
+        history = loadHistory(userState.currentUser);
+        renderHistory();
         await initializeRequestTabs();
     }
 
@@ -2722,13 +2728,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════
 
     function addHistory(method, url, status) {
+        var user = userState.currentUser;
+        if (!user || user.is_guest) {
+            history = [];
+            renderHistory();
+            return;
+        }
+
         history.unshift({ method: method, url: url, status: status, time: Date.now() });
         if (history.length > 50) history.pop();
-        saveHistoryToStorage(history);
+        saveHistoryToStorage(history, user);
         renderHistory();
     }
 
     function renderHistory() {
+        var user = userState.currentUser;
+        if (!user || user.is_guest) {
+            historyList.innerHTML = '<p class="empty-state">Log in to keep request history.</p>';
+            return;
+        }
         if (!history.length) {
             historyList.innerHTML = '<p class="empty-state">No history yet.</p>';
             return;

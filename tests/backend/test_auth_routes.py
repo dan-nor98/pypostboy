@@ -24,6 +24,7 @@ def test_register_login_logout_session_scopes_collections(client):
         201,
     )
     assert user["username"] == "browser-user"
+    assert user["is_guest"] is False
     assert "password_hash" not in user
 
     created_collection = assert_success(
@@ -35,6 +36,7 @@ def test_register_login_logout_session_scopes_collections(client):
 
     current_after_logout = assert_success(client.post("/api/auth/logout"))
     assert current_after_logout["username"] == "local_user"
+    assert current_after_logout["is_guest"] is True
     assert_success(client.get("/api/collections")) == []
 
     assert_error(
@@ -53,9 +55,11 @@ def test_register_login_logout_session_scopes_collections(client):
         )
     )
     assert logged_in["id"] == user["id"]
+    assert logged_in["is_guest"] is False
     assert len(assert_success(client.get("/api/collections"))) == 1
 
 
 def test_auth_me_uses_default_local_user_for_legacy_local_mode(client):
     current = assert_success(client.get("/api/auth/me"))
     assert current["username"] == "local_user"
+    assert current["is_guest"] is True
