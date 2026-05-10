@@ -511,36 +511,14 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Loading collections...');
             saveExpandedState(); // Save current expanded state
 
-            var res = await apiClient.getCollections();
-            console.log('Collections response status:', res.status);
+            var collections = await apiClient.getCollections();
+            console.log('Loaded collections:', collections);
 
-            if (!res.ok) {
-                throw new Error('HTTP error! status: ' + res.status);
-            }
-
-            var text = await res.text();
-            console.log('Raw response:', text);
-
-            var json;
-            try {
-                json = JSON.parse(text);
-            } catch (e) {
-                console.error('JSON parse error:', e);
-                throw new Error('Invalid JSON response from server');
-            }
-
-            console.log('Parsed collections:', json);
-
-            if (json.success) {
-                collectionsData = json.data;
-                renderCollections(json.data);
-                // Re-highlight active tab's request in sidebar
-                var activeTab = openTabs.find(function(t){ return t.id === activeTabId; });
-                if (activeTab) highlightSidebarForTab(activeTab);
-            } else {
-                console.error('Server returned error:', json.error);
-                showToast('Failed to load collections: ' + (json.error || 'Unknown error'), 'error');
-            }
+            collectionsData = collections;
+            renderCollections(collections);
+            // Re-highlight active tab's request in sidebar
+            var activeTab = openTabs.find(function(t){ return t.id === activeTabId; });
+            if (activeTab) highlightSidebarForTab(activeTab);
         } catch (err) {
             console.error('Failed to load collections:', err);
             showToast('Failed to load collections: ' + err.message, 'error');
@@ -1025,9 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function persistCollectionOrder(parentId, orderedIds) {
         try {
-            var res = await apiClient.reorderCollections(parentId, orderedIds);
-            var json = await res.json();
-            if (!json.success) throw new Error(json.error || 'Failed to reorder collections');
+            await apiClient.reorderCollections(parentId, orderedIds);
             showToast('Collection order saved', 'success');
             loadCollections();
         } catch (err) {
@@ -1038,9 +1014,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function persistRequestOrder(collectionId, orderedIds) {
         try {
-            var res = await apiClient.reorderRequests(collectionId, orderedIds);
-            var json = await res.json();
-            if (!json.success) throw new Error(json.error || 'Failed to reorder requests');
+            await apiClient.reorderRequests(collectionId, orderedIds);
             showToast('Request order saved', 'success');
             loadCollections();
         } catch (err) {
@@ -1219,25 +1193,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (id) {
                 // Update existing
-                var res = await apiClient.updateCollection(id, { name: name, description: newColDesc.value });
-                var json = await res.json();
-                if (json.success) {
-                    showToast('Collection updated', 'success');
-                } else {
-                    showToast('Error: ' + json.error, 'error');
-                }
+                await apiClient.updateCollection(id, { name: name, description: newColDesc.value });
+                showToast('Collection updated', 'success');
             } else {
                 // Create new
                 var payload = { name: name, description: newColDesc.value };
                 if (parentId) payload.parent_id = parseInt(parentId);
 
-                var res2 = await apiClient.createCollection(payload);
-                var json2 = await res2.json();
-                if (json2.success) {
-                    showToast('Collection created', 'success');
-                } else {
-                    showToast('Error: ' + (json2.error || 'Unknown error'), 'error');
-                }
+                await apiClient.createCollection(payload);
+                showToast('Collection created', 'success');
             }
             newCollectionModal.classList.remove('active');
             loadCollections();
@@ -1276,14 +1240,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function duplicateCollection(id) {
         try {
-            var res = await apiClient.duplicateCollection(id);
-            var json = await res.json();
-            if (json.success) {
-                showToast('Collection duplicated', 'success');
-                loadCollections();
-            } else {
-                showToast('Error: ' + json.error, 'error');
-            }
+            await apiClient.duplicateCollection(id);
+            showToast('Collection duplicated', 'success');
+            loadCollections();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -1292,23 +1251,18 @@ document.addEventListener('DOMContentLoaded', () => {
     async function deleteCollection(id, name) {
         if (!confirm('Delete collection "' + name + '" and all its requests?\nThis cannot be undone.')) return;
         try {
-            var res = await apiClient.deleteCollection(id);
-            var json = await res.json();
-            if (json.success) {
-                showToast('Collection deleted', 'success');
-                // Close any tabs that had requests from this collection
-                openTabs = openTabs.filter(function(t) { return t.collectionId !== id; });
-                if (!openTabs.find(function(t){ return t.id === activeTabId; })) {
-                    activeTabId = null;
-                    openNewTab();
-                } else {
-                    renderRequestTabs();
-                    persistOpenTabs();
-                }
-                loadCollections();
+            await apiClient.deleteCollection(id);
+            showToast('Collection deleted', 'success');
+            // Close any tabs that had requests from this collection
+            openTabs = openTabs.filter(function(t) { return t.collectionId !== id; });
+            if (!openTabs.find(function(t){ return t.id === activeTabId; })) {
+                activeTabId = null;
+                openNewTab();
             } else {
-                showToast('Error: ' + json.error, 'error');
+                renderRequestTabs();
+                persistOpenTabs();
             }
+            loadCollections();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -1494,21 +1448,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (id) {
                 // Rename existing request
-                var res = await apiClient.updateRequest(id, { name: name });
-                var json = await res.json();
-
-                if (json.success) {
-                    showToast('Request renamed', 'success');
-                    var renamedTab = openTabs.find(function(t){ return t.requestId === parseInt(id); });
-                    if (renamedTab) {
-                        renamedTab.label = name;
-                        renderRequestTabs();
-                        persistOpenTabs();
-                    }
-                    loadCollections();
-                } else {
-                    showToast('Error: ' + (json.error || 'Failed to rename request'), 'error');
+                await apiClient.updateRequest(id, { name: name });
+                showToast('Request renamed', 'success');
+                var renamedTab = openTabs.find(function(t){ return t.requestId === parseInt(id); });
+                if (renamedTab) {
+                    renamedTab.label = name;
+                    renderRequestTabs();
+                    persistOpenTabs();
                 }
+                loadCollections();
             } else {
                 // Create new request with current editor state
                 var payload = gatherRequestState();
@@ -1517,55 +1465,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 console.log('Creating request with payload:', payload);
 
-                var res2 = await apiClient.createRequest(payload);
+                var createdRequest = await apiClient.createRequest(payload);
+                console.log('Create request response:', createdRequest);
 
-                var json2 = await res2.json();
-                console.log('Create request response:', json2);
+                // Extract the new request ID
+                var newRequestId = createdRequest && createdRequest.id;
 
-                if (json2.success) {
-                    // Extract the new request ID
-                    var newRequestId = null;
-                    if (json2.data && json2.data.id) {
-                        newRequestId = json2.data.id;
-                    } else if (json2.id) {
-                        newRequestId = json2.id;
-                    } else if (json2.request && json2.request.id) {
-                        newRequestId = json2.request.id;
+                if (newRequestId) {
+                    showToast('Request created successfully', 'success');
+
+                    // Update the active tab to reference this saved request
+                    var createdTab = openTabs.find(function(t){ return t.id === activeTabId; });
+                    if (createdTab) {
+                        createdTab.requestId = newRequestId;
+                        createdTab.collectionId = parseInt(collectionId);
+                        createdTab.label = name;
+                        createdTab.unsaved = false;
+                        createdTab.state = gatherRequestState();
+                        renderRequestTabs();
+                        persistOpenTabs(false);
                     }
 
-                    if (newRequestId) {
-                        showToast('Request created successfully', 'success');
+                    // Reload collections to show the new request
+                    await loadCollections();
 
-                        // Update the active tab to reference this saved request
-                        var createdTab = openTabs.find(function(t){ return t.id === activeTabId; });
-                        if (createdTab) {
-                            createdTab.requestId = newRequestId;
-                            createdTab.collectionId = parseInt(collectionId);
-                            createdTab.label = name;
-                            createdTab.unsaved = false;
-                            createdTab.state = gatherRequestState();
-                            renderRequestTabs();
-                            persistOpenTabs(false);
+                    // Highlight the new request in sidebar
+                    setTimeout(() => {
+                        var newReqEl = document.querySelector('.request-item[data-id="' + newRequestId + '"]');
+                        if (newReqEl) {
+                            newReqEl.classList.add('active');
+                            newReqEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }
-
-                        // Reload collections to show the new request
-                        await loadCollections();
-
-                        // Highlight the new request in sidebar
-                        setTimeout(() => {
-                            var newReqEl = document.querySelector('.request-item[data-id="' + newRequestId + '"]');
-                            if (newReqEl) {
-                                newReqEl.classList.add('active');
-                                newReqEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                            }
-                        }, 100);
-                    } else {
-                        showToast('Request created but ID not found in response', 'warning');
-                        await loadCollections();
-                    }
+                    }, 100);
                 } else {
-                    showToast('Error: ' + (json2.error || 'Failed to create request'), 'error');
-                    console.error('Server error response:', json2);
+                    showToast('Request created but ID not found in response', 'warning');
+                    await loadCollections();
                 }
             }
 
@@ -1579,14 +1513,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function duplicateRequest(id) {
         try {
-            var res = await apiClient.duplicateRequest(id);
-            var json = await res.json();
-            if (json.success) {
-                showToast('Request duplicated', 'success');
-                loadCollections();
-            } else {
-                showToast('Error: ' + json.error, 'error');
-            }
+            await apiClient.duplicateRequest(id);
+            showToast('Request duplicated', 'success');
+            loadCollections();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -1595,17 +1524,12 @@ document.addEventListener('DOMContentLoaded', () => {
     async function deleteRequest(id, name) {
         if (!confirm('Delete request "' + name + '"?\nThis cannot be undone.')) return;
         try {
-            var res = await apiClient.deleteRequest(id);
-            var json = await res.json();
-            if (json.success) {
-                showToast('Request deleted', 'success');
-                // Close any tab that had this request open
-                var deletedTabIds = openTabs.filter(function(t){ return t.requestId === id; }).map(function(t){ return t.id; });
-                deletedTabIds.forEach(function(tid) { closeTab(tid); });
-                loadCollections();
-            } else {
-                showToast('Error: ' + json.error, 'error');
-            }
+            await apiClient.deleteRequest(id);
+            showToast('Request deleted', 'success');
+            // Close any tab that had this request open
+            var deletedTabIds = openTabs.filter(function(t){ return t.requestId === id; }).map(function(t){ return t.id; });
+            deletedTabIds.forEach(function(tid) { closeTab(tid); });
+            loadCollections();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -1924,17 +1848,14 @@ document.addEventListener('DOMContentLoaded', () => {
         reqCollectionPickerWrap.style.display = '';
         reqCollectionSelect.innerHTML = '<option value="">— Select collection —</option>';
         try {
-            var res = await apiClient.getCollections();
-            var json = await res.json();
-            if (json.success) {
-                (json.data || []).forEach(function flattenCollection(col) {
-                    var opt = document.createElement('option');
-                    opt.value = col.id;
-                    opt.textContent = col.name;
-                    reqCollectionSelect.appendChild(opt);
-                    if (col.children && col.children.length) col.children.forEach(flattenCollection);
-                });
-            }
+            var collections = await apiClient.getCollections();
+            (collections || []).forEach(function flattenCollection(col) {
+                var opt = document.createElement('option');
+                opt.value = col.id;
+                opt.textContent = col.name;
+                reqCollectionSelect.appendChild(opt);
+                if (col.children && col.children.length) col.children.forEach(flattenCollection);
+            });
         } catch (err) { /* ignore */ }
 
         requestModal.classList.add('active');
@@ -2316,14 +2237,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            var res = await apiClient.getRequestInstances(tab.requestId);
-            var json = await res.json();
-            if (json.success) {
-                renderInstancesBar(json.data || []);
-            } else {
-                renderInstancesBar([]);
-                showToast('Could not load snapshots: ' + json.error, 'error');
-            }
+            var instances = await apiClient.getRequestInstances(tab.requestId);
+            renderInstancesBar(instances || []);
         } catch (err) {
             renderInstancesBar([]);
             showToast('Could not load snapshots: ' + err.message, 'error');
@@ -2350,16 +2265,11 @@ document.addEventListener('DOMContentLoaded', () => {
         state.name = name;
 
         try {
-            var res = await apiClient.createRequestInstance(tab.requestId, state);
-            var json = await res.json();
-            if (json.success) {
-                showToast('Snapshot saved', 'success');
-                selectedSnapshotId = String(json.data.id);
-                await refreshInstancesForActiveTab();
-                highlightSnapshotRow(selectedSnapshotId);
-            } else {
-                showToast('Error: ' + json.error, 'error');
-            }
+            var instance = await apiClient.createRequestInstance(tab.requestId, state);
+            showToast('Snapshot saved', 'success');
+            selectedSnapshotId = String(instance.id);
+            await refreshInstancesForActiveTab();
+            highlightSnapshotRow(selectedSnapshotId);
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -2374,24 +2284,19 @@ document.addEventListener('DOMContentLoaded', () => {
         renderInstancesBar(activeRequestInstances);
 
         try {
-            var res = await apiClient.getRequestInstance(id);
-            var json = await res.json();
-            if (json.success) {
-                var tab = getActiveSavedTab();
-                var state = reqToState(json.data);
-                loadStateIntoEditor(state, state.method);
-                restoreResponsePane(state);
-                if (tab) {
-                    tab.state = state;
-                    tab.method = state.method;
-                    tab.unsaved = true;
-                    renderRequestTabs();
-                    persistOpenTabs(false);
-                }
-                showToast('Snapshot loaded into editor', 'success');
-            } else {
-                showToast('Error: ' + json.error, 'error');
+            var instance = await apiClient.getRequestInstance(id);
+            var tab = getActiveSavedTab();
+            var state = reqToState(instance);
+            loadStateIntoEditor(state, state.method);
+            restoreResponsePane(state);
+            if (tab) {
+                tab.state = state;
+                tab.method = state.method;
+                tab.unsaved = true;
+                renderRequestTabs();
+                persistOpenTabs(false);
             }
+            showToast('Snapshot loaded into editor', 'success');
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         } finally {
@@ -2414,16 +2319,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            var res = await apiClient.updateRequestInstance(id, { name: name });
-            var json = await res.json();
-            if (json.success) {
-                showToast('Snapshot renamed', 'success');
-                await refreshInstancesForActiveTab();
-                selectedSnapshotId = String(id);
-                renderInstancesBar(activeRequestInstances);
-            } else {
-                showToast('Error: ' + json.error, 'error');
-            }
+            await apiClient.updateRequestInstance(id, { name: name });
+            showToast('Snapshot renamed', 'success');
+            await refreshInstancesForActiveTab();
+            selectedSnapshotId = String(id);
+            renderInstancesBar(activeRequestInstances);
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -2438,14 +2338,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!confirm('Delete snapshot "' + name + '"?')) return;
 
         try {
-            var res = await apiClient.deleteRequestInstance(id);
-            var json = await res.json();
-            if (json.success) {
-                showToast('Snapshot deleted', 'success');
-                await refreshInstancesForActiveTab();
-            } else {
-                showToast('Error: ' + json.error, 'error');
-            }
+            await apiClient.deleteRequestInstance(id);
+            showToast('Snapshot deleted', 'success');
+            await refreshInstancesForActiveTab();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -2463,18 +2358,13 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.state = mergeStoredResponseState(state, tab.state);
 
         try {
-            var res = await apiClient.updateRequest(tab.requestId, state);
-            var json = await res.json();
-            if (json.success) {
-                tab.unsaved = false;
-                renderRequestTabs();
-                persistOpenTabs(false);
-                showToast('Request saved', 'success');
-                refreshInstancesForActiveTab();
-                loadCollections();
-            } else {
-                showToast('Error: ' + json.error, 'error');
-            }
+            await apiClient.updateRequest(tab.requestId, state);
+            tab.unsaved = false;
+            renderRequestTabs();
+            persistOpenTabs(false);
+            showToast('Request saved', 'success');
+            refreshInstancesForActiveTab();
+            loadCollections();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }
@@ -2955,12 +2845,11 @@ document.addEventListener('DOMContentLoaded', () => {
         var start = performance.now();
 
         try {
-            var res = await apiClient.sendProxy(payload);
+            var data = await apiClient.sendProxyRequest(payload);
 
             var elapsed = Math.round(performance.now() - start);
-            var data = await res.json();
 
-            var sc = data.status || res.status;
+            var sc = data.status;
             statusCode.textContent = sc;
             statusCode.className = 'status-badge ' + getStatusClass(sc);
             statusCode.dataset.statusText = data.statusText || '';
@@ -3219,57 +3108,42 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error('This JSON file doesn\'t appear to be a valid Postman collection');
                 }
 
-                var res = await apiClient.importData({ type: 'postman', data: data });
-
-                var json = await res.json();
-
-                if (json.success) {
-                    showImportSuccess('Postman collection imported successfully!');
-                    loadCollections();
-                    // Close modal after short delay
-                    setTimeout(function() {
-                        importModal.classList.remove('active');
-                        resetImportModal();
-                    }, 1500);
-                } else {
-                    showImportError(json.error || 'Failed to import collection');
-                }
+                await apiClient.importData({ type: 'postman', data: data });
+                showImportSuccess('Postman collection imported successfully!');
+                loadCollections();
+                // Close modal after short delay
+                setTimeout(function() {
+                    importModal.classList.remove('active');
+                    resetImportModal();
+                }, 1500);
             } else if (/^curl\s/i.test(raw)) {
                 // cURL — parse on server and load into editor
                 try {
-                    var res2 = await apiClient.importData({ type: 'curl', data: raw });
+                    var parsed = await apiClient.importData({ type: 'curl', data: raw });
+                    methodSelect.value = parsed.method || 'GET';
+                    urlInput.value = parsed.url || '';
+                    syncParamsFromUrl();
 
-                    var json2 = await res2.json();
-
-                    if (json2.success) {
-                        var parsed = json2.data;
-                        methodSelect.value = parsed.method || 'GET';
-                        urlInput.value = parsed.url || '';
-                        syncParamsFromUrl();
-
-                        headersContainer.innerHTML = '';
-                        if (parsed.headers && Array.isArray(parsed.headers)) {
-                            parsed.headers.forEach(function(h) {
-                                addHeaderRow(h.key, h.value);
-                            });
-                        }
-                        if (!headersContainer.children.length) addHeaderRow();
-
-                        if (parsed.body_content) {
-                            bodyContent.value = parsed.body_content;
-                            var bt = parsed.body_type || 'text';
-                            var radio = document.querySelector('input[name="bodyType"][value="' + bt + '"]');
-                            if (radio) radio.checked = true;
-                            bodyContent.style.display = '';
-                            formDataContainer.style.display = 'none';
-                        }
-
-                        showToast('cURL imported into editor', 'success');
-                        importModal.classList.remove('active');
-                        resetImportModal();
-                    } else {
-                        showImportError(json2.error || 'Failed to parse cURL');
+                    headersContainer.innerHTML = '';
+                    if (parsed.headers && Array.isArray(parsed.headers)) {
+                        parsed.headers.forEach(function(h) {
+                            addHeaderRow(h.key, h.value);
+                        });
                     }
+                    if (!headersContainer.children.length) addHeaderRow();
+
+                    if (parsed.body_content) {
+                        bodyContent.value = parsed.body_content;
+                        var bt = parsed.body_type || 'text';
+                        var radio = document.querySelector('input[name="bodyType"][value="' + bt + '"]');
+                        if (radio) radio.checked = true;
+                        bodyContent.style.display = '';
+                        formDataContainer.style.display = 'none';
+                    }
+
+                    showToast('cURL imported into editor', 'success');
+                    importModal.classList.remove('active');
+                    resetImportModal();
                 } catch (e) {
                     // Fallback: parse locally
                     console.warn('Server cURL parse failed, using local parser:', e);
