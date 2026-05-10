@@ -1,6 +1,6 @@
 import { getDomElements } from './dom.js';
 import { apiClient } from './api/client.js';
-import { clearLegacyGuestData, loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
+import { clearLegacyGuestHistory, loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
 import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot } from './state/tabs.js';
 import { initializeCurrentUser, loginUser, logoutUser, registerUser, subscribeToUserState, userState, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let loopTimer             = null;
     let loopRun               = 0;
     let history               = [];
-    let envVars               = {};
+    let envVars               = loadEnvVars();
     let updatingUrlFromParams = false;
     let updatingParamsFromUrl = false;
     let openTabs              = [];   // [{id, label, method, requestId, collectionId, state, unsaved}]
@@ -533,9 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearUserScopedUiState() {
-        envVars = loadEnvVars(userState.currentUser);
         history = loadHistory(userState.currentUser);
-        renderEnvVars();
         renderHistory();
         collectionsData = [];
         expandedCollections.clear();
@@ -609,10 +607,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initializeAuthenticatedWorkspace() {
         await initializeCurrentUser();
-        clearLegacyGuestData();
-        envVars = loadEnvVars(userState.currentUser);
+        clearLegacyGuestHistory();
         history = loadHistory(userState.currentUser);
-        renderEnvVars();
         renderHistory();
         await initializeRequestTabs();
     }
