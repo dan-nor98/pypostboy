@@ -1,6 +1,7 @@
 """Collection repository methods."""
 
 from pypostboy.db.connection import db, get_connection
+from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import rows_to_list, safe_parse, timestamp
 
 
@@ -10,6 +11,10 @@ class Collections:
     @classmethod
     def _conn(cls):
         return cls.connection or get_connection()
+
+    @staticmethod
+    def _default_user_id(conn):
+        return ensure_default_local_user(conn.cursor())
 
     @staticmethod
     def get_all():
@@ -95,6 +100,17 @@ class Collections:
         name = data.get('name', 'New Collection')
         parent_id = data.get('parent_id', None)
         description = data.get('description', '')
+        user_id = data.get('user_id')
+        if user_id is None and parent_id is not None:
+            parent = conn.execute(
+                "SELECT user_id FROM collections WHERE id = ?",
+                (parent_id,)
+            ).fetchone()
+            if not parent:
+                raise ValueError('Parent collection not found')
+            user_id = parent['user_id']
+        if user_id is None:
+            user_id = Collections._default_user_id(conn)
 
         if parent_id is not None:
             max_order_row = conn.execute(
@@ -110,10 +126,12 @@ class Collections:
 
         max_order = max_order_row['max_order'] if max_order_row else -1
 
+        now = timestamp()
         cursor = conn.execute(
-            """INSERT INTO collections (name, description, parent_id, sort_order, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (name, description, parent_id, max_order + 1, timestamp(), timestamp())
+            """INSERT INTO collections (
+                user_id, name, description, parent_id, sort_order, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, name, description, parent_id, max_order + 1, now, now)
         )
 
         return Collections.get_by_id(cursor.lastrowid)

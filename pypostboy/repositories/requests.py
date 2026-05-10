@@ -57,6 +57,14 @@ class Requests:
         if 'collection_id' not in data:
             raise ValueError('collection_id is required')
 
+        collection = conn.execute(
+            "SELECT user_id FROM collections WHERE id = ?",
+            (data['collection_id'],)
+        ).fetchone()
+        if not collection:
+            raise ValueError('Collection not found')
+        user_id = data.get('user_id') or collection['user_id']
+
         max_order_row = conn.execute(
             """SELECT COALESCE(MAX(sort_order), -1) as max_order
                FROM requests WHERE collection_id = ?""",
@@ -67,11 +75,12 @@ class Requests:
 
         cursor = conn.execute(
             """INSERT INTO requests (
-                collection_id, name, method, url, headers,
+                user_id, collection_id, name, method, url, headers,
                 body_type, body_content, body_raw_type, form_data,
                 auth_type, auth_data, sort_order, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
+                user_id,
                 data['collection_id'],
                 data.get('name', 'New Request'),
                 data.get('method', 'GET').upper(),
@@ -102,6 +111,18 @@ class Requests:
         updates = []
         params = []
 
+        if 'collection_id' in data:
+            target_collection = conn.execute(
+                "SELECT user_id FROM collections WHERE id = ?",
+                (data['collection_id'],)
+            ).fetchone()
+            if not target_collection:
+                raise ValueError('Target collection not found')
+            updates.append('collection_id = ?')
+            params.append(data['collection_id'])
+            updates.append('user_id = ?')
+            params.append(target_collection['user_id'])
+
         field_mapping = {
             'name': 'name',
             'method': 'method',
@@ -110,7 +131,6 @@ class Requests:
             'body_content': 'body_content',
             'body_raw': 'body_content',
             'body_raw_type': 'body_raw_type',
-            'collection_id': 'collection_id',
             'sort_order': 'sort_order',
             'auth_type': 'auth_type'
         }
@@ -236,8 +256,8 @@ class Requests:
             raise ValueError('Target collection not found')
 
         conn.execute(
-            "UPDATE requests SET collection_id = ?, updated_at = ? WHERE id = ?",
-            (new_collection_id, timestamp(), id)
+            "UPDATE requests SET collection_id = ?, user_id = ?, updated_at = ? WHERE id = ?",
+            (new_collection_id, target_col['user_id'], timestamp(), id)
         )
 
         return Requests.get_by_id(id)

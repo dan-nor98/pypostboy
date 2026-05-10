@@ -1,5 +1,10 @@
 """SQLite schema migration helpers."""
 
+from pypostboy.db.serializers import timestamp
+
+DEFAULT_LOCAL_USERNAME = 'local_user'
+DEFAULT_LOCAL_EMAIL = 'local@pypostboy.invalid'
+
 REQUEST_INSTANCE_COLUMN_MIGRATIONS = {
     'response_status': 'INTEGER',
     'response_status_text': "TEXT DEFAULT ''",
@@ -10,12 +15,256 @@ REQUEST_INSTANCE_COLUMN_MIGRATIONS = {
 }
 
 
+def table_columns(cursor, table_name):
+    """Return SQLite column metadata for a table keyed by column name."""
+    return {
+        row['name']: row
+        for row in cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+
+
 def migrate_request_instances(cursor):
     """Add request instance columns introduced after initial SQLite releases."""
-    existing_columns = {
-        row['name'] for row in cursor.execute("PRAGMA table_info(request_instances)").fetchall()
-    }
+    existing_columns = table_columns(cursor, 'request_instances')
 
     for column, definition in REQUEST_INSTANCE_COLUMN_MIGRATIONS.items():
         if column not in existing_columns:
             cursor.execute(f"ALTER TABLE request_instances ADD COLUMN {column} {definition}")
+
+
+def create_users_table(cursor):
+    """Create the users table for new and existing SQLite databases."""
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            email TEXT UNIQUE,
+            password_hash TEXT,
+            auth_provider TEXT NOT NULL DEFAULT 'local',
+            auth_subject TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+
+
+def ensure_default_local_user(cursor):
+    """Create or return the default owner used for legacy unowned rows."""
+    existing = cursor.execute(
+        "SELECT id FROM users WHERE username = ?",
+        (DEFAULT_LOCAL_USERNAME,)
+    ).fetchone()
+    if existing:
+        return existing['id']
+
+    now = timestamp()
+    cursor.execute(
+        """INSERT INTO users (
+            username, email, password_hash, auth_provider, auth_subject, created_at, updated_at
+        ) VALUES (?, ?, NULL, 'local', NULL, ?, ?)""",
+        (DEFAULT_LOCAL_USERNAME, DEFAULT_LOCAL_EMAIL, now, now)
+    )
+    return cursor.lastrowid
+
+
+def migrate_ownership(cursor):
+    """Add user ownership to existing tables and assign legacy rows to a local user.
+
+    Requests and request instances intentionally store direct ``user_id`` values in
+    addition to inheriting ownership through their parent tables. The denormalized
+    columns make authorization checks inexpensive while migrations populate them
+    from collections/requests to keep ownership consistent for legacy data.
+    """
+    create_users_table(cursor)
+    default_user_id = ensure_default_local_user(cursor)
+
+    if not _ownership_rebuild_required(cursor):
+        _backfill_ownership(cursor, default_user_id)
+        return
+
+    connection = cursor.connection
+    connection.commit()
+    cursor.execute("PRAGMA foreign_keys=OFF")
+    try:
+        _rebuild_collections(cursor, default_user_id)
+        _rebuild_requests(cursor, default_user_id)
+        _rebuild_request_instances(cursor, default_user_id)
+        connection.commit()
+    finally:
+        cursor.execute("PRAGMA foreign_keys=ON")
+
+    _backfill_ownership(cursor, default_user_id)
+
+
+def _ownership_rebuild_required(cursor):
+    """Return whether tables need to be rebuilt to enforce ownership columns."""
+    required_tables = ('collections', 'requests', 'request_instances')
+    for table_name in required_tables:
+        columns = table_columns(cursor, table_name)
+        user_column = columns.get('user_id')
+        if user_column is None or not user_column['notnull']:
+            return True
+    return False
+
+
+def _backfill_ownership(cursor, default_user_id):
+    """Populate ownership values for any remaining nullable legacy rows."""
+    cursor.execute(
+        "UPDATE collections SET user_id = ? WHERE user_id IS NULL",
+        (default_user_id,)
+    )
+    cursor.execute(
+        """UPDATE requests
+           SET user_id = COALESCE(
+               (SELECT collections.user_id FROM collections WHERE collections.id = requests.collection_id),
+               ?
+           )
+           WHERE user_id IS NULL""",
+        (default_user_id,)
+    )
+    cursor.execute(
+        """UPDATE request_instances
+           SET user_id = COALESCE(
+               (SELECT requests.user_id FROM requests WHERE requests.id = request_instances.request_id),
+               ?
+           )
+           WHERE user_id IS NULL""",
+        (default_user_id,)
+    )
+
+
+def _user_id_expression(columns, fallback_expression):
+    """Return an INSERT expression for user_id based on existing table columns."""
+    if 'user_id' in columns:
+        return f"COALESCE(user_id, {fallback_expression})"
+    return fallback_expression
+
+
+def _rebuild_collections(cursor, default_user_id):
+    columns = table_columns(cursor, 'collections')
+    if 'user_id' in columns and columns['user_id']['notnull']:
+        return
+
+    cursor.execute("ALTER TABLE collections RENAME TO collections_old_ownership")
+    cursor.execute("""
+        CREATE TABLE collections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            parent_id INTEGER REFERENCES collections(id) ON DELETE CASCADE,
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    user_id_expr = _user_id_expression(columns, str(default_user_id))
+    cursor.execute(f"""
+        INSERT INTO collections (
+            id, user_id, name, description, parent_id, sort_order, created_at, updated_at
+        )
+        SELECT id, {user_id_expr}, name, description, parent_id, sort_order, created_at, updated_at
+        FROM collections_old_ownership
+    """)
+    cursor.execute("DROP TABLE collections_old_ownership")
+
+
+def _rebuild_requests(cursor, default_user_id):
+    columns = table_columns(cursor, 'requests')
+    if 'user_id' in columns and columns['user_id']['notnull']:
+        return
+
+    cursor.execute("ALTER TABLE requests RENAME TO requests_old_ownership")
+    cursor.execute("""
+        CREATE TABLE requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            method TEXT NOT NULL DEFAULT 'GET',
+            url TEXT DEFAULT '',
+            headers TEXT DEFAULT '[]',
+            body_type TEXT DEFAULT 'none',
+            body_content TEXT DEFAULT '',
+            body_raw_type TEXT DEFAULT 'application/json',
+            form_data TEXT DEFAULT '[]',
+            auth_type TEXT DEFAULT 'none',
+            auth_data TEXT DEFAULT '{}',
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    fallback = (
+        "COALESCE((SELECT collections.user_id FROM collections "
+        "WHERE collections.id = collection_id), "
+        f"{default_user_id})"
+    )
+    user_id_expr = _user_id_expression(columns, fallback)
+    cursor.execute(f"""
+        INSERT INTO requests (
+            id, user_id, collection_id, name, method, url, headers,
+            body_type, body_content, body_raw_type, form_data,
+            auth_type, auth_data, sort_order, created_at, updated_at
+        )
+        SELECT id, {user_id_expr}, collection_id, name, method, url, headers,
+               body_type, body_content, body_raw_type, form_data,
+               auth_type, auth_data, sort_order, created_at, updated_at
+        FROM requests_old_ownership
+    """)
+    cursor.execute("DROP TABLE requests_old_ownership")
+
+
+def _rebuild_request_instances(cursor, default_user_id):
+    columns = table_columns(cursor, 'request_instances')
+    if 'user_id' in columns and columns['user_id']['notnull']:
+        return
+
+    cursor.execute("ALTER TABLE request_instances RENAME TO request_instances_old_ownership")
+    cursor.execute("""
+        CREATE TABLE request_instances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            method TEXT NOT NULL DEFAULT 'GET',
+            url TEXT DEFAULT '',
+            headers TEXT DEFAULT '[]',
+            body_type TEXT DEFAULT 'none',
+            body_content TEXT DEFAULT '',
+            body_raw_type TEXT DEFAULT 'application/json',
+            form_data TEXT DEFAULT '[]',
+            auth_type TEXT DEFAULT 'none',
+            auth_data TEXT DEFAULT '{}',
+            response_status INTEGER,
+            response_status_text TEXT DEFAULT '',
+            response_headers TEXT DEFAULT '{}',
+            response_body TEXT,
+            response_time_ms INTEGER,
+            response_size TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    fallback = (
+        "COALESCE((SELECT requests.user_id FROM requests "
+        "WHERE requests.id = request_id), "
+        f"{default_user_id})"
+    )
+    user_id_expr = _user_id_expression(columns, fallback)
+    cursor.execute(f"""
+        INSERT INTO request_instances (
+            id, user_id, request_id, name, method, url, headers,
+            body_type, body_content, body_raw_type, form_data,
+            auth_type, auth_data, response_status, response_status_text,
+            response_headers, response_body, response_time_ms, response_size,
+            created_at, updated_at
+        )
+        SELECT id, {user_id_expr}, request_id, name, method, url, headers,
+               body_type, body_content, body_raw_type, form_data,
+               auth_type, auth_data, response_status, response_status_text,
+               response_headers, response_body, response_time_ms, response_size,
+               created_at, updated_at
+        FROM request_instances_old_ownership
+    """)
+    cursor.execute("DROP TABLE request_instances_old_ownership")
