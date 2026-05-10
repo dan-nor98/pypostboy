@@ -180,8 +180,6 @@ class Requests:
     @staticmethod
     def reorder(collection_id, user_id=None, ordered_ids=None):
         """Reorder user-owned requests within a user-owned collection."""
-        from pypostboy.repositories.collections import Collections
-
         conn = Requests._conn()
         if ordered_ids is None:
             ordered_ids = user_id
@@ -199,17 +197,8 @@ class Requests:
         if len(normalized_ids) != len(set(normalized_ids)):
             raise ValueError('ordered_ids must not contain duplicates')
 
-        collection = Collections.get_by_id(collection_id, user_id)
-        if not collection:
-            raise ValueError('Collection not found')
-
-        sibling_rows = conn.execute(
-            """SELECT id FROM requests
-               WHERE collection_id = ? AND user_id = ?
-               ORDER BY sort_order ASC, id ASC""",
-            (collection_id, user_id)
-        ).fetchall()
-        sibling_ids = [row['id'] for row in sibling_rows]
+        sibling_requests = Requests.get_by_collection(collection_id, user_id)
+        sibling_ids = [request['id'] for request in sibling_requests]
 
         if set(normalized_ids) != set(sibling_ids):
             raise ValueError('ordered_ids must include exactly the requests for the collection')
@@ -243,9 +232,16 @@ class Requests:
     @staticmethod
     def duplicate(id, user_id=None):
         """Duplicate a user-owned request."""
+        from pypostboy.repositories.collections import Collections
+
+        conn = Requests._conn()
+        user_id = Requests._resolve_user_id(conn, user_id)
         original = Requests.get_by_id(id, user_id)
         if not original:
             raise ValueError('Request not found')
+
+        if not Collections.get_by_id(original['collection_id'], user_id):
+            raise ValueError('Collection not found')
 
         return Requests.create(user_id, {
             'collection_id': original['collection_id'],
