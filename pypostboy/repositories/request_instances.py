@@ -1,6 +1,7 @@
 """Request instance repository methods."""
 
 from pypostboy.db.connection import get_connection
+from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import (
     parse_json_or_text,
     parse_response_body,
@@ -20,6 +21,10 @@ class RequestInstances:
         return cls.connection or get_connection()
 
     @staticmethod
+    def _resolve_user_id(conn, user_id=None):
+        return int(user_id) if user_id is not None else ensure_default_local_user(conn.cursor())
+
+    @staticmethod
     def _row_to_instance(row):
         """Convert a request_instances row into an API-ready dict."""
         if not row:
@@ -34,36 +39,43 @@ class RequestInstances:
         return result
 
     @staticmethod
-    def get_by_id(id):
-        """Get a single saved request instance by ID."""
+    def get_by_id(id, user_id=None):
+        """Get a single user-owned saved request instance by ID."""
         conn = RequestInstances._conn()
+        user_id = RequestInstances._resolve_user_id(conn, user_id)
         row = conn.execute(
-            "SELECT * FROM request_instances WHERE id = ?", (id,)
+            "SELECT * FROM request_instances WHERE id = ? AND user_id = ?",
+            (id, user_id)
         ).fetchone()
         return RequestInstances._row_to_instance(row)
 
     @staticmethod
-    def get_by_request(request_id):
-        """Get saved instances for a request, newest first."""
+    def get_by_request(request_id, user_id=None):
+        """Get user-owned saved instances for a user-owned request, newest first."""
         conn = RequestInstances._conn()
-        request_obj = Requests.get_by_id(request_id)
+        user_id = RequestInstances._resolve_user_id(conn, user_id)
+        request_obj = Requests.get_by_id(request_id, user_id)
         if not request_obj:
             raise ValueError('Request not found')
 
         rows = conn.execute(
             """SELECT * FROM request_instances
-               WHERE request_id = ?
+               WHERE request_id = ? AND user_id = ?
                ORDER BY updated_at DESC, id DESC""",
-            (request_id,)
+            (request_id, user_id)
         ).fetchall()
         return [RequestInstances._row_to_instance(row) for row in rows]
 
     @staticmethod
-    def create(request_id, data=None):
-        """Create a saved request instance from editor state."""
+    def create(request_id, user_id=None, data=None):
+        """Create a saved request instance from editor state for a user."""
         conn = RequestInstances._conn()
+        if data is None:
+            data = user_id or {}
+            user_id = None
         data = data or {}
-        request_obj = Requests.get_by_id(request_id)
+        user_id = RequestInstances._resolve_user_id(conn, user_id)
+        request_obj = Requests.get_by_id(request_id, user_id)
         if not request_obj:
             raise ValueError('Request not found')
 
@@ -71,7 +83,6 @@ class RequestInstances:
         if not name:
             raise ValueError('name is required')
 
-        user_id = data.get('user_id') or request_obj['user_id']
         now = timestamp()
         cursor = conn.execute(
             """INSERT INTO request_instances (
@@ -105,13 +116,17 @@ class RequestInstances:
             )
         )
         conn.commit()
-        return RequestInstances.get_by_id(cursor.lastrowid)
+        return RequestInstances.get_by_id(cursor.lastrowid, user_id)
 
     @staticmethod
-    def update(id, data):
-        """Update a saved request instance."""
+    def update(id, user_id=None, data=None):
+        """Update a user-owned saved request instance."""
         conn = RequestInstances._conn()
-        instance = RequestInstances.get_by_id(id)
+        if data is None:
+            data = user_id or {}
+            user_id = None
+        user_id = RequestInstances._resolve_user_id(conn, user_id)
+        instance = RequestInstances.get_by_id(id, user_id)
         if not instance:
             raise ValueError('Request instance not found')
 
@@ -173,25 +188,27 @@ class RequestInstances:
 
         updates.append('updated_at = ?')
         params.append(timestamp())
-        params.append(id)
+        params.extend([id, user_id])
 
         conn.execute(
-            f"UPDATE request_instances SET {', '.join(updates)} WHERE id = ?",
+            f"UPDATE request_instances SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
             params
         )
         conn.commit()
-        return RequestInstances.get_by_id(id)
+        return RequestInstances.get_by_id(id, user_id)
 
     @staticmethod
-    def delete(id):
-        """Delete a saved request instance."""
+    def delete(id, user_id=None):
+        """Delete a user-owned saved request instance."""
         conn = RequestInstances._conn()
+        user_id = RequestInstances._resolve_user_id(conn, user_id)
         result = conn.execute(
-            "SELECT id FROM request_instances WHERE id = ?", (id,)
+            "SELECT id FROM request_instances WHERE id = ? AND user_id = ?",
+            (id, user_id)
         ).fetchone()
         if not result:
             return {'deleted': 0}
 
-        conn.execute("DELETE FROM request_instances WHERE id = ?", (id,))
+        conn.execute("DELETE FROM request_instances WHERE id = ? AND user_id = ?", (id, user_id))
         conn.commit()
         return {'deleted': 1}
