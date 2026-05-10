@@ -5,6 +5,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from pypostboy.auth import get_current_user
 from pypostboy.db.connection import get_connection
+from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
 from pypostboy.db.serializers import timestamp
 from pypostboy.http.responses import created, error, ok
 
@@ -20,6 +21,7 @@ def _public_user(user):
         'username': user['username'],
         'email': user['email'],
         'auth_provider': user['auth_provider'],
+        'is_guest': user['username'] == DEFAULT_LOCAL_USERNAME and not user['password_hash'],
     }
 
 
