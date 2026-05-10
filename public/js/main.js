@@ -2683,7 +2683,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════
 
     function renderEnvVars() {
+        var user = userState.currentUser;
         envVarsList.innerHTML = '';
+        if (!user || user.is_guest) {
+            envVars = {};
+            envVarsList.innerHTML = '<p class="empty-state">Log in to keep environment variables.</p>';
+            if (addEnvVarBtn) addEnvVarBtn.disabled = true;
+            return;
+        }
+
+        if (addEnvVarBtn) addEnvVarBtn.disabled = false;
         var keys = Object.keys(envVars);
         keys.forEach(function(k) { addEnvRow(k, envVars[k]); });
         if (keys.length === 0) addEnvRow('', '');
@@ -2705,16 +2714,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveEnvVars() {
+        var user = userState.currentUser;
+        if (!user || user.is_guest) {
+            envVars = {};
+            renderEnvVars();
+            return;
+        }
+
         envVars = {};
         envVarsList.querySelectorAll('.env-row').forEach(function(r) {
             var k = r.querySelector('.env-key').value.trim();
             var v = r.querySelector('.env-val').value;
             if (k) envVars[k] = v;
         });
-        saveEnvVarsToStorage(envVars);
+        saveEnvVarsToStorage(envVars, user);
     }
 
-    addEnvVarBtn.addEventListener('click', function() { addEnvRow(); });
+    addEnvVarBtn.addEventListener('click', function() {
+        var user = userState.currentUser;
+        if (!user || user.is_guest) return;
+        addEnvRow();
+    });
 
     function replaceEnvVars(str) {
         if (!str) return str;

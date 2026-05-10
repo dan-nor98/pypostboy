@@ -1,4 +1,5 @@
 const ENV_STORAGE_KEY = 'postboy_env';
+const ENV_STORAGE_PREFIX = ENV_STORAGE_KEY + '_user_';
 const HISTORY_STORAGE_KEY = 'postboy_history';
 const HISTORY_STORAGE_PREFIX = HISTORY_STORAGE_KEY + '_user_';
 
@@ -23,8 +24,9 @@ export function loadEnvVars() {
     return safeParseJson(localStorage.getItem(ENV_STORAGE_KEY), {});
 }
 
-export function saveEnvVarsToStorage(envVars) {
-    localStorage.setItem(ENV_STORAGE_KEY, JSON.stringify(envVars));
+function userStorageKey(prefix, user) {
+    if (isGuestUser(user) || user.id === undefined || user.id === null) return null;
+    return prefix + String(user.id);
 }
 
 export function loadHistory(user) {
