@@ -93,15 +93,16 @@ body {
 }
 
 .resize-handle-horizontal {
-  height: 8px;
-  margin-top: -2px;
-  margin-bottom: -2px;
+  height: 12px;
+  margin-top: 0;
+  margin-bottom: -12px;
   cursor: row-resize;
 }
 
 .resize-handle-horizontal::before {
-  top: 3px;
-  bottom: 3px;
+  top: auto;
+  bottom: 0;
+  height: 2px;
   background: var(--color-border);
 }
 
@@ -769,10 +770,13 @@ body.resizing-response {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   padding: 16px;
   gap: 12px;
+}
+
+.main-content > :not(.request-section) {
+  flex-shrink: 0;
 }
 
 .request-section {
@@ -1060,9 +1064,9 @@ body.resizing-response {
 /* ===== REQUEST SECTION ===== */
 .request-section {
   min-height: var(--request-section-min-height);
-  max-height: var(--request-section-max-height);
+  max-height: none;
   overflow: auto;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
 }
 
 /* ===== TAB BAR (PARAMS / HEADERS / BODY / AUTH) ===== */

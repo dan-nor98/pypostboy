@@ -201,12 +201,51 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function getMainContentVerticalMetrics() {
+        if (!mainContent) {
+            return {
+                bottom: window.innerHeight,
+                availableForRequestAndResponse: window.innerHeight
+            };
+        }
+
+        var mainRect = mainContent.getBoundingClientRect();
+        var mainStyle = getComputedStyle(mainContent);
+        var paddingTop = cssLengthToPx(mainStyle.paddingTop, 0);
+        var paddingBottom = cssLengthToPx(mainStyle.paddingBottom, 0);
+        var rowGap = cssLengthToPx(mainStyle.rowGap || mainStyle.gap, 0);
+        var occupiedHeight = paddingTop + paddingBottom;
+        var visibleChildren = Array.prototype.filter.call(mainContent.children, function(child) {
+            return child !== requestSection && child !== responseSection && getComputedStyle(child).display !== 'none';
+        });
+
+        visibleChildren.forEach(function(child) {
+            var childStyle = getComputedStyle(child);
+            occupiedHeight += child.getBoundingClientRect().height;
+            occupiedHeight += cssLengthToPx(childStyle.marginTop, 0) + cssLengthToPx(childStyle.marginBottom, 0);
+        });
+
+        if (visibleChildren.length > 0) {
+            occupiedHeight += rowGap * (visibleChildren.length + 1);
+        }
+
+        return {
+            bottom: mainRect.bottom - paddingBottom,
+            availableForRequestAndResponse: Math.max(0, mainRect.height - occupiedHeight)
+        };
+    }
+
     function getResponseHeightBounds() {
-        var mainHeight = mainContent ? mainContent.getBoundingClientRect().height : window.innerHeight;
+        var metrics = getMainContentVerticalMetrics();
+        var requestMinHeight = getCssLength('--request-section-min-height', 180);
+        var maxFromMainContent = Math.max(
+            getCssLength('--response-section-min-height', 180),
+            metrics.availableForRequestAndResponse - requestMinHeight
+        );
 
         return {
             min: getCssLength('--response-section-min-height', 180),
-            max: Math.min(getCssLength('--response-section-max-height', 0.7 * window.innerHeight), Math.max(220, mainHeight - 220))
+            max: Math.min(getCssLength('--response-section-max-height', 0.7 * window.innerHeight), maxFromMainContent)
         };
     }
 
@@ -304,9 +343,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 responseResizeHandle.classList.add('active');
                 document.body.classList.add('resizing-panels', 'resizing-response');
 
+                var pointerOffsetFromResponseTop = event.clientY - responseSection.getBoundingClientRect().top;
+
                 function onMove(moveEvent) {
-                    var responseBottom = responseSection.getBoundingClientRect().bottom;
-                    applyResponseHeight(responseBottom - moveEvent.clientY, true);
+                    var metrics = getMainContentVerticalMetrics();
+                    var nextResponseTop = moveEvent.clientY - pointerOffsetFromResponseTop;
+                    applyResponseHeight(metrics.bottom - nextResponseTop, true);
                 }
 
                 function onUp() {
