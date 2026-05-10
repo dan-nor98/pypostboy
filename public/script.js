@@ -123,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let snapshotContextTrigger  = null;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
+    const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
     const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
     const RESPONSE_HEIGHT_KEY = 'postboy_response_height';
     const MOBILE_RESIZE_QUERY = '(max-width: 1024px)';
@@ -656,6 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderRequestTabs();
             if (activeTab) {
                 loadStateIntoEditor(activeTab.state, activeTab.method);
+                restoreResponsePane(activeTab.state);
                 highlightSidebarForTab(activeTab);
             }
             persistOpenTabs(false);
@@ -671,7 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (includeEditorState !== false && activeTabId) {
             var activeTab = openTabs.find(function(tab) { return tab.id === activeTabId; });
             if (activeTab) {
-                activeTab.state = gatherEditorState();
+                activeTab.state = mergeStoredResponseState(gatherRequestState(), activeTab.state);
                 activeTab.method = methodSelect.value || activeTab.method || 'GET';
             }
         }
@@ -1525,7 +1527,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 // Create new request with current editor state
-                var payload = gatherEditorState();
+                var payload = gatherRequestState();
                 payload.collection_id = parseInt(collectionId);
                 payload.name = name;
 
@@ -1561,7 +1563,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             createdTab.collectionId = parseInt(collectionId);
                             createdTab.label = name;
                             createdTab.unsaved = false;
-                            createdTab.state = gatherEditorState();
+                            createdTab.state = gatherRequestState();
                             renderRequestTabs();
                             persistOpenTabs(false);
                         }
@@ -1684,7 +1686,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (activeTabId && activeTabId !== tabId) {
             var current = openTabs.find(function(t) { return t.id === activeTabId; });
             if (current) {
-                current.state = gatherEditorState();
+                current.state = mergeStoredResponseState(gatherRequestState(), current.state);
                 current.method = methodSelect.value;
                 persistOpenTabs(false);
             }
@@ -1696,6 +1698,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderRequestTabs();
         loadStateIntoEditor(tab.state, tab.method);
+        restoreResponsePane(tab.state);
         highlightSidebarForTab(tab);
         refreshInstancesForActiveTab();
         persistOpenTabs(false);
@@ -1991,7 +1994,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function reqToState(req) {
-        return {
+        var state = {
             method:       req.method       || 'GET',
             url:          req.url          || '',
             headers:      req.headers      || [],
@@ -2000,14 +2003,14 @@ document.addEventListener('DOMContentLoaded', () => {
             form_data:    req.form_data    || [],
             auth_type:    req.auth_type    || 'none',
             auth_data:    req.auth_data    || {},
-            body_raw_type: req.body_raw_type || 'application/json',
-            response_status: req.response_status != null ? req.response_status : null,
-            response_status_text: req.response_status_text || '',
-            response_headers: req.response_headers != null ? req.response_headers : '',
-            response_body: req.response_body != null ? req.response_body : '',
-            response_time_ms: req.response_time_ms != null ? req.response_time_ms : null,
-            response_size: req.response_size || ''
+            body_raw_type: req.body_raw_type || 'application/json'
         };
+
+        // Normal saved-request loads should not inherit whatever happened to be
+        // displayed in the response pane. Only carry response fields when the
+        // backend object is itself a saved response snapshot/instance.
+        if (hasResponseState(req)) Object.assign(state, getResponseStateFromSource(req));
+        return state;
     }
 
     function loadStateIntoEditor(state, method) {
@@ -2071,7 +2074,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 60);
 
-        restoreResponsePane(state);
     }
 
     function parseResponseTimeMs(value) {
@@ -2094,13 +2096,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function hasResponseState(state) {
-        return !!state && (
+        if (!state) return false;
+
+        var body = state.response_body != null ? String(state.response_body) : '';
+        var size = state.response_size != null ? String(state.response_size).trim() : '';
+        var timeMs = state.response_time_ms;
+
+        return (
             state.response_status != null ||
             !!state.response_status_text ||
             hasHeaderContent(state.response_headers) ||
-            (state.response_body != null && state.response_body !== '') ||
-            state.response_time_ms != null ||
-            !!state.response_size
+            (body !== '' && body !== EMPTY_RESPONSE_MESSAGE) ||
+            (timeMs != null && timeMs !== '' && parseInt(timeMs, 10) > 0) ||
+            (size !== '' && size !== '0 B')
         );
     }
 
@@ -2111,7 +2119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         responseTime.textContent = '0 ms';
         responseSize.textContent = '0 B';
         responseHeaders.textContent = '';
-        responseBody.textContent = 'Send a request to see the response here.';
+        responseBody.textContent = EMPTY_RESPONSE_MESSAGE;
     }
 
     function restoreResponsePane(state) {
@@ -2132,24 +2140,43 @@ document.addEventListener('DOMContentLoaded', () => {
         displayResponse(state.response_body != null ? state.response_body : '');
     }
 
+    function getResponseStateFromSource(source) {
+        source = source || {};
+        return {
+            response_status: source.response_status != null ? source.response_status : null,
+            response_status_text: source.response_status_text || '',
+            response_headers: source.response_headers != null ? source.response_headers : '',
+            response_body: source.response_body != null ? source.response_body : '',
+            response_time_ms: source.response_time_ms != null ? source.response_time_ms : null,
+            response_size: source.response_size || ''
+        };
+    }
+
     function gatherResponseState() {
         var statusText = statusCode.textContent.trim();
         var parsedStatus = /^\d+$/.test(statusText) ? parseInt(statusText, 10) : null;
-        return {
+        return getResponseStateFromSource({
             response_status: parsedStatus,
             response_status_text: statusCode.dataset.statusText || '',
             response_headers: responseHeaders.textContent || '',
             response_body: responseBody.textContent || '',
             response_time_ms: parseResponseTimeMs(responseTime.textContent),
             response_size: responseSize.textContent || ''
-        };
+        });
+    }
+
+    function mergeStoredResponseState(requestState, storedState) {
+        if (hasResponseState(storedState)) {
+            Object.assign(requestState, getResponseStateFromSource(storedState));
+        }
+        return requestState;
     }
 
     // ═══════════════════════════════════════════════════════
     //  GATHER CURRENT EDITOR STATE
     // ═══════════════════════════════════════════════════════
 
-    function gatherEditorState() {
+    function gatherRequestState() {
         var headers = [];
         headersContainer.querySelectorAll('.header-row').forEach(function(row) {
             var k = row.querySelector('.header-key').value.trim();
@@ -2183,7 +2210,7 @@ document.addEventListener('DOMContentLoaded', () => {
             authData = { key: ak ? ak.value : '', value: av ? av.value : '', addTo: ai ? ai.value : 'header' };
         }
 
-        var state = {
+        return {
             method:       methodSelect.value,
             url:          urlInput.value.trim(),
             headers:      headers,
@@ -2194,14 +2221,12 @@ document.addEventListener('DOMContentLoaded', () => {
             auth_data:    authData,
             body_raw_type: 'application/json'
         };
-
-        Object.assign(state, gatherResponseState());
-        return state;
     }
 
-    // Keep gatherRequestState as alias for backward compat
-    function gatherRequestState() {
-        return gatherEditorState();
+    function gatherEditorState(options) {
+        var state = gatherRequestState();
+        if (options && options.includeResponse) Object.assign(state, gatherResponseState());
+        return state;
     }
 
     // ═══════════════════════════════════════════════════════
@@ -2381,7 +2406,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        var state = gatherEditorState();
+        var state = gatherEditorState({ includeResponse: true });
         state.name = name;
 
         try {
@@ -2502,8 +2527,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        var state = gatherEditorState();
-        tab.state = state;
+        var state = gatherRequestState();
+        tab.state = mergeStoredResponseState(state, tab.state);
 
         try {
             var res = await fetch('/api/requests/' + tab.requestId, {
@@ -2933,7 +2958,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var tab = openTabs.find(function(t) { return t.id === activeTabId; });
         if (!tab) return;
 
-        var state = gatherEditorState();
+        var state = gatherRequestState();
         Object.assign(state, responseState);
         tab.state = state;
         tab.method = state.method;
