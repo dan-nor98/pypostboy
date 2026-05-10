@@ -99,15 +99,19 @@ PORT=8080 python app.py
 
 ```
 postboy-flask/
-├── app.py              # Main Flask application
-├── db.py               # Database layer (SQLite)
-├── requirements.txt    # Python dependencies
-├── .gitignore         # Git ignore rules
-├── README.md          # This file
-└── public/            # Frontend static files
-    ├── index.html     # Main application
-    ├── css/           # Stylesheets
-    └── js/            # JavaScript files
+├── app.py                 # Thin server entrypoint
+├── db.py                  # Database layer (SQLite)
+├── requirements.txt       # Python dependencies
+├── README.md              # This file
+├── public/                # Frontend static files
+│   ├── index.html         # Main application
+│   ├── style.css          # Stylesheet
+│   └── script.js          # Frontend behavior
+└── pypostboy/             # Package-based Flask backend
+    ├── app.py             # Application factory
+    ├── http/              # Shared HTTP response helpers
+    ├── routes/            # Blueprint route modules
+    └── services/          # Import, cURL parsing, and proxy services
 ```
 
 ## 🛠️ API Endpoints
