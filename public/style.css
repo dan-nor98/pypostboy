@@ -16,6 +16,8 @@
   --sidebar-min-width: 220px;
   --sidebar-max-width: 520px;
   --right-sidebar-width: 300px;
+  --right-sidebar-min-width: 260px;
+  --right-sidebar-max-width: 360px;
   --request-section-min-height: 180px;
   --request-section-max-height: 55vh;
   --response-section-min-height: 180px;
@@ -120,7 +122,8 @@ body.resizing-panels {
   user-select: none;
 }
 
-body.resizing-sidebar {
+body.resizing-sidebar,
+body.resizing-sidebar .right-sidebar-resize-handle {
   cursor: col-resize;
 }
 
@@ -648,8 +651,8 @@ body.resizing-response {
 /* ===== RIGHT SIDEBAR ===== */
 .right-sidebar {
   width: var(--right-sidebar-width);
-  min-width: 260px;
-  max-width: 360px;
+  min-width: var(--right-sidebar-min-width);
+  max-width: var(--right-sidebar-max-width);
   background: var(--color-sidebar);
   border-left: 1px solid var(--color-border);
   display: flex;

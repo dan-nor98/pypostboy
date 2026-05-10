@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebarToggleBtn  = document.getElementById('sidebarToggleBtn');
     const sidebarCloseBtn   = document.getElementById('sidebarCloseBtn');
     const rightSidebar      = document.getElementById('rightSidebar');
+    const rightSidebarResizeHandle = document.getElementById('rightSidebarResizeHandle');
     const rightSidebarToggleBtn = document.getElementById('rightSidebarToggleBtn');
     const rightSidebarCloseBtn  = document.getElementById('rightSidebarCloseBtn');
     const sidebarCurlOutput = document.getElementById('sidebarCurlOutput');
@@ -125,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
     const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
+    const RIGHT_SIDEBAR_WIDTH_KEY = 'postboy_right_sidebar_width';
     const RESPONSE_HEIGHT_KEY = 'postboy_response_height';
     const MOBILE_RESIZE_QUERY = '(max-width: 1024px)';
 
@@ -201,6 +203,17 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function getRightSidebarWidthBounds() {
+        var rightSidebarStyle = rightSidebar ? getComputedStyle(rightSidebar) : null;
+        var cssMin = rightSidebarStyle ? cssLengthToPx(rightSidebarStyle.minWidth, 260) : 260;
+        var cssMax = rightSidebarStyle ? cssLengthToPx(rightSidebarStyle.maxWidth, 360) : 360;
+
+        return {
+            min: getCssLength('--right-sidebar-min-width', cssMin),
+            max: Math.min(getCssLength('--right-sidebar-max-width', cssMax), Math.max(cssMin, window.innerWidth - 360))
+        };
+    }
+
     function getMainContentVerticalMetrics() {
         if (!mainContent) {
             return {
@@ -259,6 +272,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (persist) localStorage.setItem(SIDEBAR_WIDTH_KEY, String(Math.round(clampedWidth)));
     }
 
+    function applyRightSidebarWidth(width, persist) {
+        if (!rightSidebar || isMobileResizeLayout()) return;
+
+        var bounds = getRightSidebarWidthBounds();
+        var clampedWidth = clamp(width, bounds.min, bounds.max);
+        rightSidebar.style.width = clampedWidth + 'px';
+
+        if (persist) localStorage.setItem(RIGHT_SIDEBAR_WIDTH_KEY, String(Math.round(clampedWidth)));
+    }
+
     function applyResponseHeight(height, persist) {
         if (!responseSection || isMobileResizeLayout()) return;
 
@@ -274,14 +297,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isMobileResizeLayout()) return;
 
         var storedSidebarWidth = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY), 10);
+        var storedRightSidebarWidth = parseInt(localStorage.getItem(RIGHT_SIDEBAR_WIDTH_KEY), 10);
         var storedResponseHeight = parseInt(localStorage.getItem(RESPONSE_HEIGHT_KEY), 10);
 
         if (!Number.isNaN(storedSidebarWidth)) applySidebarWidth(storedSidebarWidth, false);
+        if (!Number.isNaN(storedRightSidebarWidth)) applyRightSidebarWidth(storedRightSidebarWidth, false);
         if (!Number.isNaN(storedResponseHeight)) applyResponseHeight(storedResponseHeight, false);
     }
 
     function clearInlinePanelSizesForMobile() {
         if (sidebar) sidebar.style.width = '';
+        if (rightSidebar) rightSidebar.style.width = '';
         if (responseSection) {
             responseSection.style.height = '';
             responseSection.style.flex = '';
@@ -291,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function syncResizeHandlesForViewport() {
         var disabled = isMobileResizeLayout();
 
-        [sidebarResizeHandle, responseResizeHandle].forEach(function(handle) {
+        [sidebarResizeHandle, rightSidebarResizeHandle, responseResizeHandle].forEach(function(handle) {
             if (!handle) return;
             handle.setAttribute('aria-disabled', disabled ? 'true' : 'false');
         });
@@ -327,6 +353,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 function onUp() {
                     stopPanelResize(sidebarResizeHandle, onMove, onUp, 'resizing-sidebar');
+                }
+
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+                document.addEventListener('pointercancel', onUp);
+            });
+        }
+
+        if (rightSidebarResizeHandle && rightSidebar) {
+            rightSidebarResizeHandle.addEventListener('pointerdown', function(event) {
+                if (isMobileResizeLayout()) return;
+
+                event.preventDefault();
+                rightSidebarResizeHandle.classList.add('active');
+                document.body.classList.add('resizing-panels', 'resizing-sidebar');
+
+                function onMove(moveEvent) {
+                    var appRight = appContainer ? appContainer.getBoundingClientRect().right : window.innerWidth;
+                    applyRightSidebarWidth(appRight - moveEvent.clientX, true);
+                }
+
+                function onUp() {
+                    stopPanelResize(rightSidebarResizeHandle, onMove, onUp, 'resizing-sidebar');
                 }
 
                 document.addEventListener('pointermove', onMove);
