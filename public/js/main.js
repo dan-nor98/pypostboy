@@ -1,8 +1,8 @@
 import { getDomElements } from './dom.js';
 import { apiClient } from './api/client.js';
-import { loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
+import { clearLegacyGuestData, loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
 import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot } from './state/tabs.js';
-import { initializeCurrentUser, loginUser, logoutUser, registerUser, subscribeToUserState, waitForAuth } from './state/user.js';
+import { initializeCurrentUser, loginUser, logoutUser, registerUser, subscribeToUserState, userState, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
 import { loadPanelSizes, savePanelSize } from './state/panels.js';
 import { createToast } from './ui/toast.js';
@@ -39,8 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let loopActive            = false;
     let loopTimer             = null;
     let loopRun               = 0;
-    let history               = loadHistory();
-    let envVars               = loadEnvVars();
+    let history               = [];
+    let envVars               = {};
     let updatingUrlFromParams = false;
     let updatingParamsFromUrl = false;
     let openTabs              = [];   // [{id, label, method, requestId, collectionId, state, unsaved}]
@@ -511,7 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
         var user = state.currentUser;
         var isLoading = !!state.loading;
         var username = user && user.username ? user.username : 'Guest';
-        authStatus.textContent = isLoading ? 'Checking account…' : ('Signed in as ' + username);
+        var statusText = user && user.is_guest ? 'Guest mode — log in to save history' : ('Signed in as ' + username);
+        authStatus.textContent = isLoading ? 'Checking account…' : statusText;
         authStatus.classList.toggle('auth-error', !!state.error);
         if (state.error) authStatus.textContent = state.error;
 
@@ -532,6 +533,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearUserScopedUiState() {
+        envVars = loadEnvVars(userState.currentUser);
+        history = loadHistory(userState.currentUser);
+        renderEnvVars();
+        renderHistory();
         collectionsData = [];
         expandedCollections.clear();
         activeRequestInstances = [];
@@ -604,6 +609,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initializeAuthenticatedWorkspace() {
         await initializeCurrentUser();
+        clearLegacyGuestData();
+        envVars = loadEnvVars(userState.currentUser);
+        history = loadHistory(userState.currentUser);
+        renderEnvVars();
+        renderHistory();
         await initializeRequestTabs();
     }
 
@@ -2677,7 +2687,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════
 
     function renderEnvVars() {
+        var user = userState.currentUser;
         envVarsList.innerHTML = '';
+        if (!user || user.is_guest) {
+            envVars = {};
+            envVarsList.innerHTML = '<p class="empty-state">Log in to keep environment variables.</p>';
+            if (addEnvVarBtn) addEnvVarBtn.disabled = true;
+            return;
+        }
+
+        if (addEnvVarBtn) addEnvVarBtn.disabled = false;
         var keys = Object.keys(envVars);
         keys.forEach(function(k) { addEnvRow(k, envVars[k]); });
         if (keys.length === 0) addEnvRow('', '');
@@ -2699,16 +2718,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function saveEnvVars() {
+        var user = userState.currentUser;
+        if (!user || user.is_guest) {
+            envVars = {};
+            renderEnvVars();
+            return;
+        }
+
         envVars = {};
         envVarsList.querySelectorAll('.env-row').forEach(function(r) {
             var k = r.querySelector('.env-key').value.trim();
             var v = r.querySelector('.env-val').value;
             if (k) envVars[k] = v;
         });
-        saveEnvVarsToStorage(envVars);
+        saveEnvVarsToStorage(envVars, user);
     }
 
-    addEnvVarBtn.addEventListener('click', function() { addEnvRow(); });
+    addEnvVarBtn.addEventListener('click', function() {
+        var user = userState.currentUser;
+        if (!user || user.is_guest) return;
+        addEnvRow();
+    });
 
     function replaceEnvVars(str) {
         if (!str) return str;
@@ -2722,13 +2752,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════
 
     function addHistory(method, url, status) {
+        var user = userState.currentUser;
+        if (!user || user.is_guest) {
+            history = [];
+            renderHistory();
+            return;
+        }
+
         history.unshift({ method: method, url: url, status: status, time: Date.now() });
         if (history.length > 50) history.pop();
-        saveHistoryToStorage(history);
+        saveHistoryToStorage(history, user);
         renderHistory();
     }
 
     function renderHistory() {
+        var user = userState.currentUser;
+        if (!user || user.is_guest) {
+            historyList.innerHTML = '<p class="empty-state">Log in to keep request history.</p>';
+            return;
+        }
         if (!history.length) {
             historyList.innerHTML = '<p class="empty-state">No history yet.</p>';
             return;
