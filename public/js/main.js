@@ -1,111 +1,45 @@
-// ============================================================
-//  PostBoy – Script with Full Collections CRUD (SQLite)
-// ============================================================
+import { getDomElements } from './dom.js';
+import { apiClient } from './api/client.js';
+import { loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
+import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot } from './state/tabs.js';
+import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
+import { loadPanelSizes, savePanelSize } from './state/panels.js';
+import { createToast } from './ui/toast.js';
+import { renderResponseBody } from './ui/response-viewer.js';
+import { countTotalRequests } from './features/collections.js';
+import { getBlankState } from './features/requests.js';
+import { buildSnapshotDefaultName } from './features/snapshots.js';
+import { parseResponseTimeMs } from './features/proxy.js';
+import { tokenize } from './features/import-export.js';
+import { formatByteCount, escapeHtml, highlightJson } from './utils/format.js';
 
 document.addEventListener('DOMContentLoaded', () => {
 
     // ─── Element References ────────────────────────────────
-    const methodSelect      = document.getElementById('methodSelect');
-    const urlInput          = document.getElementById('urlInput');
-    const sendBtn           = document.getElementById('sendBtn');
-    const loopBtn           = document.getElementById('loopBtn');
-    const loopControls      = document.getElementById('loopControls');
-    const loopInterval      = document.getElementById('loopInterval');
-    const loopCount         = document.getElementById('loopCount');
-    const loopStatus        = document.getElementById('loopStatus');
-    const bodyContent       = document.getElementById('bodyContent');
-    const prettifyJsonBtn   = document.getElementById('prettifyJsonBtn');
-    const responseBody      = document.getElementById('responseBody');
-    const responseHeaders   = document.getElementById('responseHeaders');
-    const statusCode        = document.getElementById('statusCode');
-    const responseTime      = document.getElementById('responseTime');
-    const responseSize      = document.getElementById('responseSize');
-    const loadingOverlay    = document.getElementById('loadingOverlay');
-    const headersContainer  = document.getElementById('headersContainer');
-    const addHeaderBtn      = document.getElementById('addHeaderBtn');
-    const importBtn         = document.getElementById('importBtn');
-    const importModal       = document.getElementById('importModal');
-    const modalClose        = document.getElementById('modalClose');
-    const importInput       = document.getElementById('importInput');
-    const importConfirmBtn  = document.getElementById('importConfirmBtn');
-    const collectionList    = document.getElementById('collectionList');
-    const exportCurlBtn     = document.getElementById('exportCurlBtn');
-    const exportModal       = document.getElementById('exportModal');
-    const exportModalClose  = document.getElementById('exportModalClose');
-    const exportOutput      = document.getElementById('exportOutput');
-    const copyExportBtn     = document.getElementById('copyExportBtn');
-    const copyResponseBtn   = document.getElementById('copyResponseBtn');
-    const saveResponseSnapshotBtn = document.getElementById('saveResponseSnapshotBtn');
-    const authFields        = document.getElementById('authFields');
-    const formDataRows      = document.getElementById('formDataRows');
-    const addFormDataBtn    = document.getElementById('addFormDataBtn');
-    const formDataContainer = document.getElementById('formDataContainer');
-    const historyList       = document.getElementById('historyList');
-    const envVarsList       = document.getElementById('envVarsList');
-    const addEnvVarBtn      = document.getElementById('addEnvVarBtn');
-    const paramsBody        = document.getElementById('paramsBody');
-    const addParamBtn       = document.getElementById('addParamBtn');
-    const mainContent      = document.querySelector('.main-content');
-    const requestSection   = document.getElementById('requestSection');
-    const responseSection  = document.getElementById('responseSection');
-    const responseSheetHandle = document.getElementById('responseSheetHandle');
-    const responseSheetToggle = document.getElementById('responseSheetToggle');
-    const sidebarResizeHandle  = document.getElementById('sidebarResizeHandle');
-    const responseResizeHandle = document.getElementById('responseResizeHandle');
-    const appContainer      = document.getElementById('appContainer');
-    const sidebar           = document.getElementById('sidebar');
-    const sidebarToggleBtn  = document.getElementById('sidebarToggleBtn');
-    const sidebarCloseBtn   = document.getElementById('sidebarCloseBtn');
-    const rightSidebar      = document.getElementById('rightSidebar');
-    const rightSidebarResizeHandle = document.getElementById('rightSidebarResizeHandle');
-    const rightSidebarToggleBtn = document.getElementById('rightSidebarToggleBtn');
-    const rightSidebarCloseBtn  = document.getElementById('rightSidebarCloseBtn');
-    const sidebarCurlOutput = document.getElementById('sidebarCurlOutput');
-    const generateSidebarCurlBtn = document.getElementById('generateSidebarCurlBtn');
-    const copySidebarCurlBtn = document.getElementById('copySidebarCurlBtn');
-    const instancesBar      = document.getElementById('instancesBar');
-    const snapshotList      = document.getElementById('snapshotList');
-    const saveInstanceBtn   = document.getElementById('saveInstanceBtn');
-
-    // New Collection elements
-    const newCollectionBtn     = document.getElementById('newCollectionBtn');
-    const newCollectionModal   = document.getElementById('newCollectionModal');
-    const newColModalClose     = document.getElementById('newColModalClose');
-    const newColName           = document.getElementById('newColName');
-    const newColDesc           = document.getElementById('newColDesc');
-    const newColSaveBtn        = document.getElementById('newColSaveBtn');
-    const newColCancelBtn      = document.getElementById('newColCancelBtn');
-    const editCollectionId     = document.getElementById('editCollectionId');
-    const collectionModalTitle = document.getElementById('collectionModalTitle');
-
-    // Request modal elements
-    const requestModal              = document.getElementById('requestModal');
-    const reqModalClose             = document.getElementById('reqModalClose');
-    const reqNameInput              = document.getElementById('reqNameInput');
-    const reqSaveBtn                = document.getElementById('reqSaveBtn');
-    const reqCancelBtn              = document.getElementById('reqCancelBtn');
-    const editRequestId             = document.getElementById('editRequestId');
-    const editRequestCollectionId   = document.getElementById('editRequestCollectionId');
-    const requestModalTitle         = document.getElementById('requestModalTitle');
-    const reqCollectionPickerWrap   = document.getElementById('reqCollectionPickerWrap');
-    const reqCollectionSelect       = document.getElementById('reqCollectionSelect');
-
-    // Request tabs bar
-    const requestTabsEl = document.getElementById('requestTabs');
-    const newTabBtn     = document.getElementById('newTabBtn');
-
-    // Context menus
-    const contextMenu        = document.getElementById('contextMenu');
-    const requestContextMenu = document.getElementById('requestContextMenu');
-    const tabContextMenu     = document.getElementById('tabContextMenu');
-    const snapshotContextMenu = document.getElementById('snapshotContextMenu');
+    const {
+        methodSelect, urlInput, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
+        bodyContent, prettifyJsonBtn, responseBody, responseHeaders, statusCode, responseTime, responseSize,
+        loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
+        importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
+        copyExportBtn, copyResponseBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
+        formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
+        requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
+        responseResizeHandle, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, rightSidebar,
+        rightSidebarResizeHandle, rightSidebarToggleBtn, rightSidebarCloseBtn, sidebarCurlOutput,
+        generateSidebarCurlBtn, copySidebarCurlBtn, instancesBar, snapshotList, saveInstanceBtn,
+        newCollectionBtn, newCollectionModal, newColModalClose, newColName, newColDesc, newColSaveBtn,
+        newColCancelBtn, editCollectionId, collectionModalTitle, requestModal, reqModalClose, reqNameInput,
+        reqSaveBtn, reqCancelBtn, editRequestId, editRequestCollectionId, requestModalTitle,
+        reqCollectionPickerWrap, reqCollectionSelect, requestTabsEl, newTabBtn, contextMenu, requestContextMenu,
+        tabContextMenu, snapshotContextMenu
+    } = getDomElements();
 
     // ─── State ─────────────────────────────────────────────
     let loopActive            = false;
     let loopTimer             = null;
     let loopRun               = 0;
-    let history               = JSON.parse(localStorage.getItem('postboy_history') || '[]');
-    let envVars               = JSON.parse(localStorage.getItem('postboy_env') || '{}');
+    let history               = loadHistory();
+    let envVars               = loadEnvVars();
     let updatingUrlFromParams = false;
     let updatingParamsFromUrl = false;
     let openTabs              = [];   // [{id, label, method, requestId, collectionId, state, unsaved}]
@@ -125,10 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
-    const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
-    const RIGHT_SIDEBAR_WIDTH_KEY = 'postboy_right_sidebar_width';
-    const RESPONSE_HEIGHT_KEY = 'postboy_response_height';
-    const MOBILE_RESIZE_QUERY = '(max-width: 1024px)';
 
     // ─── Mobile Response Bottom Sheet ─────────────────────
     function setResponseSheetState(state) {
@@ -269,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var clampedWidth = clamp(width, bounds.min, bounds.max);
         sidebar.style.width = clampedWidth + 'px';
 
-        if (persist) localStorage.setItem(SIDEBAR_WIDTH_KEY, String(Math.round(clampedWidth)));
+        if (persist) savePanelSize('sidebar', clampedWidth);
     }
 
     function applyRightSidebarWidth(width, persist) {
@@ -279,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var clampedWidth = clamp(width, bounds.min, bounds.max);
         rightSidebar.style.width = clampedWidth + 'px';
 
-        if (persist) localStorage.setItem(RIGHT_SIDEBAR_WIDTH_KEY, String(Math.round(clampedWidth)));
+        if (persist) savePanelSize('rightSidebar', clampedWidth);
     }
 
     function applyResponseHeight(height, persist) {
@@ -290,15 +220,16 @@ document.addEventListener('DOMContentLoaded', () => {
         responseSection.style.height = clampedHeight + 'px';
         responseSection.style.flex = '0 0 auto';
 
-        if (persist) localStorage.setItem(RESPONSE_HEIGHT_KEY, String(Math.round(clampedHeight)));
+        if (persist) savePanelSize('response', clampedHeight);
     }
 
     function restorePanelSizes() {
         if (isMobileResizeLayout()) return;
 
-        var storedSidebarWidth = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY), 10);
-        var storedRightSidebarWidth = parseInt(localStorage.getItem(RIGHT_SIDEBAR_WIDTH_KEY), 10);
-        var storedResponseHeight = parseInt(localStorage.getItem(RESPONSE_HEIGHT_KEY), 10);
+        var storedPanelSizes = loadPanelSizes();
+        var storedSidebarWidth = storedPanelSizes.sidebar;
+        var storedRightSidebarWidth = storedPanelSizes.rightSidebar;
+        var storedResponseHeight = storedPanelSizes.response;
 
         if (!Number.isNaN(storedSidebarWidth)) applySidebarWidth(storedSidebarWidth, false);
         if (!Number.isNaN(storedRightSidebarWidth)) applyRightSidebarWidth(storedRightSidebarWidth, false);
@@ -413,7 +344,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('resize', syncResizeHandlesForViewport);
         syncResizeHandlesForViewport();
     }
-    const OPEN_TABS_STORAGE_KEY = 'postboy_open_tabs';
 
     // ─── Init ──────────────────────────────────────────────
     initResponseSheetControls();
@@ -569,14 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════
 
     function showToast(message, type) {
-        type = type || 'info';
-        var toast = document.createElement('div');
-        toast.className = 'toast toast-' + type;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(function() {
-            if (toast.parentNode) toast.remove();
-        }, 3200);
+        createToast(message, type);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -588,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Loading collections...');
             saveExpandedState(); // Save current expanded state
 
-            var res = await fetch('/api/collections');
+            var res = await apiClient.getCollections();
             console.log('Collections response status:', res.status);
 
             if (!res.ok) {
@@ -726,7 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function restoreSavedTabs() {
-        var raw = localStorage.getItem(OPEN_TABS_STORAGE_KEY);
+        var raw = loadOpenTabsSnapshot();
         if (!raw) return false;
 
         try {
@@ -755,7 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         } catch (err) {
             console.warn('Failed to restore saved tabs:', err);
-            localStorage.removeItem(OPEN_TABS_STORAGE_KEY);
+            clearOpenTabsSnapshot();
             return false;
         }
     }
@@ -770,7 +693,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            localStorage.setItem(OPEN_TABS_STORAGE_KEY, JSON.stringify({
+            saveOpenTabsSnapshot({
                 activeTabId: activeTabId,
                 openTabs: openTabs.map(function(tab) {
                     return {
@@ -783,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         state:        tab.state || getBlankState()
                     };
                 })
-            }));
+            });
         } catch (err) {
             console.warn('Failed to persist tabs:', err);
         }
@@ -1102,11 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function persistCollectionOrder(parentId, orderedIds) {
         try {
-            var res = await fetch('/api/collections/reorder', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ parent_id: parentId, ordered_ids: orderedIds })
-            });
+            var res = await apiClient.reorderCollections(parentId, orderedIds);
             var json = await res.json();
             if (!json.success) throw new Error(json.error || 'Failed to reorder collections');
             showToast('Collection order saved', 'success');
@@ -1119,11 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function persistRequestOrder(collectionId, orderedIds) {
         try {
-            var res = await fetch('/api/requests/reorder', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ collection_id: collectionId, ordered_ids: orderedIds })
-            });
+            var res = await apiClient.reorderRequests(collectionId, orderedIds);
             var json = await res.json();
             if (!json.success) throw new Error(json.error || 'Failed to reorder requests');
             showToast('Request order saved', 'success');
@@ -1132,16 +1047,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Error: ' + err.message, 'error');
             loadCollections();
         }
-    }
-
-    function countTotalRequests(node) {
-        var count = (node.requests ? node.requests.length : 0);
-        if (node.children && node.children.length) {
-            node.children.forEach(function(child) {
-                count += countTotalRequests(child);
-            });
-        }
-        return count;
     }
 
     // var totalRequests = countTotalRequests(col);
@@ -1314,11 +1219,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (id) {
                 // Update existing
-                var res = await fetch('/api/collections/' + id, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, description: newColDesc.value })
-                });
+                var res = await apiClient.updateCollection(id, { name: name, description: newColDesc.value });
                 var json = await res.json();
                 if (json.success) {
                     showToast('Collection updated', 'success');
@@ -1330,11 +1231,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 var payload = { name: name, description: newColDesc.value };
                 if (parentId) payload.parent_id = parseInt(parentId);
 
-                var res2 = await fetch('/api/collections', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                var res2 = await apiClient.createCollection(payload);
                 var json2 = await res2.json();
                 if (json2.success) {
                     showToast('Collection created', 'success');
@@ -1379,7 +1276,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function duplicateCollection(id) {
         try {
-            var res = await fetch('/api/collections/' + id + '/duplicate', { method: 'POST' });
+            var res = await apiClient.duplicateCollection(id);
             var json = await res.json();
             if (json.success) {
                 showToast('Collection duplicated', 'success');
@@ -1395,7 +1292,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function deleteCollection(id, name) {
         if (!confirm('Delete collection "' + name + '" and all its requests?\nThis cannot be undone.')) return;
         try {
-            var res = await fetch('/api/collections/' + id, { method: 'DELETE' });
+            var res = await apiClient.deleteCollection(id);
             var json = await res.json();
             if (json.success) {
                 showToast('Collection deleted', 'success');
@@ -1597,11 +1494,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (id) {
                 // Rename existing request
-                var res = await fetch('/api/requests/' + id, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name })
-                });
+                var res = await apiClient.updateRequest(id, { name: name });
                 var json = await res.json();
 
                 if (json.success) {
@@ -1624,11 +1517,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 console.log('Creating request with payload:', payload);
 
-                var res2 = await fetch('/api/requests', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                var res2 = await apiClient.createRequest(payload);
 
                 var json2 = await res2.json();
                 console.log('Create request response:', json2);
@@ -1690,7 +1579,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function duplicateRequest(id) {
         try {
-            var res = await fetch('/api/requests/' + id + '/duplicate', { method: 'POST' });
+            var res = await apiClient.duplicateRequest(id);
             var json = await res.json();
             if (json.success) {
                 showToast('Request duplicated', 'success');
@@ -1706,7 +1595,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function deleteRequest(id, name) {
         if (!confirm('Delete request "' + name + '"?\nThis cannot be undone.')) return;
         try {
-            var res = await fetch('/api/requests/' + id, { method: 'DELETE' });
+            var res = await apiClient.deleteRequest(id);
             var json = await res.json();
             if (json.success) {
                 showToast('Request deleted', 'success');
@@ -2035,7 +1924,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reqCollectionPickerWrap.style.display = '';
         reqCollectionSelect.innerHTML = '<option value="">— Select collection —</option>';
         try {
-            var res = await fetch('/api/collections');
+            var res = await apiClient.getCollections();
             var json = await res.json();
             if (json.success) {
                 (json.data || []).forEach(function flattenCollection(col) {
@@ -2063,26 +1952,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════
     //  EDITOR STATE HELPERS
     // ═══════════════════════════════════════════════════════
-
-    function getBlankState() {
-        return {
-            method:       'GET',
-            url:          '',
-            headers:      [],
-            body_type:    'none',
-            body_content: '',
-            form_data:    [],
-            auth_type:    'none',
-            auth_data:    {},
-            body_raw_type: 'application/json',
-            response_status: null,
-            response_status_text: '',
-            response_headers: '',
-            response_body: '',
-            response_time_ms: null,
-            response_size: ''
-        };
-    }
 
     function reqToState(req) {
         var state = {
@@ -2165,11 +2034,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 60);
 
-    }
-
-    function parseResponseTimeMs(value) {
-        var match = String(value || '').match(/-?\d+/);
-        return match ? parseInt(match[0], 10) : null;
     }
 
     function stringifyHeadersForDisplay(headers) {
@@ -2329,21 +2193,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    function padSnapshotTimestampPart(value) {
-        return String(value).padStart(2, '0');
-    }
-
-    function buildSnapshotDefaultName() {
-        var now = new Date();
-        return 'Snapshot ' +
-            now.getFullYear() + '-' +
-            padSnapshotTimestampPart(now.getMonth() + 1) + '-' +
-            padSnapshotTimestampPart(now.getDate()) + ' ' +
-            padSnapshotTimestampPart(now.getHours()) + ':' +
-            padSnapshotTimestampPart(now.getMinutes()) + ':' +
-            padSnapshotTimestampPart(now.getSeconds());
-    }
-
     function highlightSnapshotRow(snapshotId) {
         if (!snapshotList || !snapshotId) return;
         var id = String(snapshotId);
@@ -2467,7 +2316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            var res = await fetch('/api/requests/' + tab.requestId + '/instances');
+            var res = await apiClient.getRequestInstances(tab.requestId);
             var json = await res.json();
             if (json.success) {
                 renderInstancesBar(json.data || []);
@@ -2501,11 +2350,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.name = name;
 
         try {
-            var res = await fetch('/api/requests/' + tab.requestId + '/instances', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(state)
-            });
+            var res = await apiClient.createRequestInstance(tab.requestId, state);
             var json = await res.json();
             if (json.success) {
                 showToast('Snapshot saved', 'success');
@@ -2529,7 +2374,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderInstancesBar(activeRequestInstances);
 
         try {
-            var res = await fetch('/api/request-instances/' + id);
+            var res = await apiClient.getRequestInstance(id);
             var json = await res.json();
             if (json.success) {
                 var tab = getActiveSavedTab();
@@ -2569,11 +2414,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            var res = await fetch('/api/request-instances/' + id, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name })
-            });
+            var res = await apiClient.updateRequestInstance(id, { name: name });
             var json = await res.json();
             if (json.success) {
                 showToast('Snapshot renamed', 'success');
@@ -2597,7 +2438,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!confirm('Delete snapshot "' + name + '"?')) return;
 
         try {
-            var res = await fetch('/api/request-instances/' + id, { method: 'DELETE' });
+            var res = await apiClient.deleteRequestInstance(id);
             var json = await res.json();
             if (json.success) {
                 showToast('Snapshot deleted', 'success');
@@ -2622,11 +2463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.state = mergeStoredResponseState(state, tab.state);
 
         try {
-            var res = await fetch('/api/requests/' + tab.requestId, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(state)
-            });
+            var res = await apiClient.updateRequest(tab.requestId, state);
             var json = await res.json();
             if (json.success) {
                 tab.unsaved = false;
@@ -2873,7 +2710,7 @@ document.addEventListener('DOMContentLoaded', () => {
             var v = r.querySelector('.env-val').value;
             if (k) envVars[k] = v;
         });
-        localStorage.setItem('postboy_env', JSON.stringify(envVars));
+        saveEnvVarsToStorage(envVars);
     }
 
     addEnvVarBtn.addEventListener('click', function() { addEnvRow(); });
@@ -2892,7 +2729,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function addHistory(method, url, status) {
         history.unshift({ method: method, url: url, status: status, time: Date.now() });
         if (history.length > 50) history.pop();
-        localStorage.setItem('postboy_history', JSON.stringify(history));
+        saveHistoryToStorage(history);
         renderHistory();
     }
 
@@ -3118,11 +2955,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var start = performance.now();
 
         try {
-            var res = await fetch('/api/proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            var res = await apiClient.sendProxy(payload);
 
             var elapsed = Math.round(performance.now() - start);
             var data = await res.json();
@@ -3386,11 +3219,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error('This JSON file doesn\'t appear to be a valid Postman collection');
                 }
 
-                var res = await fetch('/api/import', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type: 'postman', data: data })
-                });
+                var res = await apiClient.importData({ type: 'postman', data: data });
 
                 var json = await res.json();
 
@@ -3408,11 +3237,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (/^curl\s/i.test(raw)) {
                 // cURL — parse on server and load into editor
                 try {
-                    var res2 = await fetch('/api/import', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ type: 'curl', data: raw })
-                    });
+                    var res2 = await apiClient.importData({ type: 'curl', data: raw });
 
                     var json2 = await res2.json();
 
@@ -3638,41 +3463,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function tokenize(cmd) {
-        var tokens = [];
-        var i = 0;
-        while (i < cmd.length) {
-            while (i < cmd.length && cmd[i] === ' ') i++;
-            if (i >= cmd.length) break;
-            if (cmd[i] === "'" || cmd[i] === '"') {
-                var q = cmd[i++];
-                var tok = '';
-                while (i < cmd.length && cmd[i] !== q) {
-                    if (cmd[i] === '\\' && i + 1 < cmd.length) { tok += cmd[++i]; }
-                    else tok += cmd[i];
-                    i++;
-                }
-                i++; // skip closing quote
-                tokens.push(tok);
-            } else if (cmd[i] === '$' && cmd[i+1] === '(') {
-                // Skip command substitution
-                var depth = 1;
-                i += 2;
-                while (i < cmd.length && depth > 0) {
-                    if (cmd[i] === '(') depth++;
-                    if (cmd[i] === ')') depth--;
-                    i++;
-                }
-                tokens.push('$(...)');
-            } else {
-                var tok2 = '';
-                while (i < cmd.length && cmd[i] !== ' ') { tok2 += cmd[i++]; }
-                tokens.push(tok2);
-            }
-        }
-        return tokens;
-    }
-
     // ═══════════════════════════════════════════════════════
     //  EXPORT cURL
     // ═══════════════════════════════════════════════════════
@@ -3764,35 +3554,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function displayResponse(body) {
-        if (typeof body === 'object' && body !== null) {
-            responseBody.innerHTML = syntaxHighlight(JSON.stringify(body, null, 2));
-        } else {
-            var str = String(body || '');
-            try {
-                var obj = JSON.parse(str);
-                responseBody.innerHTML = syntaxHighlight(JSON.stringify(obj, null, 2));
-            } catch (e) {
-                responseBody.textContent = str;
-            }
-        }
+        renderResponseBody(responseBody, body);
     }
 
     function syntaxHighlight(json) {
-        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return json.replace(
-            /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-            function(match) {
-                var cls = 'json-number';
-                if (/^"/.test(match)) {
-                    cls = /:$/.test(match) ? 'json-key' : 'json-string';
-                } else if (/true|false/.test(match)) {
-                    cls = 'json-boolean';
-                } else if (/null/.test(match)) {
-                    cls = 'json-null';
-                }
-                return '<span class="' + cls + '">' + match + '</span>';
-            }
-        );
+        return highlightJson(json);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -3813,15 +3579,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatBytes(bytes) {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-        return (bytes / 1048576).toFixed(1) + ' MB';
+        return formatByteCount(bytes);
     }
 
     function escHtml(str) {
-        var d = document.createElement('div');
-        d.textContent = str;
-        return d.innerHTML;
+        return escapeHtml(str);
     }
 
 });
