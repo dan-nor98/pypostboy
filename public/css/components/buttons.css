@@ -1,0 +1,55 @@
+.mobile-toolbar {
+  display: none;
+  gap: 8px;
+  align-items: center;
+}
+
+.mobile-sidebar-toggle,
+.sidebar-close,
+.right-sidebar-close {
+  display: none;
+  background: var(--color-border);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 700;
+  transition: all 0.2s;
+}
+
+.mobile-sidebar-toggle:hover,
+.sidebar-close:hover,
+.right-sidebar-close:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+/* ===== IMPORT / EXPORT BUTTONS ===== */
+.btn-import,
+.btn-export {
+  width: 100%;
+  padding: 10px;
+  background: var(--color-border);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.2s;
+}
+
+.btn-import:hover,
+.btn-export:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+/* ===== ACTION BUTTONS ===== */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.action-buttons .btn-export {
+  padding: 8px 16px;
+  font-size: 0.85em;
+}

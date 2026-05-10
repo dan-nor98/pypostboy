@@ -1,0 +1,169 @@
+/* ===== COLLECTION LIST ===== */
+.collection-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.collection-folder {
+  margin-bottom: 4px;
+}
+
+.folder-header {
+  padding: 8px 12px;
+  background: var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.folder-header:hover {
+  background: var(--color-accent);
+}
+
+.folder-header .folder-arrow {
+  font-size: 0.7em;
+  transition: transform 0.2s;
+  color: #888;
+}
+
+.folder-header .folder-arrow.open {
+  transform: rotate(90deg);
+}
+
+.folder-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-count {
+  font-size: 0.72em;
+  color: var(--color-text-dim);
+  background: var(--color-bg);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.folder-items {
+  display: none;
+  padding-left: 12px;
+  margin-top: 2px;
+}
+
+.folder-items.open {
+  display: block;
+}
+
+.request-item {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.request-item:hover {
+  background: rgba(61, 163, 122, 0.1);
+}
+
+.request-item.active {
+  background: rgba(61, 163, 122, 0.2);
+  border-left: 2px solid #d1d9d4;
+}
+
+.collection-folder.dragging,
+.request-item.dragging {
+  opacity: 0.45;
+}
+
+.folder-header.drag-over,
+.request-item.drag-over,
+.folder-items.drag-over,
+.collection-list.drag-over {
+  outline: 1px dashed var(--color-accent-hover);
+  outline-offset: 2px;
+}
+
+
+.request-item-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* ===== METHOD BADGES ===== */
+.method-badge {
+  font-size: 0.7em;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
+  min-width: 36px;
+  text-align: center;
+  display: inline-block;
+}
+
+.method-GET    { background: rgba(97, 175, 254, 0.2); color: #61affe; }
+.method-POST   { background: rgba(73, 204, 144, 0.2); color: #49cc90; }
+.method-PUT    { background: rgba(252, 161, 48, 0.2); color: #fca130; }
+.method-PATCH  { background: rgba(80, 227, 194, 0.2); color: #50e3c2; }
+.method-DELETE { background: rgba(249, 62, 62, 0.2); color: #f93e3e; }
+.method-HEAD   { background: rgba(144, 18, 254, 0.2); color: #9012fe; }
+.method-OPTIONS{ background: rgba(13, 90, 167, 0.2); color: #0d5aa7; }
+
+.empty-state {
+  color: var(--color-text-dim);
+  font-size: 0.85em;
+  text-align: center;
+  padding: 20px;
+}
+/* ===== HISTORY LIST ===== */
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.82em;
+  margin-bottom: 4px;
+  transition: background 0.2s;
+}
+
+.history-item:hover {
+  background: rgba(61, 163, 122, 0.1);
+}
+
+.history-url {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ccc;
+}
+
+.history-status {
+  font-size: 0.75em;
+  font-weight: bold;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.history-status.s2xx { background: rgba(73, 204, 144, 0.2); color: #49cc90; }
+.history-status.s3xx { background: rgba(252, 161, 48, 0.2); color: #fca130; }
+.history-status.s4xx { background: rgba(249, 62, 62, 0.2); color: #f93e3e; }
+.history-status.s5xx { background: rgba(144, 18, 254, 0.2); color: #9012fe; }

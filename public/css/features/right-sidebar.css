@@ -1,0 +1,118 @@
+/* ===== RIGHT SIDEBAR ===== */
+.right-sidebar {
+  width: var(--right-sidebar-width);
+  min-width: var(--right-sidebar-min-width);
+  max-width: var(--right-sidebar-max-width);
+  background: var(--color-sidebar);
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.right-sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.right-sidebar-header h2 {
+  color: #d1d9d4;
+  font-size: 1.2em;
+}
+
+.right-sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.right-sidebar-tab {
+  flex: 1;
+  padding: 9px 6px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.8em;
+  transition: all 0.2s;
+}
+
+.right-sidebar-tab.active {
+  color: var(--color-accent);
+  border-bottom: 2px solid #2d3d36;
+}
+
+.right-sidebar-panel {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.right-sidebar-panel.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.right-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.right-sidebar-section h3 {
+  color: #d1d9d4;
+  font-size: 1em;
+}
+
+.right-sidebar-hint {
+  color: var(--color-text-muted);
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+
+.right-sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.right-sidebar-output {
+  width: 100%;
+  min-height: 240px;
+  flex: 1;
+  padding: 10px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: 'Courier New', monospace;
+  font-size: 0.82em;
+  resize: vertical;
+  white-space: pre;
+  overflow: auto;
+}
+
+.right-sidebar .instances-bar {
+  flex-direction: column;
+  align-items: stretch;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.right-sidebar .snapshot-list {
+  width: 100%;
+}
+
+.right-sidebar .btn-add-row,
+.right-sidebar .btn-remove,
+.right-sidebar .btn-export {
+  width: 100%;
+}

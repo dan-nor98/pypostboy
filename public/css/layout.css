@@ -1,0 +1,69 @@
+/* ===== APP LAYOUT ===== */
+.app-container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+}
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 300px;
+  min-width: var(--sidebar-min-width);
+  max-width: var(--sidebar-max-width);
+  background: var(--color-sidebar);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+/* ===== MAIN CONTENT ===== */
+.main-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+  gap: 12px;
+}
+
+.main-content > :not(.request-section) {
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sidebar-header h2 {
+  color: #d1d9d4;
+  font-size: 1.4em;
+}
+
+.sidebar-panel {
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+  flex: 1;
+  padding: 12px;
+}
+
+.sidebar-panel.active {
+  display: flex;
+}
+
+.sidebar-section {
+  margin-bottom: 16px;
+}
+
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
