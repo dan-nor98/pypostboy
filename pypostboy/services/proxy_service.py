@@ -9,6 +9,24 @@ from flask import current_app, has_app_context
 from pypostboy.config import BaseConfig
 
 
+HOP_BY_HOP_HEADERS = {
+    'connection',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'te',
+    'trailer',
+    'transfer-encoding',
+    'upgrade',
+}
+
+REQUEST_CONTROLLED_HEADERS = HOP_BY_HOP_HEADERS | {
+    'accept-encoding',
+    'content-length',
+    'host',
+}
+
+
 class ProxyError(Exception):
     """Base exception for proxy failures."""
 
@@ -66,8 +84,15 @@ def proxy_http_request(body):
     fetch_headers = {}
     if isinstance(headers, dict):
         for k, v in headers.items():
-            if k and v:
-                fetch_headers[k] = v
+            header_name = str(k).strip() if k else ''
+            if header_name and v and header_name.lower() not in REQUEST_CONTROLLED_HEADERS:
+                fetch_headers[header_name] = v
+
+    # Do not forward client-provided compression preferences. If an imported
+    # cURL/browser request includes ``Accept-Encoding: gzip, deflate, br, zstd``,
+    # some servers return an encoded payload that the local environment may not
+    # know how to decode, which makes the response viewer display mojibake.
+    fetch_headers['Accept-Encoding'] = 'identity'
 
     if req_body and method not in ('GET', 'HEAD'):
         if content_type and content_type != 'multipart/form-data':
