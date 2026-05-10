@@ -16,6 +16,10 @@ function createApiError(message, status, payload) {
 }
 
 async function request(path, options) {
+    return requestJson(path, options, false);
+}
+
+async function requestJson(path, options, allowRawSuccess) {
     var response;
     var json;
 
@@ -29,6 +33,10 @@ async function request(path, options) {
         json = await response.json();
     } catch (err) {
         throw createApiError('Invalid JSON response from server', response.status, null);
+    }
+
+    if (allowRawSuccess && response.ok && json && json.success === undefined) {
+        return json;
     }
 
     if (!response.ok || !json || json.success !== true) {
@@ -68,7 +76,7 @@ export const apiClient = {
     getRequestInstance(id) { return request('/api/request-instances/' + id); },
     updateRequestInstance(id, payload) { return request('/api/request-instances/' + id, buildJsonOptions('PUT', payload)); },
     deleteRequestInstance(id) { return request('/api/request-instances/' + id, { method: 'DELETE' }); },
-    sendProxyRequest(payload) { return request('/api/proxy', buildJsonOptions('POST', payload)); },
+    sendProxyRequest(payload) { return requestJson('/api/proxy', buildJsonOptions('POST', payload), true); },
     sendProxy(payload) { return this.sendProxyRequest(payload); },
     importData(payload) { return request('/api/import', buildJsonOptions('POST', payload)); }
 };
