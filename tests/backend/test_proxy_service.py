@@ -46,10 +46,40 @@ def test_proxy_http_request_filters_headers_sets_content_type_and_serializes_res
     assert result["body"] == {"ok": True}
     assert calls[0]["headers"] == {
         "Accept": "application/json",
+        "Accept-Encoding": "identity",
         "Content-Type": "application/json",
     }
     assert calls[0]["data"] == '{"name":"Ada"}'
     assert calls[0]["timeout"] == 30
+
+
+def test_proxy_http_request_does_not_forward_unsafe_transport_headers(monkeypatch):
+    calls = []
+
+    def fake_request(**kwargs):
+        calls.append(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", fake_request)
+
+    proxy_http_request(
+        {
+            "url": "https://api.example.test/widgets",
+            "method": "GET",
+            "headers": {
+                "Accept-Encoding": "gzip, deflate, br, zstd",
+                "Content-Length": "999",
+                "Host": "wrong.example.test",
+                "Connection": "keep-alive",
+                "Accept": "application/json",
+            },
+        }
+    )
+
+    assert calls[0]["headers"] == {
+        "Accept": "application/json",
+        "Accept-Encoding": "identity",
+    }
 
 
 def test_proxy_http_request_requires_url():
