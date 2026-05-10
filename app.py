@@ -15,7 +15,7 @@ if __name__ == '__main__':
     print('  ╔══════════════════════════════════════╗')
     print('  ║   📮 PostBoy is running!              ║')
     print(f'  ║   http://localhost:{port}               ║')
-    print('  ║   SQLite DB: postboy-data.db          ║')
+    print(f"  ║   SQLite DB: {app.config['DATABASE_PATH']}")
     print('  ╚══════════════════════════════════════╝')
     print('')
 
@@ -25,7 +25,7 @@ if __name__ == '__main__':
             app.run(
                 host='0.0.0.0',
                 port=port,
-                debug=False,
+                debug=app.config['DEBUG'],
                 use_reloader=False
             )
             break

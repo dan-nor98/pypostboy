@@ -5,14 +5,11 @@ import sqlite3
 from contextlib import contextmanager
 from threading import Lock
 
+from pypostboy.config import DEFAULT_DATABASE_PATH
+
 from .schema import initialize_schema
 
-DB_PATH = os.path.abspath(
-    os.environ.get(
-        'POSTBOY_DB_PATH',
-        os.path.join(os.path.dirname(__file__), '..', '..', 'postboy-data.db')
-    )
-)
+DB_PATH = os.path.abspath(os.environ.get('POSTBOY_DB_PATH', DEFAULT_DATABASE_PATH))
 
 
 class Database:
@@ -33,12 +30,22 @@ class Database:
             return
         self._initialized = True
         self.conn = None
+        self.database_path = None
+        self._owns_connection = False
         self._ready = False
-        self.init_database()
 
-    def init_database(self):
-        """Initialize database and create tables."""
-        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    def init_database(self, database_path=None):
+        """Initialize database and create tables at the configured path."""
+        global DB_PATH
+
+        resolved_path = os.path.abspath(database_path or DB_PATH)
+        if self._ready and self._owns_connection and self.database_path == resolved_path:
+            return
+
+        self.close()
+        os.makedirs(os.path.dirname(resolved_path), exist_ok=True)
+
+        self.conn = sqlite3.connect(resolved_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
@@ -46,8 +53,29 @@ class Database:
         initialize_schema(self.conn.cursor())
 
         self.conn.commit()
+        self.database_path = resolved_path
+        self._owns_connection = True
         self._ready = True
-        print(f'[DB] SQLite database initialized at {DB_PATH}')
+        DB_PATH = resolved_path
+        print(f'[DB] SQLite database initialized at {resolved_path}')
+
+    def use_connection(self, connection):
+        """Use an externally managed SQLite connection."""
+        if self.conn is not connection:
+            self.close()
+        self.conn = connection
+        self.database_path = None
+        self._owns_connection = False
+        self._ready = connection is not None
+
+    def close(self):
+        """Close the managed SQLite connection when this object owns it."""
+        if self.conn and self._owns_connection:
+            self.conn.close()
+        self.conn = None
+        self.database_path = None
+        self._owns_connection = False
+        self._ready = False
 
     def is_ready(self):
         return self._ready
@@ -70,13 +98,26 @@ class Database:
 db = Database()
 
 
+def configure_database(config):
+    """Configure the compatibility singleton from Flask app config."""
+    external_connection = config.get('DATABASE')
+    if external_connection is not None:
+        db.use_connection(external_connection)
+        return
+
+    db.init_database(config.get('DATABASE_PATH', DB_PATH))
+
+
 def get_connection():
     """Return the active SQLite connection."""
+    if not db.conn:
+        db.init_database(DB_PATH)
     return db.conn
 
 
 @contextmanager
 def transaction():
     """Run multiple statements in a SQLite transaction using the active database."""
+    get_connection()
     with db.transaction() as conn:
         yield conn

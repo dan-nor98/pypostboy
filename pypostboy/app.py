@@ -4,20 +4,28 @@ import os
 
 from flask import Flask
 from flask_cors import CORS
+from werkzeug.utils import import_string
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
+from pypostboy.config import DevelopmentConfig, ProductionConfig, TestingConfig
+from pypostboy.db.connection import configure_database
+
+CONFIG_BY_NAME = {
+    'development': DevelopmentConfig,
+    'dev': DevelopmentConfig,
+    'testing': TestingConfig,
+    'test': TestingConfig,
+    'production': ProductionConfig,
+    'prod': ProductionConfig,
+}
 
 
 def create_app(config=None):
     """Create and configure the PostBoy Flask app."""
     app = Flask(__name__, static_folder=None)
+    load_config(app, config)
     CORS(app)
 
-    app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
-    app.config['PUBLIC_DIR'] = PUBLIC_DIR
-    if config:
-        app.config.update(config)
+    configure_database(app.config)
 
     @app.after_request
     def remove_csp_headers(response):
@@ -29,6 +37,28 @@ def create_app(config=None):
 
     register_blueprints(app)
     return app
+
+
+def load_config(app, config=None):
+    """Load application configuration from defaults, names, objects, or dicts."""
+    app.config.from_object(DevelopmentConfig)
+
+    selected_config = config or os.environ.get('POSTBOY_CONFIG')
+    if not selected_config:
+        return
+
+    if isinstance(selected_config, dict):
+        app.config.update(selected_config)
+        return
+
+    if isinstance(selected_config, str):
+        config_object = CONFIG_BY_NAME.get(selected_config.lower())
+        if config_object is None:
+            config_object = import_string(selected_config)
+        app.config.from_object(config_object)
+        return
+
+    app.config.from_object(selected_config)
 
 
 def register_blueprints(app):
