@@ -1,13 +1,16 @@
 """Initial SQLite table and index creation."""
 
-from .migrations import migrate_request_instances
+from .migrations import create_users_table, migrate_ownership, migrate_request_instances
 
 
 def create_tables(cursor):
     """Create persistence tables if they do not already exist."""
+    create_users_table(cursor)
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS collections (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             description TEXT DEFAULT '',
             parent_id INTEGER REFERENCES collections(id) ON DELETE CASCADE,
@@ -20,6 +23,7 @@ def create_tables(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             method TEXT NOT NULL DEFAULT 'GET',
@@ -40,6 +44,7 @@ def create_tables(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS request_instances (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             method TEXT NOT NULL DEFAULT 'GET',
@@ -65,8 +70,11 @@ def create_tables(cursor):
 
 def create_indexes(cursor):
     """Create persistence indexes if they do not already exist."""
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_user_id ON collections(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_parent_id ON collections(parent_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_user_id ON requests(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_collection_id ON requests(collection_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_instances_user_id ON request_instances(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_instances_request_id ON request_instances(request_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_instances_updated_at ON request_instances(updated_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_sort_order ON collections(sort_order)")
@@ -77,4 +85,5 @@ def initialize_schema(cursor):
     """Create tables, run migrations, and ensure indexes exist."""
     create_tables(cursor)
     migrate_request_instances(cursor)
+    migrate_ownership(cursor)
     create_indexes(cursor)

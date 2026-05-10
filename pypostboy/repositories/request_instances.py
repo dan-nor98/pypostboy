@@ -71,16 +71,18 @@ class RequestInstances:
         if not name:
             raise ValueError('name is required')
 
+        user_id = data.get('user_id') or request_obj['user_id']
         now = timestamp()
         cursor = conn.execute(
             """INSERT INTO request_instances (
-                request_id, name, method, url, headers,
+                user_id, request_id, name, method, url, headers,
                 body_type, body_content, body_raw_type, form_data,
                 auth_type, auth_data, response_status, response_status_text,
                 response_headers, response_body, response_time_ms, response_size,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
+                user_id,
                 request_id,
                 name,
                 data.get('method', request_obj.get('method', 'GET')).upper(),
