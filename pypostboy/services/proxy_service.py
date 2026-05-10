@@ -4,6 +4,9 @@ import json
 from datetime import datetime, timezone
 
 import requests as http_requests
+from flask import current_app, has_app_context
+
+from pypostboy.config import BaseConfig
 
 
 class ProxyError(Exception):
@@ -26,8 +29,9 @@ class ProxyTimeoutError(ProxyError):
 
     status_text = 'Timeout'
 
-    def __init__(self):
-        super().__init__('Request timed out after 30 seconds')
+    def __init__(self, timeout):
+        self.timeout = timeout
+        super().__init__(f'Request timed out after {timeout} seconds')
 
     def to_payload(self):
         payload = super().to_payload()
@@ -39,6 +43,13 @@ class ProxyConnectionError(ProxyError):
     """Raised when the outbound request cannot connect."""
 
     status_text = 'Connection Error'
+
+
+def get_proxy_timeout():
+    """Return the configured outbound proxy timeout."""
+    if has_app_context():
+        return current_app.config.get('PROXY_TIMEOUT', BaseConfig.PROXY_TIMEOUT)
+    return BaseConfig.PROXY_TIMEOUT
 
 
 def proxy_http_request(body):
@@ -63,6 +74,7 @@ def proxy_http_request(body):
             fetch_headers['Content-Type'] = content_type
 
     start_time = datetime.now(timezone.utc)
+    proxy_timeout = get_proxy_timeout()
 
     try:
         response = http_requests.request(
@@ -71,10 +83,10 @@ def proxy_http_request(body):
             headers=fetch_headers,
             data=req_body if req_body else None,
             allow_redirects=True,
-            timeout=30
+            timeout=proxy_timeout
         )
     except http_requests.exceptions.Timeout as err:
-        raise ProxyTimeoutError() from err
+        raise ProxyTimeoutError(proxy_timeout) from err
     except http_requests.exceptions.ConnectionError as err:
         raise ProxyConnectionError(str(err)) from err
     except Exception as err:

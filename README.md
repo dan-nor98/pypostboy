@@ -147,11 +147,52 @@ PostBoy exposes a REST API that you can use to manage collections and requests p
 
 ## 🔧 Configuration
 
+PostBoy loads explicit Flask configuration objects from `pypostboy/config.py`. By default, `create_app()` uses the development configuration. You can choose a different configuration by setting `POSTBOY_CONFIG` to one of the built-in names (`development`, `testing`, or `production`) or to a Python import path for a custom config object.
+
+```bash
+# Run with production defaults
+POSTBOY_CONFIG=production python app.py
+
+# Run with a custom configuration object
+POSTBOY_CONFIG=myproject.settings.PostBoyConfig python app.py
+```
+
+### Built-in Configurations
+
+| Config | Purpose | Debug |
+|--------|---------|-------|
+| `DevelopmentConfig` | Local development and the default startup mode | Enabled |
+| `TestingConfig` | Automated tests and isolated test database paths | Disabled |
+| `ProductionConfig` | Production deployments | Disabled |
+
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3001 | Server port number |
+| `POSTBOY_CONFIG` | `development` | Configuration name (`development`, `testing`, `production`) or import path |
+| `POSTBOY_DB_PATH` | `postboy-data.db` in the repository root | SQLite database file path |
+| `POSTBOY_TEST_DB_PATH` | `postboy-test.db` in the repository root | SQLite database path used by `TestingConfig` |
+| `POSTBOY_PROXY_TIMEOUT` | 30 | Outbound proxy timeout in seconds |
+| `POSTBOY_STATIC_FOLDER` | `public/` in the repository root | Static frontend asset folder |
+| `POSTBOY_MAX_CONTENT_LENGTH` | 10485760 (10 MiB) | Maximum accepted request/import payload size in bytes |
+
+### Programmatic Configuration
+
+Tests and integrations can pass a config object or dictionary directly to the application factory:
+
+```python
+from pypostboy import create_app
+from pypostboy.config import TestingConfig
+
+app = create_app(TestingConfig)
+# or
+app = create_app({
+    'DATABASE_PATH': '/tmp/postboy.db',
+    'PROXY_TIMEOUT': 10,
+    'DEBUG': False,
+})
+```
 
 ### Security Notes
 
