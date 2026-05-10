@@ -30,11 +30,13 @@ def create_user(conn, username):
     return cursor.lastrowid
 
 
-def test_api_routes_scope_resources_to_current_user(client, sqlite_connection, collection, request_record):
+def test_api_routes_scope_resources_to_current_user(
+    client, sqlite_connection, collection, request_record, user_a_headers
+):
     other_user_id = create_user(sqlite_connection, "other-user")
     other_headers = {"X-Postboy-User-Id": str(other_user_id)}
 
-    assert_success(client.get("/api/collections"))
+    assert_success(client.get("/api/collections", headers=user_a_headers))
     assert_success(client.get("/api/collections", headers=other_headers)) == []
 
     assert_error(
@@ -66,6 +68,7 @@ def test_api_routes_scope_resources_to_current_user(client, sqlite_connection, c
     assert_error(
         client.put(
             f"/api/requests/{request_record['id']}/move",
+            headers=user_a_headers,
             json={"collection_id": other_collection["id"]},
         ),
         404,
@@ -73,9 +76,13 @@ def test_api_routes_scope_resources_to_current_user(client, sqlite_connection, c
     )
 
 
-def test_request_instances_scope_to_current_user(client, sqlite_connection, request_record):
+def test_request_instances_scope_to_current_user(
+    client, sqlite_connection, request_record, user_a
+):
     other_user_id = create_user(sqlite_connection, "snapshot-user")
-    instance = RequestInstances.create(request_record["id"], {"name": "Owned snapshot"})
+    instance = RequestInstances.create(
+        request_record["id"], user_a["id"], {"name": "Owned snapshot"}
+    )
     other_headers = {"X-Postboy-User-Id": str(other_user_id)}
 
     assert_error(
@@ -84,7 +91,9 @@ def test_request_instances_scope_to_current_user(client, sqlite_connection, requ
         "Request instance not found",
     )
     assert_error(
-        client.delete(f"/api/request-instances/{instance['id']}", headers=other_headers),
+        client.delete(
+            f"/api/request-instances/{instance['id']}", headers=other_headers
+        ),
         404,
         "Request instance not found",
     )

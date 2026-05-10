@@ -17,10 +17,13 @@ def assert_error(response, status, message):
     assert message in payload["error"]
 
 
-def test_requests_crud_duplicate_move_and_reorder_contract(client, collection):
+def test_requests_crud_duplicate_move_and_reorder_contract(
+    client, collection, user_a, user_a_headers
+):
     created = assert_success(
         client.post(
             "/api/requests",
+            headers=user_a_headers,
             json={
                 "collection_id": collection["id"],
                 "name": "Create widget",
@@ -39,19 +42,30 @@ def test_requests_crud_duplicate_move_and_reorder_contract(client, collection):
     second = assert_success(
         client.post(
             "/api/requests",
+            headers=user_a_headers,
             json={"collection_id": collection["id"], "name": "Second"},
         ),
         201,
     )
 
-    fetched = assert_success(client.get(f"/api/requests/{created['id']}"))
+    fetched = assert_success(
+        client.get(f"/api/requests/{created['id']}", headers=user_a_headers)
+    )
     assert fetched["name"] == "Create widget"
 
-    listed = assert_success(client.get(f"/api/collections/{collection['id']}/requests"))
+    listed = assert_success(
+        client.get(
+            f"/api/collections/{collection['id']}/requests", headers=user_a_headers
+        )
+    )
     assert [req["id"] for req in listed] == [created["id"], second["id"]]
 
     updated = assert_success(
-        client.put(f"/api/requests/{created['id']}", json={"method": "patch", "name": "Patch widget"})
+        client.put(
+            f"/api/requests/{created['id']}",
+            headers=user_a_headers,
+            json={"method": "patch", "name": "Patch widget"},
+        )
     )
     assert updated["method"] == "PATCH"
     assert updated["name"] == "Patch widget"
@@ -59,45 +73,178 @@ def test_requests_crud_duplicate_move_and_reorder_contract(client, collection):
     reordered = assert_success(
         client.put(
             "/api/requests/reorder",
-            json={"collection_id": collection["id"], "ordered_ids": [second["id"], created["id"]]},
+            headers=user_a_headers,
+            json={
+                "collection_id": collection["id"],
+                "ordered_ids": [second["id"], created["id"]],
+            },
         )
     )
     assert reordered == {"updated": 2}
 
-    duplicate = assert_success(client.post(f"/api/requests/{created['id']}/duplicate"))
+    duplicate = assert_success(
+        client.post(f"/api/requests/{created['id']}/duplicate", headers=user_a_headers)
+    )
     assert duplicate["name"] == "Patch widget (copy)"
 
-    target = Collections.create({"name": "Target"})
+    target = Collections.create(user_a["id"], {"name": "Target"})
     moved = assert_success(
-        client.put(f"/api/requests/{created['id']}/move", json={"collection_id": target["id"]})
+        client.put(
+            f"/api/requests/{created['id']}/move",
+            headers=user_a_headers,
+            json={"collection_id": target["id"]},
+        )
     )
     assert moved["collection_id"] == target["id"]
 
-    deleted = assert_success(client.delete(f"/api/requests/{created['id']}"))
+    deleted = assert_success(
+        client.delete(f"/api/requests/{created['id']}", headers=user_a_headers)
+    )
     assert deleted == {"deleted": 1}
 
 
-def test_requests_error_contracts(client):
-    assert_error(client.get("/api/requests/404"), 404, "Request not found")
-    assert_error(client.post("/api/requests", json={"name": "Missing collection"}), 400, "collection_id")
-    assert_error(client.put("/api/requests/reorder", json={}), 400, "collection_id required")
-    assert_error(client.put("/api/requests/404/move", json={}), 400, "collection_id required")
+def test_requests_error_contracts(client, user_a_headers):
+    assert_error(
+        client.get("/api/requests/404", headers=user_a_headers),
+        404,
+        "Request not found",
+    )
+    assert_error(
+        client.post(
+            "/api/requests", headers=user_a_headers, json={"name": "Missing collection"}
+        ),
+        400,
+        "collection_id",
+    )
+    assert_error(
+        client.put("/api/requests/reorder", headers=user_a_headers, json={}),
+        400,
+        "collection_id required",
+    )
+    assert_error(
+        client.put("/api/requests/404/move", headers=user_a_headers, json={}),
+        400,
+        "collection_id required",
+    )
 
 
-def test_request_repository_move_and_reorder_validation(collection):
+def test_user_cannot_access_or_move_other_users_request(
+    client, user_a_headers, user_b_headers
+):
+    user_a_collection = assert_success(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "User A root"}
+        ),
+        201,
+    )
+    user_b_collection = assert_success(
+        client.post(
+            "/api/collections", headers=user_b_headers, json={"name": "User B root"}
+        ),
+        201,
+    )
+    user_b_request = assert_success(
+        client.post(
+            "/api/requests",
+            headers=user_b_headers,
+            json={"collection_id": user_b_collection["id"], "name": "User B request"},
+        ),
+        201,
+    )
+    user_a_request = assert_success(
+        client.post(
+            "/api/requests",
+            headers=user_a_headers,
+            json={"collection_id": user_a_collection["id"], "name": "User A request"},
+        ),
+        201,
+    )
+
+    assert_error(
+        client.get(f"/api/requests/{user_b_request['id']}", headers=user_a_headers),
+        404,
+        "Request not found",
+    )
+    assert_error(
+        client.put(
+            f"/api/requests/{user_a_request['id']}/move",
+            headers=user_a_headers,
+            json={"collection_id": user_b_collection["id"]},
+        ),
+        404,
+        "Target collection not found",
+    )
+
+
+def test_user_cannot_reorder_requests_with_other_users_ids(
+    client, user_a_headers, user_b_headers
+):
+    user_a_collection = assert_success(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "User A root"}
+        ),
+        201,
+    )
+    user_b_collection = assert_success(
+        client.post(
+            "/api/collections", headers=user_b_headers, json={"name": "User B root"}
+        ),
+        201,
+    )
+    user_a_request = assert_success(
+        client.post(
+            "/api/requests",
+            headers=user_a_headers,
+            json={"collection_id": user_a_collection["id"], "name": "User A request"},
+        ),
+        201,
+    )
+    user_b_request = assert_success(
+        client.post(
+            "/api/requests",
+            headers=user_b_headers,
+            json={"collection_id": user_b_collection["id"], "name": "User B request"},
+        ),
+        201,
+    )
+
+    assert_error(
+        client.put(
+            "/api/requests/reorder",
+            headers=user_a_headers,
+            json={
+                "collection_id": user_a_collection["id"],
+                "ordered_ids": [user_a_request["id"], user_b_request["id"]],
+            },
+        ),
+        400,
+        "exactly the requests",
+    )
+
+
+def test_request_repository_move_and_reorder_validation(collection, user_a):
     from pypostboy.repositories.requests import Requests
 
-    first = Requests.create({"collection_id": collection["id"], "name": "First"})
-    second = Requests.create({"collection_id": collection["id"], "name": "Second"})
+    first = Requests.create(
+        user_a["id"], {"collection_id": collection["id"], "name": "First"}
+    )
+    second = Requests.create(
+        user_a["id"], {"collection_id": collection["id"], "name": "Second"}
+    )
 
-    assert Requests.reorder(collection["id"], [second["id"], first["id"]]) == {"updated": 2}
-    assert [item["id"] for item in Requests.get_by_collection(collection["id"])] == [
+    assert Requests.reorder(
+        collection["id"], user_a["id"], [second["id"], first["id"]]
+    ) == {"updated": 2}
+    assert [
+        item["id"]
+        for item in Requests.get_by_collection(collection["id"], user_a["id"])
+    ] == [
         second["id"],
         first["id"],
     ]
 
     try:
-        Requests.reorder(collection["id"], [first["id"], first["id"]])
+        Requests.reorder(collection["id"], user_a["id"], [first["id"], first["id"]])
     except ValueError as err:
         assert "duplicates" in str(err)
     else:
