@@ -3,7 +3,7 @@
 import base64
 import os
 
-from flask import Blueprint, current_app, send_from_directory
+from flask import Blueprint, abort, current_app, send_from_directory
 
 bp = Blueprint('static_routes', __name__)
 
@@ -34,4 +34,6 @@ def serve_static(path):
     full_path = os.path.join(public_dir, path)
     if os.path.isfile(full_path):
         return send_from_directory(public_dir, path)
+    if os.path.splitext(path)[1]:
+        abort(404)
     return send_from_directory(public_dir, 'index.html')
