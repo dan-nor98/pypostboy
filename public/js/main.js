@@ -2,6 +2,7 @@ import { getDomElements } from './dom.js';
 import { apiClient } from './api/client.js';
 import { clearLegacyGuestHistory, loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
 import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot } from './state/tabs.js';
+import { initTheme } from './state/theme.js';
 import { initializeCurrentUser, loginUser, logoutUser, registerUser, subscribeToUserState, userState, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
 import { loadPanelSizes, savePanelSize } from './state/panels.js';
@@ -25,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
         copyExportBtn, copyResponseBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
-        responseResizeHandle, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, rightSidebar,
+        responseResizeHandle, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
         rightSidebarResizeHandle, rightSidebarToggleBtn, rightSidebarCloseBtn, sidebarCurlOutput,
         generateSidebarCurlBtn, copySidebarCurlBtn, instancesBar, snapshotList, saveInstanceBtn,
         newCollectionBtn, newCollectionModal, newColModalClose, newColName, newColDesc, newColSaveBtn,
@@ -347,6 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ─── Init ──────────────────────────────────────────────
+    initTheme(themeToggleBtn);
     initResponseSheetControls();
     initPanelResizing();
     renderHistory();

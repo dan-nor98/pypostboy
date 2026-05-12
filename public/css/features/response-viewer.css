@@ -26,7 +26,7 @@
 }
 
 .response-header h3 {
-  color: #d1d9d4;
+  color: var(--color-text);
 }
 
 .response-meta {
@@ -43,14 +43,14 @@
   border-radius: var(--radius-sm);
   font-weight: bold;
   font-size: 0.9em;
-  background: #333;
-  color: #aaa;
+  background: var(--color-border-light);
+  color: var(--color-text-muted);
 }
 
-.status-badge.s2xx { background: rgba(73, 204, 144, 0.2); color: #49cc90; }
-.status-badge.s3xx { background: rgba(252, 161, 48, 0.2); color: #fca130; }
-.status-badge.s4xx { background: rgba(249, 62, 62, 0.2); color: #f93e3e; }
-.status-badge.s5xx { background: rgba(144, 18, 254, 0.2); color: #9012fe; }
+.status-badge.s2xx { background: var(--color-accent-soft); color: var(--color-success); }
+.status-badge.s3xx { background: var(--color-warning-soft); color: var(--color-warning); }
+.status-badge.s4xx { background: var(--color-danger-soft); color: var(--color-danger); }
+.status-badge.s5xx { background: var(--color-purple-soft); color: var(--color-purple); }
 
 .btn-copy-response {
   flex: 0 0 auto;
@@ -66,7 +66,7 @@
 
 .btn-copy-response:hover {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-contrast);
 }
 
 .response-sheet-handle,
@@ -74,8 +74,8 @@
   display: none;
 }
 /* ===== JSON SYNTAX HIGHLIGHTING ===== */
-.json-key     { color: #d1d9d4; }
-.json-string  { color: #49cc90; }
-.json-number  { color: #61affe; }
-.json-boolean { color: #fca130; }
-.json-null    { color: #9012fe; }
+.json-key     { color: var(--color-text); }
+.json-string  { color: var(--color-success); }
+.json-number  { color: var(--color-info); }
+.json-boolean { color: var(--color-warning); }
+.json-null    { color: var(--color-purple); }

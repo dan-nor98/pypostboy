@@ -1,12 +1,12 @@
 /* ===== ENVIRONMENT EDITOR ===== */
 .env-editor h4 {
   margin-bottom: 8px;
-  color: #d1d9d4;
+  color: var(--color-text);
 }
 
 .env-hint {
   font-size: 0.78em;
-  color: #888;
+  color: var(--color-text-muted);
   margin-bottom: 12px;
 }
 
@@ -14,7 +14,7 @@
   background: var(--color-border);
   padding: 1px 5px;
   border-radius: 3px;
-  color: #fca130;
+  color: var(--color-warning);
 }
 
 .env-row {
@@ -34,13 +34,13 @@
 }
 /* ===== PARAMS TAB ===== */
 .params-auto-hint {
-  background: rgba(15, 46, 33, 0.267);
+  background: var(--color-accent-softer);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 8px 12px;
   margin-bottom: 12px;
   font-size: 0.8em;
-  color: #718279;
+  color: var(--color-text-muted);
 }
 
 .params-table {
@@ -54,7 +54,7 @@
   text-align: left;
   padding: 6px 8px;
   font-size: 0.78em;
-  color: #888;
+  color: var(--color-text-muted);
   border-bottom: 1px solid var(--color-border);
   font-weight: 600;
   text-transform: uppercase;
@@ -62,12 +62,12 @@
 }
 
 .params-table tbody tr {
-  border-bottom: 1px solid rgba(15, 46, 33, 0.333);
+  border-bottom: 1px solid var(--color-border-subtle);
   transition: background 0.15s;
 }
 
 .params-table tbody tr:hover {
-  background: rgba(61, 163, 122, 0.25);
+  background: var(--color-accent-soft);
 }
 
 .params-table tbody td {
@@ -89,7 +89,7 @@
   padding: 7px 8px;
   background: var(--color-bg);
   color: var(--color-text);
-  border: 1px solid rgba(61, 163, 122, 0.1);
+  border: 1px solid var(--color-accent-hover-soft);
   border-radius: var(--radius-sm);
   font-size: 0.88em;
   transition: border-color 0.2s;
@@ -97,11 +97,11 @@
 
 .params-table input[type="text"]:focus {
   outline: none;
-  border-color: #d1d9d4;
+  border-color: var(--color-text);
 }
 
 .params-table input[type="text"].param-desc {
-  color: #888;
+  color: var(--color-text-muted);
 }
 
 .params-table input[type="checkbox"] {
@@ -136,13 +136,13 @@
 
 .header-row input:focus {
   outline: none;
-  border-color: #d1d9d4;
+  border-color: var(--color-text);
 }
 
 .btn-remove {
   padding: 6px 10px;
-  background: rgba(61, 163, 122, 0.2);
-  color: #d1d9d4;
+  background: var(--color-accent-soft);
+  color: var(--color-text);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -152,14 +152,14 @@
 
 .btn-remove:hover {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-contrast);
 }
 
 .btn-add-row {
   padding: 6px 14px;
   background: none;
   color: var(--color-accent);
-  border: 1px dashed #d1d9d4;
+  border: 1px dashed var(--color-text);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.85em;
@@ -167,7 +167,7 @@
 }
 
 .btn-add-row:hover {
-  background: rgba(61, 163, 122, 0.133);
+  background: var(--color-accent-softer);
 }
 /* ===== BODY ===== */
 .body-type-selector {
@@ -210,7 +210,7 @@
 
 #bodyContent:focus {
   outline: none;
-  border-color: #d1d9d4;
+  border-color: var(--color-text);
 }
 
 .form-data-container {
@@ -252,7 +252,7 @@
 }
 
 .auth-type-selector input[type="radio"] {
-  accent-color: #d1d9d4;
+  accent-color: var(--color-text);
 }
 
 .auth-fields {
@@ -273,7 +273,7 @@
 
 .auth-fields input:focus {
   outline: none;
-  border-color: #d1d9d4;
+  border-color: var(--color-text);
 }
 
 .auth-fields label {

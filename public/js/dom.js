@@ -51,6 +51,7 @@ export function getDomElements() {
         sidebar: document.getElementById('sidebar'),
         sidebarToggleBtn: document.getElementById('sidebarToggleBtn'),
         sidebarCloseBtn: document.getElementById('sidebarCloseBtn'),
+        themeToggleBtn: document.getElementById('themeToggleBtn'),
         authStatus: document.getElementById('authStatus'),
         authUsername: document.getElementById('authUsername'),
         authPassword: document.getElementById('authPassword'),

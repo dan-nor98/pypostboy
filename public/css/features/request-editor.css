@@ -4,25 +4,25 @@
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
-  background: rgba(15, 46, 33, 0.267);
+  background: var(--color-accent-softer);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: 0.85em;
 }
 
 .current-req-label {
-  color: #888;
+  color: var(--color-text-muted);
 }
 
 .current-req-name {
-  color: #d1d9d4;
+  color: var(--color-text);
   font-weight: 600;
   flex: 1;
 }
 
 .btn-save-request {
   padding: 5px 14px;
-  background: rgba(73, 204, 144, 0.2);
+  background: var(--color-accent-soft);
   color: var(--color-accent-hover);
   border: 1px solid var(--color-accent-hover);
   border-radius: var(--radius-sm);
@@ -33,7 +33,7 @@
 
 .btn-save-request:hover {
   background: var(--color-accent-hover);
-  color: #fff;
+  color: var(--color-accent-contrast);
 }
 /* ===== URL BAR ===== */
 .url-bar {
@@ -46,7 +46,7 @@
 #methodSelect {
   padding: 10px 12px;
   background: var(--color-border);
-  color: #d1d9d4;
+  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-weight: bold;
@@ -68,13 +68,13 @@
 
 #urlInput:focus {
   outline: none;
-  border-color: #d1d9d4;
+  border-color: var(--color-text);
 }
 
 .btn-send {
   padding: 10px 24px;
   background: var(--color-border);
-  color: #fff;
+  color: var(--color-text);
   border: none;
   border-radius: var(--radius-md);
   font-weight: bold;
@@ -84,6 +84,7 @@
 
 .btn-send:hover {
   background: var(--color-accent);
+  color: var(--color-accent-contrast);
 }
 
 .btn-loop {
@@ -99,8 +100,8 @@
 
 .btn-loop.active {
   background: var(--color-accent);
-  color: #fff;
-  border-color: #d1d9d4;
+  color: var(--color-accent-contrast);
+  border-color: var(--color-text);
 }
 /* ===== LOOP CONTROLS ===== */
 .loop-controls {
@@ -129,7 +130,7 @@
 }
 
 #loopStatus {
-  color: #d1d9d4;
+  color: var(--color-text);
   font-weight: bold;
   margin-left: auto;
 }
@@ -190,7 +191,7 @@
 .snapshot-list-item:hover:not(.is-disabled),
 .snapshot-list-item:focus-within:not(.is-disabled) {
   background: var(--color-surface);
-  border-color: #d1d9d4;
+  border-color: var(--color-text);
   outline: none;
 }
 
@@ -231,11 +232,11 @@
 
 .snapshot-overflow-button:hover,
 .snapshot-overflow-button[aria-expanded="true"] {
-  background: rgba(61, 163, 122, 0.15);
+  background: var(--color-accent-hover-soft);
 }
 
 .snapshot-list-item.is-active {
-  background: #0f2e21;
+  background: var(--color-border);
   border-color: var(--color-accent);
   color: var(--color-accent-hover);
 }
