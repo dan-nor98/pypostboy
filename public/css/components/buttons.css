@@ -21,7 +21,35 @@
 .sidebar-close:hover,
 .right-sidebar-close:hover {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-contrast);
+}
+
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  background: var(--color-border);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-light);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.78em;
+  font-weight: 700;
+  line-height: 1;
+  transition: all 0.2s;
+}
+
+.theme-toggle:hover {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--color-accent-hover);
+  outline-offset: 2px;
 }
 
 /* ===== IMPORT / EXPORT BUTTONS ===== */
@@ -41,7 +69,7 @@
 .btn-import:hover,
 .btn-export:hover {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-contrast);
 }
 /* ===== ACTION BUTTONS ===== */
 .action-buttons {

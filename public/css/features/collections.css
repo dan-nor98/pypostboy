@@ -28,7 +28,7 @@
 .folder-header .folder-arrow {
   font-size: 0.7em;
   transition: transform 0.2s;
-  color: #888;
+  color: var(--color-text-muted);
 }
 
 .folder-header .folder-arrow.open {
@@ -73,12 +73,12 @@
 }
 
 .request-item:hover {
-  background: rgba(61, 163, 122, 0.1);
+  background: var(--color-accent-hover-soft);
 }
 
 .request-item.active {
-  background: rgba(61, 163, 122, 0.2);
-  border-left: 2px solid #d1d9d4;
+  background: var(--color-accent-soft);
+  border-left: 2px solid var(--color-text);
 }
 
 .collection-folder.dragging,
@@ -112,13 +112,13 @@
   display: inline-block;
 }
 
-.method-GET    { background: rgba(97, 175, 254, 0.2); color: #61affe; }
-.method-POST   { background: rgba(73, 204, 144, 0.2); color: #49cc90; }
-.method-PUT    { background: rgba(252, 161, 48, 0.2); color: #fca130; }
-.method-PATCH  { background: rgba(80, 227, 194, 0.2); color: #50e3c2; }
-.method-DELETE { background: rgba(249, 62, 62, 0.2); color: #f93e3e; }
-.method-HEAD   { background: rgba(144, 18, 254, 0.2); color: #9012fe; }
-.method-OPTIONS{ background: rgba(13, 90, 167, 0.2); color: #0d5aa7; }
+.method-GET    { background: var(--color-info-soft); color: var(--color-info); }
+.method-POST   { background: var(--color-accent-soft); color: var(--color-success); }
+.method-PUT    { background: var(--color-warning-soft); color: var(--color-warning); }
+.method-PATCH  { background: var(--color-cyan-soft); color: var(--color-cyan); }
+.method-DELETE { background: var(--color-danger-soft); color: var(--color-danger); }
+.method-HEAD   { background: var(--color-purple-soft); color: var(--color-purple); }
+.method-OPTIONS{ background: var(--color-info-soft); color: var(--color-info); }
 
 .empty-state {
   color: var(--color-text-dim);
@@ -145,7 +145,7 @@
 }
 
 .history-item:hover {
-  background: rgba(61, 163, 122, 0.1);
+  background: var(--color-accent-hover-soft);
 }
 
 .history-url {
@@ -153,7 +153,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #ccc;
+  color: var(--color-text-muted);
 }
 
 .history-status {
@@ -163,7 +163,7 @@
   border-radius: 3px;
 }
 
-.history-status.s2xx { background: rgba(73, 204, 144, 0.2); color: #49cc90; }
-.history-status.s3xx { background: rgba(252, 161, 48, 0.2); color: #fca130; }
-.history-status.s4xx { background: rgba(249, 62, 62, 0.2); color: #f93e3e; }
-.history-status.s5xx { background: rgba(144, 18, 254, 0.2); color: #9012fe; }
+.history-status.s2xx { background: var(--color-accent-soft); color: var(--color-success); }
+.history-status.s3xx { background: var(--color-warning-soft); color: var(--color-warning); }
+.history-status.s4xx { background: var(--color-danger-soft); color: var(--color-danger); }
+.history-status.s5xx { background: var(--color-purple-soft); color: var(--color-purple); }

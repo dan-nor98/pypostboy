@@ -21,7 +21,7 @@
 }
 
 .right-sidebar-header h2 {
-  color: #d1d9d4;
+  color: var(--color-text);
   font-size: 1.2em;
 }
 
@@ -43,7 +43,7 @@
 
 .right-sidebar-tab.active {
   color: var(--color-accent);
-  border-bottom: 2px solid #2d3d36;
+  border-bottom: 2px solid var(--color-border-strong);
 }
 
 .right-sidebar-panel {
@@ -67,7 +67,7 @@
 }
 
 .right-sidebar-section h3 {
-  color: #d1d9d4;
+  color: var(--color-text);
   font-size: 1em;
 }
 

@@ -42,7 +42,7 @@
 }
 
 .sidebar-header h2 {
-  color: #d1d9d4;
+  color: var(--color-text);
   font-size: 1.4em;
 }
 
@@ -86,7 +86,7 @@
 }
 
 .account-status.auth-error {
-  color: #ff8a80;
+  color: var(--color-danger-muted);
   white-space: normal;
 }
 
@@ -112,7 +112,7 @@
 
 .account-fields input:focus {
   outline: none;
-  border-color: #d1d9d4;
+  border-color: var(--color-text);
 }
 
 .btn-account {
@@ -129,7 +129,7 @@
 
 .btn-account:hover:not(:disabled) {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-accent-contrast);
 }
 
 .btn-account:disabled,
