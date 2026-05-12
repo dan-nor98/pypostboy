@@ -3,7 +3,7 @@ import { apiClient } from './api/client.js';
 import { clearLegacyGuestHistory, loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
 import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot } from './state/tabs.js';
 import { initTheme } from './state/theme.js';
-import { initializeCurrentUser, loginUser, logoutUser, registerUser, subscribeToUserState, userState, waitForAuth } from './state/user.js';
+import { canUseWorkspace, continueAsGuest, initializeCurrentUser, isExplicitGuestSession, loginUser, logoutUser, registerUser, subscribeToUserState, userState, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
 import { loadPanelSizes, savePanelSize } from './state/panels.js';
 import { createToast } from './ui/toast.js';
@@ -26,14 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
         copyExportBtn, copyResponseBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
-        responseResizeHandle, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
+        responseResizeHandle, loginScreen, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
         rightSidebarResizeHandle, rightSidebarToggleBtn, rightSidebarCloseBtn, sidebarCurlOutput,
         generateSidebarCurlBtn, copySidebarCurlBtn, instancesBar, snapshotList, saveInstanceBtn,
         newCollectionBtn, newCollectionModal, newColModalClose, newColName, newColDesc, newColSaveBtn,
         newColCancelBtn, editCollectionId, collectionModalTitle, requestModal, reqModalClose, reqNameInput,
         reqSaveBtn, reqCancelBtn, editRequestId, editRequestCollectionId, requestModalTitle,
         reqCollectionPickerWrap, reqCollectionSelect, requestTabsEl, newTabBtn, contextMenu, requestContextMenu,
-        tabContextMenu, snapshotContextMenu, authStatus, authUsername, authPassword, loginBtn, registerBtn, logoutBtn
+        tabContextMenu, snapshotContextMenu, authStatus, appAuthStatus, authUsername, authPassword, loginBtn, registerBtn, logoutBtn, guestLoginBtn
     } = getDomElements();
 
     // ─── State ─────────────────────────────────────────────
@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let loadingSnapshotId      = '';
     let snapshotContextTargetId = '';
     let snapshotContextTrigger  = null;
+    let workspaceInitialized = false;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
@@ -354,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderHistory();
     renderEnvVars();
     initAuthControls();
-    initializeAuthenticatedWorkspace();
+    startAuthFlow();
 
     // ─── Close context menus on click elsewhere ────────────
     document.addEventListener('click', function() {
@@ -507,18 +508,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    function renderAuthControls(state) {
-        if (!authStatus) return;
+    function setAuthenticatedViewVisible(showApp) {
+        if (loginScreen) loginScreen.hidden = showApp;
+        if (appContainer) appContainer.hidden = !showApp;
+    }
+
+    function getAuthStatusText(state) {
+        if (state.loading) return 'Checking account…';
+        if (state.error) return state.error;
 
         var user = state.currentUser;
-        var isLoading = !!state.loading;
-        var username = user && user.username ? user.username : 'Guest';
-        var statusText = user && user.is_guest ? 'Guest mode — log in to save history' : ('Signed in as ' + username);
-        authStatus.textContent = isLoading ? 'Checking account…' : statusText;
-        authStatus.classList.toggle('auth-error', !!state.error);
-        if (state.error) authStatus.textContent = state.error;
+        if (!user) return 'Sign in or continue as guest to start using PostBoy.';
+        if (user.is_guest) {
+            return state.explicitGuest ? 'Guest mode — log in to save history' : 'Choose how you want to continue.';
+        }
+        return 'Signed in as ' + (user.username || 'User');
+    }
 
-        [authUsername, authPassword, loginBtn, registerBtn, logoutBtn].forEach(function(control) {
+    function renderAuthControls(state) {
+        var isLoading = !!state.loading;
+        var showApp = canUseWorkspace(state);
+        var statusText = getAuthStatusText(state);
+
+        setAuthenticatedViewVisible(showApp);
+
+        [authStatus, appAuthStatus].forEach(function(statusEl) {
+            if (!statusEl) return;
+            statusEl.textContent = statusText;
+            statusEl.classList.toggle('auth-error', !!state.error);
+        });
+
+        [authUsername, authPassword, loginBtn, registerBtn, logoutBtn, guestLoginBtn].forEach(function(control) {
             if (control) control.disabled = isLoading;
         });
     }
@@ -563,6 +583,14 @@ document.addEventListener('DOMContentLoaded', () => {
         persistOpenTabs(false);
     }
 
+    async function ensureWorkspaceReady() {
+        if (!workspaceInitialized) {
+            await initializeAuthenticatedWorkspace();
+            return;
+        }
+        await reloadUserScopedData();
+    }
+
     function initAuthControls() {
         subscribeToUserState(renderAuthControls);
 
@@ -582,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast('Signed in', 'success');
                 }
                 clearAuthInputs();
-                await reloadUserScopedData();
+                await ensureWorkspaceReady();
             } catch (err) {
                 showToast('Auth error: ' + err.message, 'error');
             }
@@ -590,12 +618,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (loginBtn) loginBtn.addEventListener('click', function() { submitAuth('login'); });
         if (registerBtn) registerBtn.addEventListener('click', function() { submitAuth('register'); });
+        if (guestLoginBtn) {
+            guestLoginBtn.addEventListener('click', async function() {
+                try {
+                    await continueAsGuest();
+                    showToast('Continuing as guest', 'success');
+                    await ensureWorkspaceReady();
+                } catch (err) {
+                    showToast('Guest mode failed: ' + err.message, 'error');
+                }
+            });
+        }
         if (logoutBtn) {
             logoutBtn.addEventListener('click', async function() {
                 try {
                     await logoutUser();
                     showToast('Signed out', 'success');
-                    await reloadUserScopedData();
+                    setAuthenticatedViewVisible(false);
                 } catch (err) {
                     showToast('Logout failed: ' + err.message, 'error');
                 }
@@ -610,13 +649,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function initializeAuthenticatedWorkspace() {
-        await initializeCurrentUser();
+        await waitForAuth();
+        if (!canUseWorkspace(userState)) return;
         clearLegacyGuestHistory();
         history = loadHistory(userState.currentUser);
         envVars = loadEnvVars(userState.currentUser);
         renderHistory();
         renderEnvVars();
         await initializeRequestTabs();
+        workspaceInitialized = true;
+    }
+
+    async function startAuthFlow() {
+        await initializeCurrentUser();
+        if (canUseWorkspace(userState)) {
+            await initializeAuthenticatedWorkspace();
+            if (isExplicitGuestSession(userState)) {
+                showToast('Continuing as guest', 'success');
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════
