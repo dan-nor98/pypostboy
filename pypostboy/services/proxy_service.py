@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 
 import requests as http_requests
-from flask import current_app, has_app_context
+from django.conf import settings
 
 from pypostboy.config import BaseConfig
 
@@ -65,9 +65,7 @@ class ProxyConnectionError(ProxyError):
 
 def get_proxy_timeout():
     """Return the configured outbound proxy timeout."""
-    if has_app_context():
-        return current_app.config.get('PROXY_TIMEOUT', BaseConfig.PROXY_TIMEOUT)
-    return BaseConfig.PROXY_TIMEOUT
+    return getattr(settings, 'PROXY_TIMEOUT', BaseConfig.PROXY_TIMEOUT)
 
 
 def proxy_http_request(body):

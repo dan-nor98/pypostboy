@@ -1,6 +1,6 @@
 # 📮 PostBoy - API Client & Proxy Server
 
-A lightweight, self-hosted API client and HTTP proxy server built with Flask. Test and manage your API requests with an intuitive interface, organize them into collections, and proxy requests through a local server - all without any external API dependencies.
+A lightweight, self-hosted API client and HTTP proxy server built with Django. Test and manage your API requests with an intuitive interface, organize them into collections, and proxy requests through a local server - all without any external API dependencies.
 
 ## ✨ Features
 
@@ -52,8 +52,8 @@ A lightweight, self-hosted API client and HTTP proxy server built with Flask. Te
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/postboy-flask.git
-cd postboy-flask
+git clone https://github.com/yourusername/postboy-django.git
+cd postboy-django
 ```
 
 2. **Create a virtual environment (recommended)**
@@ -98,19 +98,24 @@ PORT=8080 python app.py
 ## 📁 Project Structure
 
 ```
-postboy-flask/
-├── app.py                 # Thin server entrypoint
-├── db.py                  # Database layer (SQLite)
+postboy-django/
+├── app.py                 # Thin Django server entrypoint
+├── db.py                  # Compatibility exports for the SQLite data layer
 ├── requirements.txt       # Python dependencies
 ├── README.md              # This file
 ├── public/                # Frontend static files
 │   ├── index.html         # Main application
 │   ├── style.css          # Stylesheet
 │   └── script.js          # Frontend behavior
-└── pypostboy/             # Package-based Flask backend
-    ├── app.py             # Application factory
-    ├── http/              # Shared HTTP response helpers
-    ├── routes/            # Blueprint route modules
+└── pypostboy/             # Package-based Django backend
+    ├── app.py             # Django application factory and test facade
+    ├── settings.py        # Django settings
+    ├── urls.py            # URL routing table
+    ├── wsgi.py            # WSGI application
+    ├── djangoapp/         # Request context, middleware, and parsing helpers
+    ├── http/              # Shared JSON response helpers
+    ├── routes/            # Focused function-based Django views
+    ├── repositories/      # Persistence repositories
     └── services/          # Import, cURL parsing, and proxy services
 ```
 
@@ -147,7 +152,7 @@ PostBoy exposes a REST API that you can use to manage collections and requests p
 
 ## 🔧 Configuration
 
-PostBoy loads explicit Flask configuration objects from `pypostboy/config.py`. By default, `create_app()` uses the development configuration. You can choose a different configuration by setting `POSTBOY_CONFIG` to one of the built-in names (`development`, `testing`, or `production`) or to a Python import path for a custom config object.
+PostBoy loads explicit environment configuration objects from `pypostboy/config.py` and applies them to the Django runtime. By default, `create_app()` uses the development configuration and returns a Django WSGI application facade. You can choose a different configuration by setting `POSTBOY_CONFIG` to one of the built-in names (`development`, `testing`, or `production`) or to a Python import path for a custom config object.
 
 ```bash
 # Run with production defaults
@@ -197,7 +202,7 @@ app = create_app({
 ### Security Notes
 
 - PostBoy is designed for **local development** use
-- No authentication is required (runs on localhost)
+- Local-first authentication falls back to a default local user for legacy single-user mode
 - The proxy endpoint forwards requests as-is
 - Sensitive data (API keys, tokens) is stored in the local SQLite database
 - Do not expose PostBoy to public networks without additional security
@@ -219,7 +224,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 🙏 Acknowledgments
 
 - Inspired by Postman and Insomnia
-- Built with Flask and SQLite
+- Built with Django and SQLite
 - Uses vanilla JavaScript for the frontend
 
 ## 🚦 Status

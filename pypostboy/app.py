@@ -1,15 +1,15 @@
-"""Flask application factory for PostBoy."""
+"""Django application factory and compatibility helpers for PostBoy."""
 
+import json
 import os
 
-from flask import Flask
-from flask_cors import CORS
-from werkzeug.utils import import_string
+from django.conf import settings
+from django.core.wsgi import get_wsgi_application
+from django.test import Client as DjangoClient
+from django.utils.module_loading import import_string
 
 from pypostboy.config import DevelopmentConfig, ProductionConfig, TestingConfig
-from pypostboy.auth import AuthenticationError, get_current_user
 from pypostboy.db.connection import configure_database
-from pypostboy.http.responses import error
 
 CONFIG_BY_NAME = {
     'development': DevelopmentConfig,
@@ -21,79 +21,113 @@ CONFIG_BY_NAME = {
 }
 
 
-def create_app(config=None):
-    """Create and configure the PostBoy Flask app."""
-    app = Flask(__name__, static_folder=None)
-    load_config(app, config)
-    CORS(app, supports_credentials=True)
+class DjangoResponseAdapter:
+    """Expose the small legacy response surface used by legacy tests."""
 
-    configure_database(app.config)
+    def __init__(self, response):
+        self._response = response
 
-    @app.before_request
-    def load_current_user():
-        if not request_is_api():
-            return None
-        try:
-            get_current_user()
-        except AuthenticationError as err:
-            return error(err, 401)
-        return None
+    def __getattr__(self, name):
+        return getattr(self._response, name)
 
-    @app.after_request
-    def remove_csp_headers(response):
-        response.headers.pop('Content-Security-Policy', None)
-        response.headers.pop('X-Content-Security-Policy', None)
-        response.headers.pop('X-WebKit-CSP', None)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response
+    @property
+    def data(self):
+        return self._response.content
 
-    register_blueprints(app)
-    return app
+    @property
+    def mimetype(self):
+        return (self._response.headers.get('Content-Type') or '').split(';', 1)[0]
+
+    def get_json(self):
+        return json.loads(self._response.content.decode(self._response.charset or 'utf-8'))
 
 
-def load_config(app, config=None):
+class LegacyDjangoClient:
+    """Django test client with legacy json= convenience and responses."""
+
+    def __init__(self):
+        self._client = DjangoClient()
+
+    def _request(self, method, path, **kwargs):
+        if 'json' in kwargs:
+            kwargs['data'] = json.dumps(kwargs.pop('json'))
+            kwargs.setdefault('content_type', 'application/json')
+        response = getattr(self._client, method)(path, **kwargs)
+        return DjangoResponseAdapter(response)
+
+    def get(self, path, **kwargs):
+        return self._request('get', path, **kwargs)
+
+    def post(self, path, **kwargs):
+        return self._request('post', path, **kwargs)
+
+    def put(self, path, **kwargs):
+        return self._request('put', path, **kwargs)
+
+    def delete(self, path, **kwargs):
+        return self._request('delete', path, **kwargs)
+
+
+class PostBoyDjangoApplication:
+    """Small facade around Django's WSGI application for legacy entrypoints."""
+
+    def __init__(self, wsgi_application, config):
+        self.wsgi_application = wsgi_application
+        self.config = config
+
+    def __call__(self, environ, start_response):
+        return self.wsgi_application(environ, start_response)
+
+    def test_client(self):
+        return LegacyDjangoClient()
+
+
+def _config_to_dict(config_object):
+    return {
+        name: getattr(config_object, name)
+        for name in dir(config_object)
+        if name.isupper()
+    }
+
+
+def load_config(config=None):
     """Load application configuration from defaults, names, objects, or dicts."""
-    app.config.from_object(DevelopmentConfig)
-
+    config_dict = _config_to_dict(DevelopmentConfig)
     selected_config = config or os.environ.get('POSTBOY_CONFIG')
-    if not selected_config:
-        return
 
     if isinstance(selected_config, dict):
-        app.config.update(selected_config)
-        return
-
-    if isinstance(selected_config, str):
+        config_dict.update(selected_config)
+    elif isinstance(selected_config, str):
         config_object = CONFIG_BY_NAME.get(selected_config.lower())
         if config_object is None:
             config_object = import_string(selected_config)
-        app.config.from_object(config_object)
-        return
+        config_dict.update(_config_to_dict(config_object))
+    elif selected_config:
+        config_dict.update(_config_to_dict(selected_config))
 
-    app.config.from_object(selected_config)
-
-
-def register_blueprints(app):
-    """Register route blueprints while preserving existing URL paths."""
-    from pypostboy.routes.auth import bp as auth_bp
-    from pypostboy.routes.collections import bp as collections_bp
-    from pypostboy.routes.imports import bp as imports_bp
-    from pypostboy.routes.instances import bp as instances_bp
-    from pypostboy.routes.proxy import bp as proxy_bp
-    from pypostboy.routes.requests import bp as requests_bp
-    from pypostboy.routes.static import bp as static_bp
-
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(collections_bp)
-    app.register_blueprint(requests_bp)
-    app.register_blueprint(instances_bp)
-    app.register_blueprint(imports_bp)
-    app.register_blueprint(proxy_bp)
-    app.register_blueprint(static_bp)
+    return config_dict
 
 
-def request_is_api():
-    """Return whether the current request targets API routes."""
-    from flask import request
+def _apply_django_settings(config_dict):
+    """Apply mutable PostBoy settings after Django is configured."""
+    settings.DEBUG = bool(config_dict.get('DEBUG', settings.DEBUG))
+    settings.SECRET_KEY = config_dict.get('SECRET_KEY', settings.SECRET_KEY)
+    settings.PUBLIC_DIR = config_dict.get('PUBLIC_DIR', settings.PUBLIC_DIR)
+    settings.PROXY_TIMEOUT = config_dict.get('PROXY_TIMEOUT', settings.PROXY_TIMEOUT)
+    settings.DATA_UPLOAD_MAX_MEMORY_SIZE = config_dict.get(
+        'MAX_CONTENT_LENGTH', settings.DATA_UPLOAD_MAX_MEMORY_SIZE
+    )
 
-    return request.path.startswith('/api/')
+
+def create_app(config=None):
+    """Create and configure the PostBoy Django app."""
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pypostboy.settings')
+    config_dict = load_config(config)
+
+    # Importing the WSGI application configures Django once. Runtime mutable
+    # settings are then synchronized for tests and local entrypoints.
+    wsgi_application = get_wsgi_application()
+    _apply_django_settings(config_dict)
+    configure_database(config_dict)
+
+    return PostBoyDjangoApplication(wsgi_application, config_dict)
