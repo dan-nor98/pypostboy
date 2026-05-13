@@ -1,7 +1,9 @@
-"""Thin entrypoint for running the PostBoy Flask app."""
+"""Thin entrypoint for running the PostBoy Django app."""
 
 import os
 import sys
+
+from django.core.servers.basehttp import run
 
 from pypostboy import create_app
 
@@ -22,12 +24,7 @@ if __name__ == '__main__':
     max_attempts = 5
     for attempt in range(max_attempts):
         try:
-            app.run(
-                host='0.0.0.0',
-                port=port,
-                debug=app.config['DEBUG'],
-                use_reloader=False
-            )
+            run('0.0.0.0', port, app)
             break
         except OSError as err:
             if err.errno == 48 or 'Address already in use' in str(err):

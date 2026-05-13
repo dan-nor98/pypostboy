@@ -1,4 +1,4 @@
-"""Configuration objects for PostBoy Flask environments."""
+"""Configuration objects for PostBoy Django environments."""
 
 import os
 
