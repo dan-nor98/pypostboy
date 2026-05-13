@@ -1,44 +1,41 @@
-"""Request API routes."""
+"""Request API views."""
 
-from flask import Blueprint, request
+from django.views.decorators.csrf import csrf_exempt
 
 from db import Requests
 from pypostboy.auth import require_current_user
+from pypostboy.djangoapp.request import json_body
 from pypostboy.http.responses import created, error, ok
 
-bp = Blueprint('requests', __name__)
 
-
-def _current_user_id():
-    return require_current_user()['id']
+def _current_user_id(request):
+    return require_current_user(request)['id']
 
 
 def _status_for_error(err):
     return 404 if 'not found' in str(err).lower() else 400
 
 
-@bp.route('/api/requests/reorder', methods=['PUT'])
-def reorder_requests():
+@csrf_exempt
+def reorder_requests(request):
     """Reorder requests within a collection."""
     try:
-        body = request.get_json(silent=True) or {}
+        body = json_body(request)
         collection_id = body.get('collection_id')
         if not collection_id:
             return error('collection_id required', 400)
         if 'ordered_ids' not in body:
             return error('ordered_ids required', 400)
-
-        result = Requests.reorder(collection_id, _current_user_id(), body.get('ordered_ids'))
+        result = Requests.reorder(collection_id, _current_user_id(request), body.get('ordered_ids'))
         return ok(result)
     except Exception as err:
         return error(err, _status_for_error(err))
 
 
-@bp.route('/api/requests/<int:id>', methods=['GET'])
-def get_request(id):
+def get_request(request, id):
     """Get single request."""
     try:
-        req = Requests.get_by_id(id, _current_user_id())
+        req = Requests.get_by_id(id, _current_user_id(request))
         if not req:
             return error('Request not found', 404)
         return ok(req)
@@ -46,11 +43,10 @@ def get_request(id):
         return error(err, 500)
 
 
-@bp.route('/api/collections/<int:id>/requests', methods=['GET'])
-def get_collection_requests(id):
+def get_collection_requests(request, id):
     """Get all requests in a collection."""
     try:
-        reqs = Requests.get_by_collection(id, _current_user_id())
+        reqs = Requests.get_by_collection(id, _current_user_id(request))
         return ok(reqs)
     except ValueError as err:
         return error(err, 404)
@@ -58,31 +54,31 @@ def get_collection_requests(id):
         return error(err, 500)
 
 
-@bp.route('/api/requests', methods=['POST'])
-def create_request():
+@csrf_exempt
+def create_request(request):
     """Create a new request."""
     try:
-        req = Requests.create(_current_user_id(), request.get_json(silent=True) or {})
+        req = Requests.create(_current_user_id(request), json_body(request))
         return created(req)
     except Exception as err:
         return error(err, _status_for_error(err))
 
 
-@bp.route('/api/requests/<int:id>', methods=['PUT'])
-def update_request(id):
+@csrf_exempt
+def update_request(request, id):
     """Update a request."""
     try:
-        req = Requests.update(id, _current_user_id(), request.get_json(silent=True) or {})
+        req = Requests.update(id, _current_user_id(request), json_body(request))
         return ok(req)
     except Exception as err:
         return error(err, _status_for_error(err))
 
 
-@bp.route('/api/requests/<int:id>', methods=['DELETE'])
-def delete_request(id):
+@csrf_exempt
+def delete_request(request, id):
     """Delete a request."""
     try:
-        result = Requests.delete(id, _current_user_id())
+        result = Requests.delete(id, _current_user_id(request))
         if result.get('deleted') == 0:
             return error('Request not found', 404)
         return ok(result)
@@ -90,25 +86,25 @@ def delete_request(id):
         return error(err, _status_for_error(err))
 
 
-@bp.route('/api/requests/<int:id>/duplicate', methods=['POST'])
-def duplicate_request(id):
+@csrf_exempt
+def duplicate_request(request, id):
     """Duplicate a request."""
     try:
-        req = Requests.duplicate(id, _current_user_id())
+        req = Requests.duplicate(id, _current_user_id(request))
         return ok(req)
     except Exception as err:
         return error(err, _status_for_error(err))
 
 
-@bp.route('/api/requests/<int:id>/move', methods=['PUT'])
-def move_request(id):
+@csrf_exempt
+def move_request(request, id):
     """Move request to another collection."""
     try:
-        body = request.get_json(silent=True) or {}
+        body = json_body(request)
         collection_id = body.get('collection_id')
         if not collection_id:
             return error('collection_id required', 400)
-        req = Requests.move(id, _current_user_id(), collection_id)
+        req = Requests.move(id, _current_user_id(request), collection_id)
         return ok(req)
     except Exception as err:
         return error(err, _status_for_error(err))

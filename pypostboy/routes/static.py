@@ -1,39 +1,44 @@
-"""Static file and SPA fallback routes."""
+"""Static file and SPA fallback views."""
 
 import base64
+import mimetypes
 import os
 
-from flask import Blueprint, abort, current_app, send_from_directory
+from django.conf import settings
+from django.http import FileResponse, Http404, HttpResponse
 
-bp = Blueprint('static_routes', __name__)
 
-
-@bp.route('/favicon.ico')
-def favicon():
+def favicon(request):
     """Serve a minimal transparent PNG favicon."""
     favicon_data = base64.b64decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
     )
-    return current_app.response_class(
-        response=favicon_data,
-        mimetype='image/png',
-        headers={'Cache-Control': 'public, max-age=604800'}
+    return HttpResponse(
+        favicon_data,
+        content_type='image/png',
+        headers={'Cache-Control': 'public, max-age=604800'},
     )
 
 
-@bp.route('/')
-def index():
+def _serve_file(path):
+    content_type, _encoding = mimetypes.guess_type(path)
+    return FileResponse(open(path, 'rb'), content_type=content_type or 'application/octet-stream')
+
+
+def index(request):
     """Serve the main index.html."""
-    return send_from_directory(current_app.config['PUBLIC_DIR'], 'index.html')
+    return _serve_file(os.path.join(settings.PUBLIC_DIR, 'index.html'))
 
 
-@bp.route('/<path:path>')
-def serve_static(path):
+def serve_static(request, path):
     """Serve static files and fallback to index.html for SPA."""
-    public_dir = current_app.config['PUBLIC_DIR']
-    full_path = os.path.join(public_dir, path)
+    public_dir = settings.PUBLIC_DIR
+    safe_path = os.path.normpath(path).lstrip(os.sep)
+    full_path = os.path.abspath(os.path.join(public_dir, safe_path))
+    if not full_path.startswith(os.path.abspath(public_dir) + os.sep):
+        raise Http404()
     if os.path.isfile(full_path):
-        return send_from_directory(public_dir, path)
+        return _serve_file(full_path)
     if os.path.splitext(path)[1]:
-        abort(404)
-    return send_from_directory(public_dir, 'index.html')
+        raise Http404()
+    return _serve_file(os.path.join(public_dir, 'index.html'))
