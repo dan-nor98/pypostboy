@@ -71,7 +71,7 @@ def sqlite_connection(tmp_path, monkeypatch):
 
 @pytest.fixture
 def app(sqlite_connection):
-    """Create a Flask app configured for tests against the temp database."""
+    """Create a Django app configured for tests against the temp database."""
     return create_app(
         {
             "TESTING": True,

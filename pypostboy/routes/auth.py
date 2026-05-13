@@ -1,15 +1,14 @@
-"""Authentication API routes for PostBoy."""
+"""Authentication API views for PostBoy."""
 
-from flask import Blueprint, g, request, session
-from werkzeug.security import check_password_hash, generate_password_hash
+from django.contrib.auth.hashers import check_password, make_password
+from django.views.decorators.csrf import csrf_exempt
 
 from pypostboy.auth import get_current_user
 from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
 from pypostboy.db.serializers import timestamp
+from pypostboy.djangoapp.request import json_body
 from pypostboy.http.responses import created, error, ok
-
-bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 
 def _public_user(user):
@@ -32,18 +31,15 @@ def _normalize_credentials(payload):
     return username, password, email
 
 
-@bp.get('/me')
-def current_user():
+def current_user(request):
     """Return the current session/header/cookie resolved user."""
-    return ok(_public_user(get_current_user()))
+    return ok(_public_user(get_current_user(request)))
 
 
-@bp.post('/login')
-def login():
+@csrf_exempt
+def login(request):
     """Start a session for a username/password user."""
-    username, password, _email = _normalize_credentials(
-        request.get_json(silent=True) or {}
-    )
+    username, password, _email = _normalize_credentials(json_body(request))
     if not username or not password:
         return error('Username and password are required', 400)
 
@@ -54,22 +50,20 @@ def login():
     if (
         not user
         or not user['password_hash']
-        or not check_password_hash(user['password_hash'], password)
+        or not check_password(password, user['password_hash'])
     ):
         return error('Invalid username or password', 401)
 
-    session['user_id'] = user['id']
-    g.current_user = dict(user)
-    session.permanent = True
+    request.session['user_id'] = user['id']
+    request.session.modified = True
+    request.current_user = dict(user)
     return ok(_public_user(user))
 
 
-@bp.post('/register')
-def register():
+@csrf_exempt
+def register(request):
     """Create a local username/password user and start a session."""
-    username, password, email = _normalize_credentials(
-        request.get_json(silent=True) or {}
-    )
+    username, password, email = _normalize_credentials(json_body(request))
     if not username or not password:
         return error('Username and password are required', 400)
     if len(password) < 8:
@@ -88,7 +82,7 @@ def register():
         """INSERT INTO users (
             username, email, password_hash, auth_provider, auth_subject, created_at, updated_at
         ) VALUES (?, ?, ?, 'local', NULL, ?, ?)""",
-        (username, email, generate_password_hash(password), now, now),
+        (username, email, make_password(password), now, now),
     )
     conn.commit()
 
@@ -96,15 +90,17 @@ def register():
         'SELECT * FROM users WHERE id = ?',
         (cursor.lastrowid,),
     ).fetchone()
-    session['user_id'] = user['id']
-    g.current_user = dict(user)
-    session.permanent = True
+    request.session['user_id'] = user['id']
+    request.session.modified = True
+    request.current_user = dict(user)
     return created(_public_user(user))
 
 
-@bp.post('/logout')
-def logout():
+@csrf_exempt
+def logout(request):
     """Clear the current browser session."""
-    session.pop('user_id', None)
-    g.pop('current_user', None)
-    return ok(_public_user(get_current_user()))
+    request.session.pop('user_id', None)
+    request.session.modified = True
+    if hasattr(request, 'current_user'):
+        delattr(request, 'current_user')
+    return ok(_public_user(get_current_user(request)))

@@ -99,7 +99,7 @@ db = Database()
 
 
 def configure_database(config):
-    """Configure the compatibility singleton from Flask app config."""
+    """Configure the compatibility singleton from Django app config."""
     external_connection = config.get('DATABASE')
     if external_connection is not None:
         db.use_connection(external_connection)

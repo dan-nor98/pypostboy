@@ -1,14 +1,13 @@
-"""Shared JSON response helpers for the PostBoy API."""
+"""Shared JSON response helpers for the PostBoy Django API."""
 
-from flask import jsonify
+from django.http import JsonResponse
 
 
 def ok(data=None, status=200, **extra):
     """Return a standard successful API response."""
     payload = {"success": True, "data": data}
     payload.update(extra)
-    response = jsonify(payload)
-    return response, status
+    return JsonResponse(payload, status=status)
 
 
 def created(data=None, **extra):
@@ -20,7 +19,7 @@ def error(message, status=400, **extra):
     """Return a standard failed API response."""
     payload = {"success": False, "error": str(message)}
     payload.update(extra)
-    return jsonify(payload), status
+    return JsonResponse(payload, status=status)
 
 
 # Backwards-compatible aliases for modules/tests that still import the old names.
