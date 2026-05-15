@@ -3551,26 +3551,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // cURL — parse on server and load into editor
                 try {
                     var parsed = await apiClient.importData({ type: 'curl', data: raw });
-                    methodSelect.value = parsed.method || 'GET';
-                    urlInput.value = parsed.url || '';
-                    syncParamsFromUrl();
-
-                    headersContainer.innerHTML = '';
-                    if (parsed.headers && Array.isArray(parsed.headers)) {
-                        parsed.headers.forEach(function(h) {
-                            addHeaderRow(h.key, h.value);
-                        });
-                    }
-                    if (!headersContainer.children.length) addHeaderRow();
-
-                    if (parsed.body_content) {
-                        bodyContent.value = parsed.body_content;
-                        var bt = parsed.body_type || 'text';
-                        var radio = document.querySelector('input[name="bodyType"][value="' + bt + '"]');
-                        if (radio) radio.checked = true;
-                        bodyContent.style.display = '';
-                        formDataContainer.style.display = 'none';
-                    }
+                    loadStateIntoEditor(reqToState(parsed));
 
                     showToast('cURL imported into editor', 'success');
                     importModal.classList.remove('active');

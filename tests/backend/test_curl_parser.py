@@ -31,7 +31,7 @@ def test_parse_curl_defaults_post_when_data_is_supplied_without_method():
 
     assert result["method"] == "POST"
     assert result["url"] == "https://api.example.test/search"
-    assert result["body_type"] == "text"
+    assert result["body_type"] == "form-urlencoded"
     assert result["body_content"] == "q=postboy"
     assert result["headers"] == [
         {"key": "Authorization", "value": "Basic dXNlcjpzZWNyZXQ="}
@@ -163,3 +163,54 @@ def test_parse_curl_does_not_convert_cookie_file_to_cookie_header():
 
     assert result["url"] == "https://api.example.test/widgets"
     assert result["headers"] == []
+
+
+def test_parse_curl_accumulates_repeated_data_flags_with_ampersands():
+    result = parse_curl_to_request(
+        "curl https://api.example.test/search -d q=postboy --data page=2 "
+        "--data-raw sort=created"
+    )
+
+    assert result["method"] == "POST"
+    assert result["body_type"] == "form-urlencoded"
+    assert result["body_content"] == "q=postboy&page=2&sort=created"
+    assert "form_data" not in result
+
+
+def test_parse_curl_accumulates_data_urlencode_as_structured_form_data():
+    result = parse_curl_to_request(
+        "curl https://api.example.test/search "
+        "--data-urlencode 'q=Ada Lovelace' --data-urlencode 'page=2'"
+    )
+
+    assert result["method"] == "POST"
+    assert result["body_type"] == "form-urlencoded"
+    assert result["body_content"] == "q=Ada+Lovelace&page=2"
+    assert result["form_data"] == [
+        {"key": "q", "value": "Ada Lovelace"},
+        {"key": "page", "value": "2"},
+    ]
+
+
+def test_parse_curl_infers_xml_body_type():
+    result = parse_curl_to_request(
+        "curl https://api.example.test/widgets -H 'Content-Type: application/xml' "
+        "--data '<widget><name>Ada</name></widget>'"
+    )
+
+    assert result["body_type"] == "xml"
+    assert result["body_content"] == "<widget><name>Ada</name></widget>"
+
+
+def test_parse_curl_parses_form_options_as_form_data():
+    result = parse_curl_to_request(
+        "curl https://api.example.test/upload -F 'name=Ada' --form 'avatar=@ada.png'"
+    )
+
+    assert result["method"] == "POST"
+    assert result["body_type"] == "form-data"
+    assert result["body_content"] == ""
+    assert result["form_data"] == [
+        {"key": "name", "value": "Ada"},
+        {"key": "avatar", "value": "@ada.png"},
+    ]
