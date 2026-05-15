@@ -2,6 +2,7 @@ export function getDomElements() {
     return {
         methodSelect: document.getElementById('methodSelect'),
         urlInput: document.getElementById('urlInput'),
+        executionModeSelect: document.getElementById('executionModeSelect'),
         sendBtn: document.getElementById('sendBtn'),
         loopBtn: document.getElementById('loopBtn'),
         loopControls: document.getElementById('loopControls'),

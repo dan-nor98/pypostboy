@@ -71,6 +71,31 @@
   border-color: var(--color-text);
 }
 
+.execution-mode-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  color: var(--color-text-muted);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.execution-mode-control select {
+  padding: 10px 12px;
+  background: var(--color-border);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.execution-mode-control select:focus {
+  outline: none;
+  border-color: var(--color-text);
+}
+
 .btn-send {
   padding: 10px 24px;
   background: var(--color-border);

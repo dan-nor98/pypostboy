@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ─── Element References ────────────────────────────────
     const {
-        methodSelect, urlInput, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
+        methodSelect, urlInput, executionModeSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
         bodyContent, prettifyJsonBtn, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
         importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
@@ -62,7 +62,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
+    const EXECUTION_MODE_STORAGE_KEY = 'postboy.executionMode';
+    const DEFAULT_EXECUTION_MODE = 'server';
+    const FORBIDDEN_CLIENT_HEADERS = new Set([
+        'accept-charset', 'accept-encoding', 'access-control-request-headers',
+        'access-control-request-method', 'connection', 'content-length', 'cookie',
+        'cookie2', 'date', 'dnt', 'expect', 'host', 'keep-alive', 'origin',
+        'permissions-policy', 'referer', 'te', 'trailer', 'transfer-encoding',
+        'upgrade', 'via'
+    ]);
+    const FORBIDDEN_CLIENT_HEADER_PREFIXES = ['proxy-', 'sec-'];
 
+    initExecutionModeControl();
     initBodyContentEditor(bodyContent);
 
     function initBodyContentEditor(textarea) {
@@ -3052,6 +3063,133 @@ document.addEventListener('DOMContentLoaded', () => {
         headersContainer.appendChild(row);
     }
 
+    function getStoredExecutionMode() {
+        var stored = null;
+        try {
+            stored = localStorage.getItem(EXECUTION_MODE_STORAGE_KEY);
+        } catch (err) {
+            stored = null;
+        }
+        return stored === 'client' || stored === 'server' ? stored : DEFAULT_EXECUTION_MODE;
+    }
+
+    function getSelectedExecutionMode() {
+        if (!executionModeSelect) return DEFAULT_EXECUTION_MODE;
+        return executionModeSelect.value === 'client' ? 'client' : 'server';
+    }
+
+    function initExecutionModeControl() {
+        if (!executionModeSelect) return;
+        executionModeSelect.value = getStoredExecutionMode();
+        executionModeSelect.addEventListener('change', function() {
+            try {
+                localStorage.setItem(EXECUTION_MODE_STORAGE_KEY, getSelectedExecutionMode());
+            } catch (err) {
+                showToast('Could not persist execution mode preference', 'warning');
+            }
+        });
+    }
+
+    function isForbiddenClientHeaderName(headerName) {
+        var lowerName = String(headerName || '').trim().toLowerCase();
+        if (!lowerName) return true;
+        if (FORBIDDEN_CLIENT_HEADERS.has(lowerName)) return true;
+        return FORBIDDEN_CLIENT_HEADER_PREFIXES.some(function(prefix) {
+            return lowerName.indexOf(prefix) === 0;
+        });
+    }
+
+    function buildClientFetchHeaders(headers, contentType) {
+        var fetchHeaders = new Headers();
+        var skippedHeaders = [];
+
+        Object.keys(headers || {}).forEach(function(name) {
+            var value = headers[name];
+            if (isForbiddenClientHeaderName(name)) {
+                skippedHeaders.push(name);
+                return;
+            }
+            if (value !== undefined && value !== null && String(value) !== '') {
+                try {
+                    fetchHeaders.set(name, value);
+                } catch (err) {
+                    skippedHeaders.push(name);
+                }
+            }
+        });
+
+        if (contentType && contentType !== 'multipart/form-data' && !fetchHeaders.has('Content-Type')) {
+            fetchHeaders.set('Content-Type', contentType);
+        }
+
+        return { headers: fetchHeaders, skippedHeaders: skippedHeaders };
+    }
+
+    function headersToObject(headers) {
+        var result = {};
+        headers.forEach(function(value, key) {
+            result[key] = value;
+        });
+        return result;
+    }
+
+    function getClientFetchFailureMessage(err) {
+        return [
+            'Direct client-side request failed: ' + (err && err.message ? err.message : 'Browser blocked the request.'),
+            '',
+            'Browser execution is subject to browser security rules. The request may be blocked by CORS, forbidden/request-controlled headers, cookie or credentials policy, mixed-content rules, redirects, Private Network Access, or other browser restrictions.',
+            '',
+            'Try switching the execution mode to Server proxy if you intentionally want PostBoy's server to make this request.'
+        ].join('\n');
+    }
+
+    async function sendClientRequest(payload) {
+        var start = performance.now();
+        var headerResult = buildClientFetchHeaders(payload.headers, payload.contentType);
+        var options = {
+            method: payload.method,
+            headers: headerResult.headers
+        };
+
+        if (payload.body != null && ['GET', 'HEAD'].indexOf(payload.method) === -1) {
+            options.body = payload.body;
+        }
+
+        var response;
+        try {
+            response = await fetch(payload.url, options);
+        } catch (err) {
+            throw new Error(getClientFetchFailureMessage(err));
+        }
+
+        var responseBody = await response.text();
+        var parsedBody = responseBody;
+        try {
+            parsedBody = JSON.parse(responseBody);
+        } catch (err) {
+            parsedBody = responseBody;
+        }
+
+        if (headerResult.skippedHeaders.length) {
+            showToast('Skipped browser-controlled headers in client mode: ' + headerResult.skippedHeaders.join(', '), 'warning');
+        }
+
+        return {
+            status: response.status,
+            statusText: response.statusText,
+            headers: headersToObject(response.headers),
+            body: parsedBody,
+            time: Math.round(performance.now() - start)
+        };
+    }
+
+    async function executeRequest(payload, executionMode) {
+        if (executionMode === 'client') {
+            return sendClientRequest(payload);
+        }
+        return apiClient.sendProxyRequest(payload);
+    }
+
     // ═══════════════════════════════════════════════════════
     //  SEND REQUEST
     // ═══════════════════════════════════════════════════════
@@ -3129,12 +3267,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         var payload = { url: url, method: method, headers: headers, body: body, contentType: contentType };
+        var executionMode = getSelectedExecutionMode();
 
         showLoading(true);
         var start = performance.now();
 
         try {
-            var data = await apiClient.sendProxyRequest(payload);
+            var data = await executeRequest(payload, executionMode);
 
             var elapsed = Math.round(performance.now() - start);
 
@@ -3166,7 +3305,10 @@ document.addEventListener('DOMContentLoaded', () => {
             openResponseSheetForMobile();
         } catch (err) {
             var errorElapsed = Math.round(performance.now() - start);
-            var errorBody = 'Error: ' + err.message + '\n\nMake sure the proxy server is running (npm start).';
+            var errorBody = 'Error: ' + err.message;
+            if (executionMode === 'server') {
+                errorBody += '\n\nMake sure the proxy server is running (npm start).';
+            }
             statusCode.textContent = 'ERR';
             statusCode.className = 'status-badge s5xx';
             statusCode.dataset.statusText = 'Error';

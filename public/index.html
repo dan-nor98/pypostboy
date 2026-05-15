@@ -185,6 +185,13 @@
                     <option value="OPTIONS">OPTIONS</option>
                 </select>
                 <input type="text" id="urlInput" placeholder="Enter request URL or paste cURL command...">
+                <label class="execution-mode-control" for="executionModeSelect">
+                    <span>Run via</span>
+                    <select id="executionModeSelect" title="Choose how this request is executed">
+                        <option value="client">Client side</option>
+                        <option value="server">Server proxy</option>
+                    </select>
+                </label>
                 <button class="btn-send" id="sendBtn">Send</button>
                 <button class="btn-loop" id="loopBtn" title="Loop Request">🔁</button>
             </div>
