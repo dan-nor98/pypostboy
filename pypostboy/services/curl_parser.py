@@ -6,6 +6,17 @@ import re
 import shlex
 
 
+_DATA_OPTIONS = ('--data', '--data-raw', '--data-binary', '--data-urlencode')
+_FLAG_OPTIONS = {
+    '--compressed', '-k', '--insecure', '-s', '--silent', '-S', '-L',
+    '--location', '-v', '--verbose',
+}
+_LONG_CONSUME_VALUE_OPTIONS = {
+    '--connect-timeout', '--max-time', '--output', '--user-agent', '--referer',
+}
+_SHORT_CONSUME_VALUE_OPTIONS = {'-o', '-A', '-e'}
+
+
 def parse_curl_to_request(cmd):
     """Parse cURL command to request object."""
     cmd = _normalize_line_continuations(cmd).strip()
@@ -14,6 +25,7 @@ def parse_curl_to_request(cmd):
     url = ''
     headers = []
     data = ''
+    method_forced_by_option = False
 
     tokens = _tokenize(cmd)
 
@@ -23,41 +35,67 @@ def parse_curl_to_request(cmd):
         if t == 'curl':
             i += 1
             continue
-        if t in ('-X', '--request'):
-            i += 1
-            method = (tokens[i] if i < len(tokens) else '').upper()
-        elif t in ('-H', '--header'):
-            i += 1
-            hdr = tokens[i] if i < len(tokens) else ''
-            ci = hdr.find(':')
-            if ci > 0:
-                headers.append({
-                    'key': hdr[:ci].strip(),
-                    'value': hdr[ci+1:].strip()
-                })
-        elif t in ('-d', '--data', '--data-raw', '--data-binary', '--data-urlencode'):
-            i += 1
-            data = tokens[i] if i < len(tokens) else ''
-        elif t in ('-u', '--user'):
-            i += 1
-            cred = tokens[i] if i < len(tokens) else ''
-            encoded = base64.b64encode(cred.encode()).decode()
+
+        long_name, long_value, has_long_value = _split_long_option(t)
+        short_name, short_value, has_short_value = _split_short_option(t)
+
+        if long_name == '--request':
+            value, i = _option_value(tokens, i, long_value, has_long_value)
+            method = value.upper()
+            method_forced_by_option = True
+        elif short_name == '-X':
+            value, i = _option_value(tokens, i, short_value, has_short_value)
+            method = value.upper()
+            method_forced_by_option = True
+        elif long_name == '--url':
+            url, i = _option_value(tokens, i, long_value, has_long_value)
+        elif long_name in ('--header',) or short_name == '-H':
+            value, i = _option_value(
+                tokens, i, long_value or short_value,
+                has_long_value or has_short_value
+            )
+            _add_header(headers, value)
+        elif long_name in _DATA_OPTIONS or short_name == '-d':
+            value, i = _option_value(
+                tokens, i, long_value or short_value,
+                has_long_value or has_short_value
+            )
+            data = value
+        elif long_name == '--user' or short_name == '-u':
+            value, i = _option_value(
+                tokens, i, long_value or short_value,
+                has_long_value or has_short_value
+            )
+            encoded = base64.b64encode(value.encode()).decode()
             headers.append({
                 'key': 'Authorization',
                 'value': f'Basic {encoded}'
             })
-        elif t == '--url':
-            i += 1
-            url = tokens[i] if i < len(tokens) else ''
-        elif t in ('--compressed', '-k', '--insecure', '-s', '--silent',
-                   '-S', '-L', '--location', '-v', '--verbose'):
+        elif long_name == '--cookie' or short_name == '-b':
+            value, i = _option_value(
+                tokens, i, long_value or short_value,
+                has_long_value or has_short_value
+            )
+            if _is_inline_cookie(value):
+                _add_cookie_header(headers, value)
+        elif t in ('-I', '--head'):
+            method = 'HEAD'
+            method_forced_by_option = True
+        elif t in ('-G', '--get'):
+            method = 'GET'
+            method_forced_by_option = True
+        elif long_name in _LONG_CONSUME_VALUE_OPTIONS:
+            _, i = _option_value(tokens, i, long_value, has_long_value)
+        elif short_name in _SHORT_CONSUME_VALUE_OPTIONS:
+            _, i = _option_value(tokens, i, short_value, has_short_value)
+        elif t in _FLAG_OPTIONS:
             pass
         elif t[0] != '-' and not url:
             url = t
 
         i += 1
 
-    if data and method == 'GET':
+    if data and method == 'GET' and not method_forced_by_option:
         method = 'POST'
 
     body_type = 'none'
@@ -91,3 +129,58 @@ def _tokenize(cmd):
     except ValueError as err:
         message = f'Invalid cURL command: unable to parse quoted arguments ({err}).'
         raise ValueError(message) from err
+
+
+def _split_long_option(token):
+    """Return long option name, inline value, and whether one was supplied."""
+    if not token.startswith('--'):
+        return None, '', False
+    name, separator, value = token.partition('=')
+    return name, value, bool(separator)
+
+
+def _split_short_option(token):
+    """Return supported short option name and attached value, when present."""
+    if not token.startswith('-') or token.startswith('--'):
+        return None, '', False
+    for name in ('-X', '-H', '-d', '-u', '-b', '-o', '-A', '-e'):
+        if token == name:
+            return name, '', False
+        if token.startswith(name) and len(token) > len(name):
+            return name, token[len(name):], True
+    return token, '', False
+
+
+def _option_value(tokens, index, inline_value, has_inline_value):
+    """Return the value for an option and the index it consumed through."""
+    if has_inline_value:
+        return inline_value, index
+    next_index = index + 1
+    return (tokens[next_index] if next_index < len(tokens) else ''), next_index
+
+
+def _add_header(headers, value):
+    """Append a header from a cURL header argument."""
+    colon_index = value.find(':')
+    if colon_index > 0:
+        headers.append({
+            'key': value[:colon_index].strip(),
+            'value': value[colon_index + 1:].strip()
+        })
+
+
+def _add_cookie_header(headers, value):
+    """Add inline cURL cookies to the request as a Cookie header."""
+    for header in headers:
+        if header['key'].lower() == 'cookie':
+            if header['value']:
+                header['value'] = f"{header['value']}; {value}"
+            else:
+                header['value'] = value
+            return
+    headers.append({'key': 'Cookie', 'value': value})
+
+
+def _is_inline_cookie(value):
+    """Return True when the cURL cookie value looks like inline cookie data."""
+    return bool(value and '=' in value and not value.startswith('@'))

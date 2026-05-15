@@ -84,3 +84,82 @@ def test_parse_curl_handles_tabs_between_arguments():
 def test_parse_curl_raises_clear_validation_error_for_unclosed_quotes():
     with pytest.raises(ValueError, match="Invalid cURL command: unable to parse"):
         parse_curl_to_request("curl -d '{\"name\":\"Ada\" https://api.example.test/widgets")
+
+
+def test_parse_curl_handles_attached_short_request_method():
+    result = parse_curl_to_request(
+        "curl -XPOST https://api.example.test/widgets -d '{\"name\":\"Ada\"}'"
+    )
+
+    assert result["method"] == "POST"
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["body_type"] == "json"
+    assert result["body_content"] == '{"name":"Ada"}'
+
+
+def test_parse_curl_handles_equals_request_and_url_options():
+    result = parse_curl_to_request(
+        "curl --request=PATCH --url=https://api.example.test/widgets/1"
+    )
+
+    assert result["method"] == "PATCH"
+    assert result["url"] == "https://api.example.test/widgets/1"
+    assert result["body_type"] == "none"
+
+
+def test_parse_curl_head_flags_set_head_method():
+    short_result = parse_curl_to_request("curl -I https://api.example.test/widgets")
+    long_result = parse_curl_to_request("curl --head https://api.example.test/widgets")
+
+    assert short_result["method"] == "HEAD"
+    assert short_result["url"] == "https://api.example.test/widgets"
+    assert long_result["method"] == "HEAD"
+    assert long_result["url"] == "https://api.example.test/widgets"
+
+
+def test_parse_curl_get_flags_keep_data_requests_as_get():
+    short_result = parse_curl_to_request(
+        "curl -G -d q=postboy https://api.example.test/search"
+    )
+    long_result = parse_curl_to_request(
+        "curl --get --data q=postboy https://api.example.test/search"
+    )
+
+    assert short_result["method"] == "GET"
+    assert short_result["url"] == "https://api.example.test/search"
+    assert short_result["body_content"] == "q=postboy"
+    assert long_result["method"] == "GET"
+    assert long_result["url"] == "https://api.example.test/search"
+    assert long_result["body_content"] == "q=postboy"
+
+
+def test_parse_curl_consumes_ignored_options_before_url():
+    result = parse_curl_to_request(
+        "curl --connect-timeout 5 --max-time=10 -o /tmp/out.txt "
+        "--output=/tmp/out2.txt -A 'Postboy Agent' --user-agent=Other "
+        "--referer https://referer.example.test https://api.example.test/widgets"
+    )
+
+    assert result["method"] == "GET"
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["headers"] == []
+
+
+def test_parse_curl_converts_inline_cookie_options_to_cookie_header():
+    result = parse_curl_to_request(
+        "curl -b 'session=abc' --cookie='theme=light' https://api.example.test/widgets"
+    )
+
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["headers"] == [
+        {"key": "Cookie", "value": "session=abc; theme=light"}
+    ]
+
+
+def test_parse_curl_does_not_convert_cookie_file_to_cookie_header():
+    result = parse_curl_to_request(
+        "curl --cookie cookies.txt https://api.example.test/widgets"
+    )
+
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["headers"] == []
