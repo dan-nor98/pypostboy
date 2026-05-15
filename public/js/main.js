@@ -13,7 +13,7 @@ import { getBlankState } from './features/requests.js';
 import { buildSnapshotDefaultName } from './features/snapshots.js';
 import { parseResponseTimeMs } from './features/proxy.js';
 import { tokenize } from './features/import-export.js';
-import { formatByteCount, escapeHtml, highlightJson } from './utils/format.js';
+import { detectBodyFormat, formatByteCount, escapeHtml, highlightByFormat, highlightJson } from './utils/format.js';
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -62,6 +62,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
+
+    initBodyContentEditor(bodyContent);
+
+    function initBodyContentEditor(textarea) {
+        if (!textarea) return;
+
+        var editor = document.getElementById('bodyContentEditor');
+        var highlight = document.getElementById('bodyContentHighlight');
+        if (!editor || !highlight) return;
+
+        function getBodyFormat() {
+            var selected = document.querySelector('input[name="bodyType"]:checked');
+            var bodyType = selected ? selected.value : 'text';
+            if (bodyType === 'xml') return 'markup';
+            if (bodyType === 'json') return 'json';
+            return detectBodyFormat(textarea.value, bodyType === 'text' ? 'text/plain' : '');
+        }
+
+        function syncHighlight() {
+            var value = textarea.value || '';
+            highlight.innerHTML = value ? highlightByFormat(value, getBodyFormat()) : '';
+        }
+
+        function syncScroll() {
+            highlight.parentElement.scrollTop = textarea.scrollTop;
+            highlight.parentElement.scrollLeft = textarea.scrollLeft;
+        }
+
+        function syncVisibility() {
+            editor.style.display = textarea.style.display === 'none' ? 'none' : '';
+        }
+
+        var descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+        if (descriptor && descriptor.get && descriptor.set) {
+            Object.defineProperty(textarea, 'value', {
+                get: function() {
+                    return descriptor.get.call(textarea);
+                },
+                set: function(value) {
+                    descriptor.set.call(textarea, value);
+                    syncHighlight();
+                    syncScroll();
+                }
+            });
+        }
+
+        textarea.addEventListener('input', syncHighlight);
+        textarea.addEventListener('scroll', syncScroll);
+        document.querySelectorAll('input[name="bodyType"]').forEach(function(radio) {
+            radio.addEventListener('change', syncHighlight);
+        });
+
+        new MutationObserver(syncVisibility).observe(textarea, { attributes: true, attributeFilter: ['style'] });
+        syncHighlight();
+        syncScroll();
+        syncVisibility();
+    }
 
     // ─── Mobile Response Bottom Sheet ─────────────────────
     function setResponseSheetState(state) {
@@ -2181,7 +2238,7 @@ document.addEventListener('DOMContentLoaded', () => {
             : '0 ms';
         responseSize.textContent = state.response_size || '0 B';
         responseHeaders.textContent = stringifyHeadersForDisplay(state.response_headers);
-        displayResponse(state.response_body != null ? state.response_body : '');
+        displayResponse(state.response_body != null ? state.response_body : '', state.response_headers);
     }
 
     function getResponseStateFromSource(source) {
@@ -3059,10 +3116,10 @@ document.addEventListener('DOMContentLoaded', () => {
             var sizeText = formatBytes(new Blob([raw]).size);
             responseSize.textContent = sizeText;
 
-            displayResponse(data.body);
-
             var responseHeadersValue = data.headers || {};
             responseHeaders.textContent = stringifyHeadersForDisplay(responseHeadersValue);
+
+            displayResponse(data.body, responseHeadersValue);
 
             storeResponseOnActiveTab({
                 response_status: sc,
@@ -3627,8 +3684,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function displayResponse(body) {
-        renderResponseBody(responseBody, body);
+    function displayResponse(body, headers) {
+        renderResponseBody(responseBody, body, headers);
     }
 
     function syntaxHighlight(json) {
