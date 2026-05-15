@@ -1,6 +1,9 @@
 /* ===== COLLECTION LIST ===== */
 .collection-list {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -10,6 +13,7 @@
 
 .folder-header {
   position: relative;
+  min-width: 0;
   padding: 8px 12px;
   background: var(--color-border);
   border-radius: var(--radius-md);
@@ -37,7 +41,8 @@
 }
 
 .folder-name {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -93,6 +98,7 @@
 
 .request-item {
   position: relative;
+  min-width: 0;
   padding: 6px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -147,7 +153,8 @@
 
 
 .request-item-name {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -179,7 +186,9 @@
 }
 /* ===== HISTORY LIST ===== */
 .history-list {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   overflow-y: auto;
 }
 

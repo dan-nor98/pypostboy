@@ -15,10 +15,12 @@
   width: 300px;
   min-width: var(--sidebar-min-width);
   max-width: var(--sidebar-max-width);
+  min-height: 0;
   background: var(--color-sidebar);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  overflow: hidden;
 }
 /* ===== MAIN CONTENT ===== */
 .main-content {
@@ -52,9 +54,11 @@
 
 .sidebar-panel {
   display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   flex-direction: column;
-  overflow-y: auto;
-  flex: 1;
+  overflow: hidden;
   padding: 12px;
 }
 
@@ -68,8 +72,16 @@
 
 .sidebar-actions {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 6px;
+}
+
+#env-panel .env-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
 }
 
 /* ===== ACCOUNT AREA ===== */
