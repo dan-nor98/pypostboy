@@ -4,9 +4,9 @@ import base64
 import json
 import re
 import shlex
+from urllib.parse import quote_plus
 
-
-_DATA_OPTIONS = ('--data', '--data-raw', '--data-binary', '--data-urlencode')
+_FORM_OPTIONS = ('--form',)
 _FLAG_OPTIONS = {
     '--compressed', '-k', '--insecure', '-s', '--silent', '-S', '-L',
     '--location', '-v', '--verbose',
@@ -24,7 +24,10 @@ def parse_curl_to_request(cmd):
     method = 'GET'
     url = ''
     headers = []
-    data = ''
+    body_parts = []
+    has_urlencoded_data = False
+    form_data = []
+    has_form_data = False
     method_forced_by_option = False
 
     tokens = _tokenize(cmd)
@@ -55,12 +58,28 @@ def parse_curl_to_request(cmd):
                 has_long_value or has_short_value
             )
             _add_header(headers, value)
-        elif long_name in _DATA_OPTIONS or short_name == '-d':
+        elif long_name in ('--data-urlencode',):
+            value, i = _option_value(tokens, i, long_value, has_long_value)
+            body_parts.append(_encode_urlencoded_argument(value))
+            has_urlencoded_data = True
+            field = _form_field_from_assignment(value)
+            if field:
+                form_data.append(field)
+        elif long_name in ('--data', '--data-raw', '--data-binary') or short_name == '-d':
             value, i = _option_value(
                 tokens, i, long_value or short_value,
                 has_long_value or has_short_value
             )
-            data = value
+            body_parts.append(value)
+        elif long_name in _FORM_OPTIONS or short_name == '-F':
+            value, i = _option_value(
+                tokens, i, long_value or short_value,
+                has_long_value or has_short_value
+            )
+            has_form_data = True
+            field = _form_field_from_assignment(value)
+            if field:
+                form_data.append(field)
         elif long_name == '--user' or short_name == '-u':
             value, i = _option_value(
                 tokens, i, long_value or short_value,
@@ -95,26 +114,23 @@ def parse_curl_to_request(cmd):
 
         i += 1
 
-    if data and method == 'GET' and not method_forced_by_option:
+    has_body = bool(body_parts or has_form_data)
+    if has_body and method == 'GET' and not method_forced_by_option:
         method = 'POST'
 
-    body_type = 'none'
-    body_content = ''
-    if data:
-        body_content = data
-        try:
-            json.loads(data)
-            body_type = 'json'
-        except (json.JSONDecodeError, ValueError):
-            body_type = 'text'
+    body_content = _build_body_content(body_parts, has_form_data)
+    body_type = _infer_body_type(body_content, headers, has_urlencoded_data, has_form_data)
 
-    return {
+    result = {
         'method': method,
         'url': url,
         'headers': headers,
         'body_type': body_type,
         'body_content': body_content
     }
+    if form_data:
+        result['form_data'] = form_data
+    return result
 
 
 def _normalize_line_continuations(cmd):
@@ -143,7 +159,7 @@ def _split_short_option(token):
     """Return supported short option name and attached value, when present."""
     if not token.startswith('-') or token.startswith('--'):
         return None, '', False
-    for name in ('-X', '-H', '-d', '-u', '-b', '-o', '-A', '-e'):
+    for name in ('-X', '-H', '-d', '-F', '-u', '-b', '-o', '-A', '-e'):
         if token == name:
             return name, '', False
         if token.startswith(name) and len(token) > len(name):
@@ -157,6 +173,95 @@ def _option_value(tokens, index, inline_value, has_inline_value):
         return inline_value, index
     next_index = index + 1
     return (tokens[next_index] if next_index < len(tokens) else ''), next_index
+
+
+def _build_body_content(body_parts, has_form_data):
+    """Build request body content from cURL data options."""
+    if has_form_data:
+        return ''
+    if len(body_parts) > 1:
+        return '&'.join(body_parts)
+    if body_parts:
+        return body_parts[0]
+    return ''
+
+
+def _infer_body_type(body_content, headers, has_urlencoded_data, has_form_data):
+    """Infer the editor body type for parsed cURL data."""
+    if has_form_data:
+        return 'form-data'
+    if not body_content:
+        return 'none'
+
+    content_type = _content_type(headers)
+    if 'multipart/form-data' in content_type:
+        return 'form-data'
+    if 'application/json' in content_type or _is_json(body_content):
+        return 'json'
+    if _is_xml_content_type(content_type) or _looks_like_xml(body_content):
+        return 'xml'
+    if has_urlencoded_data or 'application/x-www-form-urlencoded' in content_type:
+        return 'form-urlencoded'
+    if _looks_like_form_urlencoded(body_content):
+        return 'form-urlencoded'
+    if content_type.startswith('text/'):
+        return 'text'
+    return 'text'
+
+
+def _content_type(headers):
+    """Return the lower-cased content type header value, if present."""
+    for header in headers:
+        if header['key'].lower() == 'content-type':
+            return header['value'].lower()
+    return ''
+
+
+def _is_json(value):
+    """Return whether value is valid JSON."""
+    try:
+        json.loads(value)
+        return True
+    except (json.JSONDecodeError, ValueError):
+        return False
+
+
+def _is_xml_content_type(content_type):
+    """Return whether content type represents XML."""
+    media_type = content_type.split(';', 1)[0].strip()
+    return media_type.endswith('/xml') or media_type.endswith('+xml')
+
+
+def _looks_like_xml(value):
+    """Return whether a body looks like XML or HTML-style markup."""
+    return bool(re.match(r'\s*<[^>]+>', value))
+
+
+def _looks_like_form_urlencoded(value):
+    """Return whether a body looks like URL-encoded form data."""
+    if not value or value.lstrip().startswith(('{', '[')) or _looks_like_xml(value):
+        return False
+    pairs = value.split('&')
+    return all('=' in pair and pair.split('=', 1)[0] for pair in pairs)
+
+
+def _encode_urlencoded_argument(value):
+    """Encode a --data-urlencode argument the way cURL posts key/value data."""
+    field = _form_field_from_assignment(value)
+    if not field:
+        return quote_plus(value)
+    return f"{quote_plus(field['key'])}={quote_plus(field['value'])}"
+
+
+def _form_field_from_assignment(value):
+    """Return a structured form field from a key=value cURL argument."""
+    equal_index = value.find('=')
+    if equal_index <= 0:
+        return None
+    return {
+        'key': value[:equal_index],
+        'value': value[equal_index + 1:]
+    }
 
 
 def _add_header(headers, value):
@@ -182,5 +287,5 @@ def _add_cookie_header(headers, value):
 
 
 def _is_inline_cookie(value):
-    """Return True when the cURL cookie value looks like inline cookie data."""
-    return bool(value and '=' in value and not value.startswith('@'))
+    """Return whether a cURL cookie value is an inline cookie header."""
+    return '=' in value or ';' in value
