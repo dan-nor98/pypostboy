@@ -3647,14 +3647,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Form fields
+                var formValue = null;
                 if (t === '-F' || t === '--form') {
+                    formValue = tokens[++i] || '';
+                } else if (t.indexOf('--form=') === 0) {
+                    formValue = t.substring('--form='.length);
+                } else if (t.indexOf('-F') === 0 && t.length > 2) {
+                    formValue = t.substring(2);
+                }
+                if (formValue !== null) {
                     isMultipart = true;
-                    var formField = tokens[++i] || '';
-                    var feqIdx = formField.indexOf('=');
+                    var feqIdx = formValue.indexOf('=');
                     if (feqIdx > 0) {
                         formFields.push({
-                            key: formField.substring(0, feqIdx),
-                            value: formField.substring(feqIdx + 1)
+                            key: formValue.substring(0, feqIdx),
+                            value: formValue.substring(feqIdx + 1)
                         });
                     }
                     continue;
@@ -3780,9 +3787,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 formDataRows.querySelectorAll('.form-data-row').forEach(function(r) {
                     var fk = r.children[0].value.trim();
                     var fv = r.children[1].value;
-                    if (fk) fdParts.push(encodeURIComponent(fk) + '=' + encodeURIComponent(fv));
+                    if (fk) {
+                        if (bodyType === 'form-data') {
+                            parts.push("-F '" + (fk + '=' + fv).replace(/'/g, "\\'") + "'");
+                        } else {
+                            fdParts.push(encodeURIComponent(fk) + '=' + encodeURIComponent(fv));
+                        }
+                    }
                 });
-                if (fdParts.length) parts.push("-d '" + fdParts.join('&') + "'");
+                if (bodyType === 'form-urlencoded' && fdParts.length) parts.push("-d '" + fdParts.join('&') + "'");
             }
         }
 
