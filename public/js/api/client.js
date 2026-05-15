@@ -72,6 +72,9 @@ export const apiClient = {
     reorderRequests(collectionId, orderedIds) {
         return request('/api/requests/reorder', buildJsonOptions('PUT', { collection_id: collectionId, ordered_ids: orderedIds }));
     },
+    moveRequest(id, collectionId) {
+        return request('/api/requests/' + id + '/move', buildJsonOptions('PUT', { collection_id: collectionId }));
+    },
     getRequest(id) { return request('/api/requests/' + id); },
     updateRequest(id, payload) { return request('/api/requests/' + id, buildJsonOptions('PUT', payload)); },
     createRequest(payload) { return request('/api/requests', buildJsonOptions('POST', payload)); },

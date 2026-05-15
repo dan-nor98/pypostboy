@@ -1054,8 +1054,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearDragClasses() {
-        document.querySelectorAll('.dragging, .drag-over').forEach(function(el) {
-            el.classList.remove('dragging', 'drag-over');
+        document.querySelectorAll('.dragging, .drag-over, .drag-over-valid, .drag-over-invalid').forEach(function(el) {
+            el.classList.remove('dragging', 'drag-over', 'drag-over-valid', 'drag-over-invalid');
         });
     }
 
@@ -1141,24 +1141,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         reqEl.addEventListener('dragover', function(e) {
             if (!dragState || dragState.type !== 'request') return;
-            if (dragState.collectionId !== parseInt(reqEl.dataset.collectionId, 10)) return;
             if (dragState.id === parseInt(reqEl.dataset.id, 10)) return;
+
+            if (dragState.collectionId !== parseInt(reqEl.dataset.collectionId, 10)) {
+                reqEl.classList.add('drag-over-invalid');
+                return;
+            }
+
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             reqEl.classList.add('drag-over');
         });
 
         reqEl.addEventListener('dragleave', function() {
-            reqEl.classList.remove('drag-over');
+            reqEl.classList.remove('drag-over', 'drag-over-invalid');
         });
 
         reqEl.addEventListener('drop', function(e) {
             if (!dragState || dragState.type !== 'request') return;
-            e.preventDefault();
-            e.stopPropagation();
-            reqEl.classList.remove('drag-over');
+            reqEl.classList.remove('drag-over', 'drag-over-invalid');
             if (dragState.id === parseInt(reqEl.dataset.id, 10)) return;
             if (dragState.collectionId !== parseInt(reqEl.dataset.collectionId, 10)) return;
+
+            e.preventDefault();
+            e.stopPropagation();
             reorderRequestElement(reqEl, e.clientY);
         });
 
@@ -1174,23 +1180,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
         container.addEventListener('dragover', function(e) {
             if (!dragState || dragState.type !== 'request') return;
-            if (dragState.collectionId !== parseInt(collectionId, 10)) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
-            container.classList.add('drag-over');
+            container.classList.remove('drag-over-invalid');
+            container.classList.add('drag-over', 'drag-over-valid');
         });
 
         container.addEventListener('dragleave', function(e) {
-            if (!container.contains(e.relatedTarget)) container.classList.remove('drag-over');
+            if (!container.contains(e.relatedTarget)) {
+                container.classList.remove('drag-over', 'drag-over-valid', 'drag-over-invalid');
+            }
         });
 
         container.addEventListener('drop', function(e) {
             if (!dragState || dragState.type !== 'request') return;
-            if (dragState.collectionId !== parseInt(collectionId, 10)) return;
+
+            var targetCollectionId = parseInt(collectionId, 10);
             e.preventDefault();
             e.stopPropagation();
-            container.classList.remove('drag-over');
-            reorderRequestElement(null, e.clientY, container);
+            container.classList.remove('drag-over', 'drag-over-valid', 'drag-over-invalid');
+
+            if (dragState.collectionId === targetCollectionId) {
+                reorderRequestElement(null, e.clientY, container);
+            } else {
+                moveRequestToCollection(dragState.id, targetCollectionId);
+            }
         });
     }
 
@@ -1234,6 +1248,24 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
             loadCollections();
+        }
+    }
+
+    async function moveRequestToCollection(requestId, targetCollectionId) {
+        try {
+            var movedRequest = await apiClient.moveRequest(requestId, targetCollectionId);
+            var movedCollectionId = parseInt((movedRequest && movedRequest.collection_id) || targetCollectionId, 10);
+            openTabs.forEach(function(tab) {
+                if (parseInt(tab.requestId, 10) === parseInt(requestId, 10)) {
+                    tab.collectionId = movedCollectionId;
+                }
+            });
+            persistOpenTabs(false);
+            showToast('Request moved', 'success');
+            await loadCollections();
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            await loadCollections();
         }
     }
 
