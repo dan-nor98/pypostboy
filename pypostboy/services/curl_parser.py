@@ -3,13 +3,12 @@
 import base64
 import json
 import re
+import shlex
 
 
 def parse_curl_to_request(cmd):
     """Parse cURL command to request object."""
-    cmd = re.sub(r'\\\n', ' ', cmd)
-    cmd = re.sub(r'\\\r\n', ' ', cmd)
-    cmd = cmd.strip()
+    cmd = _normalize_line_continuations(cmd).strip()
 
     method = 'GET'
     url = ''
@@ -80,34 +79,15 @@ def parse_curl_to_request(cmd):
     }
 
 
+def _normalize_line_continuations(cmd):
+    """Replace shell line continuations with spaces before tokenizing."""
+    return re.sub(r'\\\r?\n', ' ', cmd)
+
+
 def _tokenize(cmd):
-    """Tokenize a cURL command string."""
-    tokens = []
-    i = 0
-    while i < len(cmd):
-        while i < len(cmd) and cmd[i] == ' ':
-            i += 1
-        if i >= len(cmd):
-            break
-
-        if cmd[i] in ("'", '"'):
-            quote = cmd[i]
-            i += 1
-            tok = ''
-            while i < len(cmd) and cmd[i] != quote:
-                if cmd[i] == '\\' and i + 1 < len(cmd):
-                    i += 1
-                    tok += cmd[i]
-                else:
-                    tok += cmd[i]
-                i += 1
-            i += 1
-            tokens.append(tok)
-        else:
-            tok = ''
-            while i < len(cmd) and cmd[i] != ' ':
-                tok += cmd[i]
-                i += 1
-            tokens.append(tok)
-
-    return tokens
+    """Tokenize a cURL command string using shell-compatible parsing."""
+    try:
+        return shlex.split(cmd)
+    except ValueError as err:
+        message = f'Invalid cURL command: unable to parse quoted arguments ({err}).'
+        raise ValueError(message) from err
