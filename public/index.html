@@ -253,7 +253,10 @@
                     <div class="body-actions">
                         <button class="btn-add-row" id="prettifyJsonBtn" type="button">Prettify JSON</button>
                     </div>
-                    <textarea id="bodyContent" placeholder="Enter request body..." rows="8"></textarea>
+                    <div class="request-body-editor" id="bodyContentEditor">
+                        <pre class="request-body-highlight" aria-hidden="true"><code id="bodyContentHighlight"></code></pre>
+                        <textarea id="bodyContent" placeholder="Enter request body..." rows="8" spellcheck="false"></textarea>
+                    </div>
                     <div id="formDataContainer" class="form-data-container" style="display:none;">
                         <div id="formDataRows"></div>
                         <button class="btn-add-row" id="addFormDataBtn">+ Add Field</button>
