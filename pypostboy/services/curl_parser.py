@@ -128,7 +128,7 @@ def parse_curl_to_request(cmd):
         'body_type': body_type,
         'body_content': body_content
     }
-    if form_data:
+    if has_form_data or form_data:
         result['form_data'] = form_data
     return result
 
@@ -254,7 +254,11 @@ def _encode_urlencoded_argument(value):
 
 
 def _form_field_from_assignment(value):
-    """Return a structured form field from a key=value cURL argument."""
+    """Return a structured form field from a key=value cURL argument.
+
+    cURL form arguments use the value text after the first ``=`` exactly as
+    provided, including file upload markers such as ``@/tmp/avatar.png``.
+    """
     equal_index = value.find('=')
     if equal_index <= 0:
         return None

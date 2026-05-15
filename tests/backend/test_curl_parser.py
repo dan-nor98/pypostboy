@@ -202,9 +202,37 @@ def test_parse_curl_infers_xml_body_type():
     assert result["body_content"] == "<widget><name>Ada</name></widget>"
 
 
-def test_parse_curl_parses_form_options_as_form_data():
+def test_parse_curl_parses_form_text_fields_as_form_data():
     result = parse_curl_to_request(
-        "curl https://api.example.test/upload -F 'name=Ada' --form 'avatar=@ada.png'"
+        "curl https://api.example.test/profile -F 'name=Ada Lovelace' "
+        "--form 'note=math=logic'"
+    )
+
+    assert result["method"] == "POST"
+    assert result["body_type"] == "form-data"
+    assert result["body_content"] == ""
+    assert result["form_data"] == [
+        {"key": "name", "value": "Ada Lovelace"},
+        {"key": "note", "value": "math=logic"},
+    ]
+
+
+def test_parse_curl_preserves_form_file_field_syntax():
+    result = parse_curl_to_request(
+        "curl https://api.example.test/upload --form 'avatar=@/tmp/a.png'"
+    )
+
+    assert result["method"] == "POST"
+    assert result["body_type"] == "form-data"
+    assert result["body_content"] == ""
+    assert result["form_data"] == [
+        {"key": "avatar", "value": "@/tmp/a.png"},
+    ]
+
+
+def test_parse_curl_parses_mixed_form_fields_as_form_data():
+    result = parse_curl_to_request(
+        "curl https://api.example.test/upload -F 'name=Ada' --form 'avatar=@/tmp/a.png'"
     )
 
     assert result["method"] == "POST"
@@ -212,5 +240,5 @@ def test_parse_curl_parses_form_options_as_form_data():
     assert result["body_content"] == ""
     assert result["form_data"] == [
         {"key": "name", "value": "Ada"},
-        {"key": "avatar", "value": "@ada.png"},
+        {"key": "avatar", "value": "@/tmp/a.png"},
     ]
