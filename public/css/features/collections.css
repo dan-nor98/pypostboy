@@ -9,6 +9,7 @@
 }
 
 .folder-header {
+  position: relative;
   padding: 8px 12px;
   background: var(--color-border);
   border-radius: var(--radius-md);
@@ -52,15 +53,46 @@
 
 .folder-items {
   display: none;
-  padding-left: 12px;
-  margin-top: 2px;
+  position: relative;
+  margin-top: 4px;
+  margin-left: 10px;
+  padding-left: 16px;
+  border-left: 1px solid var(--color-border-light);
 }
 
 .folder-items.open {
   display: block;
 }
 
+.folder-items > .collection-folder,
+.folder-items > .request-item {
+  position: relative;
+}
+
+.folder-items > .collection-folder {
+  margin-bottom: 2px;
+}
+
+.folder-items > .collection-folder > .folder-header::before,
+.folder-items > .request-item::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -17px;
+  width: 12px;
+  border-top: 1px solid var(--color-border-light);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.folder-items > .collection-folder > .folder-header:hover::before,
+.folder-items > .request-item:hover::before,
+.folder-items > .request-item.active::before {
+  border-top-color: var(--color-text-dim);
+}
+
 .request-item {
+  position: relative;
   padding: 6px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -96,12 +128,17 @@
 
 .folder-items.drag-over-valid {
   background: var(--color-accent-soft);
+  border-left-color: var(--color-accent-hover);
 }
 
 .request-item.drag-over-invalid,
 .folder-items.drag-over-invalid {
   outline: 1px dashed var(--color-danger);
   outline-offset: 2px;
+}
+
+.folder-items.drag-over-invalid {
+  border-left-color: var(--color-danger);
 }
 
 .request-item.drag-over-invalid {
