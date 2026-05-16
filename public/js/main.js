@@ -12,7 +12,7 @@ import { countTotalRequests } from './features/collections.js';
 import { getBlankState } from './features/requests.js';
 import { buildSnapshotDefaultName } from './features/snapshots.js';
 import { parseResponseTimeMs } from './features/proxy.js';
-import { applyParsedImportPayload, parseCurlFallback } from './features/import-export.js';
+import { applyParsedImportPayload, normalizeParsedImportPayload, parseCurlFallback } from './features/import-export.js';
 import { detectBodyFormat, formatByteCount, escapeHtml, highlightByFormat, highlightJson } from './utils/format.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -3400,9 +3400,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const importFileInput = document.getElementById('importFileInput');
     const browseFileBtn = document.getElementById('browseFileBtn');
     const selectedFileName = document.getElementById('selectedFileName');
+    const importPreview = document.getElementById('importPreview');
+    const importPreviewMethod = document.getElementById('importPreviewMethod');
+    const importPreviewUrl = document.getElementById('importPreviewUrl');
+    const importPreviewHeaderCount = document.getElementById('importPreviewHeaderCount');
+    const importPreviewBodyType = document.getElementById('importPreviewBodyType');
+    const importPreviewHeaders = document.getElementById('importPreviewHeaders');
+    const importPreviewBody = document.getElementById('importPreviewBody');
+    const importReplaceWarning = document.getElementById('importReplaceWarning');
+    const importBackBtn = document.getElementById('importBackBtn');
+    const importApplyBtn = document.getElementById('importApplyBtn');
 
     let importedFileContent = null;
     let currentImportTab = 'text';
+    let pendingCurlImport = null;
 
     // Import tab switching
     document.querySelectorAll('.import-tab').forEach(function(tab) {
@@ -3417,6 +3428,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tab.classList.add('active');
             currentImportTab = tab.dataset.importTab;
             document.getElementById('import-' + currentImportTab + '-panel').classList.add('active');
+            clearCurlImportPreview();
         });
     });
 
@@ -3442,8 +3454,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetImportModal() {
         importInput.value = '';
         importedFileContent = null;
+        pendingCurlImport = null;
         selectedFileName.textContent = '';
+        if (importFileInput) importFileInput.value = '';
         importProgress.style.display = 'none';
+        clearCurlImportPreview();
         // Remove any error/success messages
         var errors = importModal.querySelectorAll('.import-errors, .import-success, .import-warnings');
         errors.forEach(function(el) { el.remove(); });
@@ -3527,6 +3542,135 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 50);
     });
 
+    function removeImportMessages() {
+        var prevMessages = importModal.querySelectorAll('.import-errors, .import-success, .import-warnings');
+        prevMessages.forEach(function(el) { el.remove(); });
+    }
+
+    function clearCurlImportPreview() {
+        pendingCurlImport = null;
+        if (importPreview) importPreview.style.display = 'none';
+        if (importPreviewMethod) importPreviewMethod.textContent = '—';
+        if (importPreviewUrl) importPreviewUrl.textContent = '—';
+        if (importPreviewHeaderCount) importPreviewHeaderCount.textContent = '0';
+        if (importPreviewBodyType) importPreviewBodyType.textContent = 'none';
+        if (importPreviewHeaders) importPreviewHeaders.innerHTML = '';
+        if (importPreviewBody) importPreviewBody.textContent = 'No body detected.';
+        if (importReplaceWarning) importReplaceWarning.style.display = 'none';
+        if (importBackBtn) importBackBtn.style.display = 'none';
+        if (importApplyBtn) importApplyBtn.style.display = 'none';
+        if (importConfirmBtn) importConfirmBtn.style.display = '';
+        document.querySelectorAll('.import-panel').forEach(function(panel) {
+            panel.classList.toggle('import-panel-previewing', false);
+        });
+    }
+
+    function getActiveTab() {
+        return openTabs.find(function(t) { return t.id === activeTabId; }) || null;
+    }
+
+    function editorHasReplacementValues() {
+        var state = gatherRequestState();
+        var hasHeaders = Array.isArray(state.headers) && state.headers.length > 0;
+        var hasBody = state.body_type !== 'none' && (
+            (state.body_content && state.body_content.trim()) ||
+            (Array.isArray(state.form_data) && state.form_data.length > 0)
+        );
+        return !!(
+            (state.url && state.url.trim()) ||
+            state.method !== 'GET' ||
+            hasHeaders ||
+            hasBody ||
+            state.auth_type !== 'none'
+        );
+    }
+
+    function importWillReplaceUnsavedValues() {
+        var tab = getActiveTab();
+        if (tab && tab.unsaved) return true;
+        if (!tab || !tab.requestId) return editorHasReplacementValues();
+        return false;
+    }
+
+    function formatImportPreviewBody(parsed) {
+        if (parsed.body_type === 'form-data' || parsed.body_type === 'form-urlencoded') {
+            if (!parsed.form_data || !parsed.form_data.length) return parsed.body_content || 'No body detected.';
+            return parsed.form_data.map(function(field) {
+                return (field.key || '') + '=' + (field.value || '');
+            }).join('\n');
+        }
+        return parsed.body_content || 'No body detected.';
+    }
+
+    function showCurlImportPreview(payload) {
+        var parsed = normalizeParsedImportPayload(payload);
+        if (!parsed.url || !String(parsed.url).trim()) {
+            throw new Error('The cURL command must include a URL before it can be imported.');
+        }
+
+        pendingCurlImport = {
+            parsed: parsed,
+            warnings: Array.isArray(payload && payload.warnings) ? payload.warnings : []
+        };
+
+        importPreviewMethod.textContent = parsed.method || 'GET';
+        importPreviewUrl.textContent = parsed.url || '—';
+        importPreviewHeaderCount.textContent = String(parsed.headers.length) + (parsed.headers.length === 1 ? ' header' : ' headers');
+        importPreviewBodyType.textContent = parsed.body_type || 'none';
+
+        importPreviewHeaders.innerHTML = '';
+        if (parsed.headers.length) {
+            parsed.headers.forEach(function(header) {
+                var item = document.createElement('li');
+                item.textContent = (header.key || '') + ': ' + (header.value || '');
+                importPreviewHeaders.appendChild(item);
+            });
+        } else {
+            var emptyItem = document.createElement('li');
+            emptyItem.className = 'import-preview-empty';
+            emptyItem.textContent = 'No headers detected.';
+            importPreviewHeaders.appendChild(emptyItem);
+        }
+
+        var bodyPreview = formatImportPreviewBody(parsed);
+        importPreviewBody.textContent = bodyPreview.length > 1200 ? bodyPreview.substring(0, 1200) + '\n…' : bodyPreview;
+
+        var replaceWarning = importWillReplaceUnsavedValues();
+        importReplaceWarning.style.display = replaceWarning ? '' : 'none';
+        importPreview.style.display = 'block';
+        importConfirmBtn.style.display = 'none';
+        importBackBtn.style.display = '';
+        importApplyBtn.style.display = '';
+        document.querySelectorAll('.import-panel').forEach(function(panel) {
+            panel.classList.toggle('import-panel-previewing', true);
+        });
+
+        if (pendingCurlImport.warnings.length) showImportWarning(pendingCurlImport.warnings);
+    }
+
+    function backToCurlImportEditor() {
+        clearCurlImportPreview();
+        removeImportMessages();
+    }
+
+    function applyPendingCurlImport() {
+        if (!pendingCurlImport) {
+            showImportError('Parse a cURL command before applying the import.');
+            return;
+        }
+        if (importWillReplaceUnsavedValues() && !window.confirm('Applying this cURL import will replace current unsaved editor values. Continue?')) {
+            return;
+        }
+
+        applyParsedImportToEditor(pendingCurlImport.parsed);
+        showToast('cURL imported into editor', pendingCurlImport.warnings.length ? 'warning' : 'success');
+        importModal.classList.remove('active');
+        resetImportModal();
+    }
+
+    if (importBackBtn) importBackBtn.addEventListener('click', backToCurlImportEditor);
+    if (importApplyBtn) importApplyBtn.addEventListener('click', applyPendingCurlImport);
+
     // Import confirmation handler - ENHANCED
     importConfirmBtn.addEventListener('click', async function() {
         var raw = '';
@@ -3552,8 +3696,8 @@ document.addEventListener('DOMContentLoaded', () => {
         importConfirmBtn.disabled = true;
 
         // Remove previous messages
-        var prevMessages = importModal.querySelectorAll('.import-errors, .import-success, .import-warnings');
-        prevMessages.forEach(function(el) { el.remove(); });
+        removeImportMessages();
+        clearCurlImportPreview();
 
         try {
             if (raw.charAt(0) === '{' || raw.charAt(0) === '[') {
@@ -3579,19 +3723,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     resetImportModal();
                 }, 1500);
             } else if (/^curl\s/i.test(raw)) {
-                // cURL — parse on server and load into editor
+                // cURL — parse on server and preview before applying to editor
                 try {
                     var parsed = await apiClient.importData({ type: 'curl', data: raw });
-                    applyParsedImportToEditor(parsed);
-
-                    if (parsed.warnings && parsed.warnings.length) {
-                        showImportWarning(parsed.warnings);
-                        showImportSuccess('cURL imported into editor. Review the warning details before continuing.');
-                    } else {
-                        showToast('cURL imported into editor', 'success');
-                        importModal.classList.remove('active');
-                        resetImportModal();
-                    }
+                    showCurlImportPreview(parsed);
+                    showImportSuccess('Review the cURL import preview, then choose Apply import or Back/Edit.');
                 } catch (e) {
                     if (hasStructuredImportErrors(e)) {
                         showImportError(getImportErrorMessages(e));
@@ -3600,7 +3736,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Fallback: parse locally when the server parser is unavailable.
                     console.warn('Server cURL parse failed, using local parser:', e);
-                    importCurlLocal(raw, { showModalWarning: true });
+                    previewCurlLocal(raw, { showModalWarning: true });
                 }
             } else {
                 showImportError('Unrecognized format. Please paste a valid Postman JSON collection or cURL command.');
@@ -3614,12 +3750,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function addImportMessage(messageDiv) {
+        var actionButtons = importModal.querySelector('.import-action-buttons');
+        if (actionButtons && actionButtons.parentNode) {
+            actionButtons.parentNode.insertBefore(messageDiv, actionButtons);
+        } else {
+            importConfirmBtn.parentNode.insertBefore(messageDiv, importConfirmBtn);
+        }
+    }
+
     function showImportError(message) {
         var messages = Array.isArray(message) ? message : [message];
         var errorDiv = document.createElement('div');
         errorDiv.className = 'import-errors';
         errorDiv.innerHTML = '<h4>⚠️ Import Error</h4>' + formatImportMessages(messages);
-        importConfirmBtn.parentNode.insertBefore(errorDiv, importConfirmBtn);
+        addImportMessage(errorDiv);
     }
 
     function showImportWarning(message) {
@@ -3627,7 +3772,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var warningDiv = document.createElement('div');
         warningDiv.className = 'import-warnings';
         warningDiv.innerHTML = '<h4>⚠️ Import Warning</h4>' + formatImportMessages(messages);
-        importConfirmBtn.parentNode.insertBefore(warningDiv, importConfirmBtn);
+        addImportMessage(warningDiv);
     }
 
     function formatImportMessages(messages) {
@@ -3658,7 +3803,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var successDiv = document.createElement('div');
         successDiv.className = 'import-success';
         successDiv.innerHTML = '<h4>✅ Success</h4><p>' + escHtml(message) + '</p>';
-        importConfirmBtn.parentNode.insertBefore(successDiv, importConfirmBtn);
+        addImportMessage(successDiv);
     }
 
     async function importCurl(cmd) {
@@ -3677,6 +3822,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             console.warn('Server cURL parse failed, using local parser:', e);
             importCurlLocal(cmd, { showToastWarning: true });
+        }
+    }
+
+    function previewCurlLocal(cmd, options) {
+        options = options || {};
+        try {
+            var parsed = parseCurlFallback(cmd);
+            parsed.warnings = ['Using the local fallback cURL parser. Import accuracy may be limited.'];
+            showCurlImportPreview(parsed);
+            showImportSuccess('Review the cURL import preview, then choose Apply import or Back/Edit.');
+        } catch (err) {
+            console.error('cURL parse error:', err);
+            if (options.showModalWarning) showImportError(err.message || 'Failed to parse cURL command');
+            showToast('Failed to parse cURL command', 'error');
         }
     }
 
