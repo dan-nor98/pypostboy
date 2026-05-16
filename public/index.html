@@ -130,12 +130,47 @@
                             </div>
                         </div>
                         
+                        <div class="import-preview" id="importPreview" style="display: none;" aria-live="polite">
+                            <h4>cURL import preview</h4>
+                            <dl class="import-preview-summary">
+                                <div>
+                                    <dt>Method</dt>
+                                    <dd id="importPreviewMethod">—</dd>
+                                </div>
+                                <div>
+                                    <dt>URL</dt>
+                                    <dd id="importPreviewUrl">—</dd>
+                                </div>
+                                <div>
+                                    <dt>Headers</dt>
+                                    <dd id="importPreviewHeaderCount">0</dd>
+                                </div>
+                                <div>
+                                    <dt>Body type</dt>
+                                    <dd id="importPreviewBodyType">none</dd>
+                                </div>
+                            </dl>
+                            <div class="import-preview-section">
+                                <strong>Header list</strong>
+                                <ul id="importPreviewHeaders" class="import-preview-list"></ul>
+                            </div>
+                            <div class="import-preview-section">
+                                <strong>Body preview</strong>
+                                <pre id="importPreviewBody" class="import-preview-body">No body detected.</pre>
+                            </div>
+                            <p class="import-replace-warning" id="importReplaceWarning" style="display: none;">⚠️ Applying this import will replace current unsaved editor values.</p>
+                        </div>
+
                         <div class="import-progress" id="importProgress" style="display: none;">
                             <div class="spinner"></div>
                             <span>Importing...</span>
                         </div>
-                        
-                        <button class="btn-send" id="importConfirmBtn">Import</button>
+
+                        <div class="modal-buttons import-action-buttons">
+                            <button class="btn-cancel" id="importBackBtn" type="button" style="display: none;">Back/Edit</button>
+                            <button class="btn-send" id="importConfirmBtn" type="button">Import</button>
+                            <button class="btn-send" id="importApplyBtn" type="button" style="display: none;">Apply import</button>
+                        </div>
                     </div>
                 </div>
 

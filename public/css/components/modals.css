@@ -339,3 +339,125 @@
   margin: 10px 0;
   color: var(--color-success);
 }
+
+.import-preview {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.import-preview h4 {
+  margin: 0 0 10px 0;
+  color: var(--color-text);
+  font-size: 0.95em;
+}
+
+.import-preview-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px 0;
+}
+
+.import-preview-summary div {
+  min-width: 0;
+  padding: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.import-preview-summary dt {
+  margin: 0 0 4px 0;
+  color: var(--color-text-muted);
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.import-preview-summary dd {
+  margin: 0;
+  color: var(--color-text);
+  font-family: 'Courier New', monospace;
+  font-size: 0.86em;
+  overflow-wrap: anywhere;
+}
+
+.import-preview-section {
+  margin-top: 10px;
+}
+
+.import-preview-section strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text-muted);
+  font-size: 0.82em;
+}
+
+.import-preview-list {
+  max-height: 130px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px 8px 8px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-family: 'Courier New', monospace;
+  font-size: 0.82em;
+}
+
+.import-preview-empty {
+  color: var(--color-text-muted);
+  font-family: inherit;
+}
+
+.import-preview-body {
+  max-height: 170px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-family: 'Courier New', monospace;
+  font-size: 0.82em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.import-replace-warning,
+.import-warnings {
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  margin: 10px 0;
+  color: var(--color-warning);
+}
+
+.import-warnings h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+
+.import-warnings p,
+.import-warnings ul {
+  margin: 0;
+  font-size: 13px;
+}
+
+.import-warnings ul {
+  padding-left: 20px;
+}
+
+.import-panel-previewing {
+  display: none !important;
+}
+
+.import-action-buttons {
+  align-items: center;
+}
