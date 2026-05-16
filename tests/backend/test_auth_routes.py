@@ -63,3 +63,82 @@ def test_auth_me_uses_default_local_user_for_legacy_local_mode(client):
     current = assert_success(client.get("/api/auth/me"))
     assert current["username"] == "local_user"
     assert current["is_guest"] is True
+
+
+def test_wsgi_browser_session_cookie_persists_login_for_collections(app, sqlite_connection):
+    """A WSGI/browser cookie flow keeps login state without shared test-client memory."""
+    import io
+    import json
+    from http.cookies import SimpleCookie
+
+    from django.contrib.auth.hashers import make_password
+
+    from pypostboy.db.serializers import timestamp
+    from pypostboy.repositories.collections import Collections
+
+    now = timestamp()
+    cursor = sqlite_connection.execute(
+        """INSERT INTO users (
+            username, email, password_hash, auth_provider, auth_subject, created_at, updated_at
+        ) VALUES (?, ?, ?, 'local', NULL, ?, ?)""",
+        (
+            "wsgi-browser-user",
+            "wsgi-browser-user@example.test",
+            make_password("password123"),
+            now,
+            now,
+        ),
+    )
+    sqlite_connection.commit()
+    user_id = cursor.lastrowid
+    collection = Collections.create(user_id, {"name": "WSGI browser collection"})
+
+    def wsgi_request(method, path, payload=None, cookie_header=None):
+        body = b'' if payload is None else json.dumps(payload).encode('utf-8')
+        environ = {
+            'REQUEST_METHOD': method,
+            'PATH_INFO': path,
+            'wsgi.input': io.BytesIO(body),
+            'CONTENT_LENGTH': str(len(body)),
+        }
+        if payload is not None:
+            environ['CONTENT_TYPE'] = 'application/json'
+            environ['HTTP_CONTENT_TYPE'] = 'application/json'
+        if cookie_header:
+            environ['HTTP_COOKIE'] = cookie_header
+
+        captured = {}
+
+        def start_response(status, headers):
+            captured['status'] = status
+            captured['headers'] = dict(headers)
+
+        response_body = b''.join(app(environ, start_response))
+        return captured['status'], captured['headers'], json.loads(response_body.decode('utf-8'))
+
+    login_status, login_headers, login_payload = wsgi_request(
+        'POST',
+        '/api/auth/login',
+        {'username': 'wsgi-browser-user', 'password': 'password123'},
+    )
+    assert login_status.startswith('200')
+    assert login_payload['success'] is True
+    assert login_payload['data']['id'] == user_id
+    assert 'Set-Cookie' in login_headers
+    session_cookie = SimpleCookie(login_headers['Set-Cookie'])
+    assert 'sessionid' in session_cookie
+    assert session_cookie['sessionid']['samesite'] == 'Lax'
+
+    cookie_header = session_cookie.output(header='', attrs=[]).strip()
+    collections_status, _headers, collections_payload = wsgi_request(
+        'GET',
+        '/api/collections',
+        cookie_header=cookie_header,
+    )
+    assert collections_status.startswith('200')
+    assert collections_payload['success'] is True
+    assert len(collections_payload['data']) == 1
+    persisted_collection = collections_payload['data'][0]
+    assert persisted_collection['id'] == collection['id']
+    assert persisted_collection['name'] == 'WSGI browser collection'
+    assert persisted_collection['user_id'] == user_id

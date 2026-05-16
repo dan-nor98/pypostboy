@@ -5,10 +5,49 @@ from http.cookies import SimpleCookie
 
 from django.conf import settings
 from django.http import Http404, HttpResponse
+from django.contrib.sessions.middleware import load_session
+
+
+_MISSING = object()
 
 
 class SessionStore(dict):
-    modified = False
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.modified = False
+
+    def __setitem__(self, key, value):
+        self.modified = True
+        return super().__setitem__(key, value)
+
+    def __delitem__(self, key):
+        self.modified = True
+        return super().__delitem__(key)
+
+    def clear(self):
+        self.modified = True
+        return super().clear()
+
+    def pop(self, key, default=_MISSING):
+        if key in self:
+            self.modified = True
+        if default is _MISSING:
+            return super().pop(key)
+        return super().pop(key, default)
+
+    def popitem(self):
+        self.modified = True
+        return super().popitem()
+
+    def setdefault(self, key, default=None):
+        if key not in self:
+            self.modified = True
+        return super().setdefault(key, default)
+
+    def update(self, *args, **kwargs):
+        if args or kwargs:
+            self.modified = True
+        return super().update(*args, **kwargs)
 
 
 class Request:
@@ -61,7 +100,14 @@ class WSGIApplication:
         if environ.get('HTTP_COOKIE'):
             cookie = SimpleCookie(environ['HTTP_COOKIE'])
             cookies = {k: morsel.value for k, morsel in cookie.items()}
-        request = Request(path=path, method=method, body=body, headers=headers, cookies=cookies)
+        request = Request(
+            path=path,
+            method=method,
+            body=body,
+            headers=headers,
+            cookies=cookies,
+            session=load_session(cookies),
+        )
         response = self.handle(request)
         status = f'{response.status_code} OK'
         start_response(status, list(response.headers.items()))
