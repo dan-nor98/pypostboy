@@ -117,6 +117,12 @@ def _apply_django_settings(config_dict):
     settings.DATA_UPLOAD_MAX_MEMORY_SIZE = config_dict.get(
         'MAX_CONTENT_LENGTH', settings.DATA_UPLOAD_MAX_MEMORY_SIZE
     )
+    settings.SESSION_COOKIE_NAME = config_dict.get(
+        'SESSION_COOKIE_NAME', getattr(settings, 'SESSION_COOKIE_NAME', 'sessionid')
+    )
+    settings.SESSION_COOKIE_SAMESITE = config_dict.get(
+        'SESSION_COOKIE_SAMESITE', getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax')
+    )
 
 
 def create_app(config=None):
