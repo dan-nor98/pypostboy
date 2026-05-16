@@ -15,6 +15,17 @@ def assert_error(response, status, message):
     assert message in payload["error"]
 
 
+def test_login_rejects_malformed_json(client):
+    assert_error(
+        client.post(
+            "/api/auth/login",
+            data='{',
+            content_type="application/json",
+        ),
+        400,
+        "Invalid JSON request body",
+    )
+
 def test_register_login_logout_session_scopes_collections(client):
     user = assert_success(
         client.post(
@@ -58,12 +69,10 @@ def test_register_login_logout_session_scopes_collections(client):
     assert logged_in["is_guest"] is False
     assert len(assert_success(client.get("/api/collections"))) == 1
 
-
 def test_auth_me_uses_default_local_user_for_legacy_local_mode(client):
     current = assert_success(client.get("/api/auth/me"))
     assert current["username"] == "local_user"
     assert current["is_guest"] is True
-
 
 def test_wsgi_browser_session_cookie_persists_login_for_collections(app, sqlite_connection):
     """A WSGI/browser cookie flow keeps login state without shared test-client memory."""
@@ -153,7 +162,6 @@ def _assert_deletes_legacy_identity_cookies(response):
         assert cookie_name in response.cookies
         assert response.cookies[cookie_name]["max-age"] == 0
 
-
 def test_invalid_user_id_cookie_continue_as_guest_clears_cookie(client):
     _set_cookie(client, "user_id", "999999")
 
@@ -163,7 +171,6 @@ def test_invalid_user_id_cookie_continue_as_guest_clears_cookie(client):
     assert current["username"] == "local_user"
     assert current["is_guest"] is True
     _assert_deletes_legacy_identity_cookies(response)
-
 
 def test_valid_legacy_user_id_cookie_is_ignored_and_cleared(client, user_b):
     _set_cookie(client, "user_id", str(user_b["id"]))
@@ -175,7 +182,6 @@ def test_valid_legacy_user_id_cookie_is_ignored_and_cleared(client, user_b):
     assert current["is_guest"] is True
     assert current["id"] != user_b["id"]
     _assert_deletes_legacy_identity_cookies(response)
-
 
 def test_invalid_cookie_does_not_override_login(client):
     registered = assert_success(
@@ -198,7 +204,6 @@ def test_invalid_cookie_does_not_override_login(client):
     assert logged_in["id"] == registered["id"]
     assert logged_in["is_guest"] is False
     _assert_deletes_legacy_identity_cookies(login_response)
-
 
 def test_stale_cookie_does_not_override_session_and_logout_clears_it(client, user_b):
     session_user = assert_success(

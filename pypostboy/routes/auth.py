@@ -11,7 +11,7 @@ from pypostboy.auth import (
 from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
 from pypostboy.db.serializers import timestamp
-from pypostboy.djangoapp.request import json_body
+from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
 
 
@@ -43,7 +43,12 @@ def current_user(request):
 @csrf_exempt
 def login(request):
     """Start a session for a username/password user."""
-    username, password, _email = _normalize_credentials(json_body(request))
+    try:
+        username, password, _email = _normalize_credentials(
+            json_body(request, allow_blank=False)
+        )
+    except BadJsonBody:
+        return error('Invalid JSON request body', 400)
     if not username or not password:
         return error('Username and password are required', 400)
 
@@ -67,7 +72,12 @@ def login(request):
 @csrf_exempt
 def register(request):
     """Create a local username/password user and start a session."""
-    username, password, email = _normalize_credentials(json_body(request))
+    try:
+        username, password, email = _normalize_credentials(
+            json_body(request, allow_blank=False)
+        )
+    except BadJsonBody:
+        return error('Invalid JSON request body', 400)
     if not username or not password:
         return error('Username and password are required', 400)
     if len(password) < 8:

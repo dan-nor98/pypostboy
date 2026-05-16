@@ -4,7 +4,6 @@ from pypostboy.db.serializers import parse_json_or_text, safe_parse, safe_string
 from pypostboy.repositories.collections import Collections
 from pypostboy.services.import_service import import_postman_to_db
 
-
 def test_import_postman_collection_preserves_folders_requests_bodies_and_auth(sqlite_connection):
     imported = import_postman_to_db(
         {
@@ -61,7 +60,6 @@ def test_import_postman_collection_preserves_folders_requests_bodies_and_auth(sq
     assert users["requests"][1]["body_type"] == "form-urlencoded"
     assert users["requests"][1]["form_data"] == [{"key": "q", "value": "ada"}]
 
-
 def test_serialization_helpers_handle_json_text_and_fallbacks():
     assert safe_parse('{"ok": true}', {}) == {"ok": True}
     assert safe_parse("not-json", []) == []
@@ -70,6 +68,15 @@ def test_serialization_helpers_handle_json_text_and_fallbacks():
     assert parse_json_or_text('{"ok": true}', {}) == {"ok": True}
     assert parse_json_or_text("plain text", {}) == "plain text"
 
+
+def test_import_route_rejects_malformed_json(client):
+    response = client.post("/api/import", data='{', content_type="application/json")
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "success": False,
+        "error": "Invalid JSON request body",
+    }
 
 def test_import_route_supports_curl_postman_and_unknown_type(client):
     curl_payload = client.post(
@@ -93,7 +100,6 @@ def test_import_route_supports_curl_postman_and_unknown_type(client):
     unknown_type = client.post("/api/import", json={"type": "har", "data": {"ok": True}})
     assert unknown_type.status_code == 400
     assert 'Unknown import type' in unknown_type.get_json()["error"]
-
 
 def test_import_route_curl_response_shape_documents_editor_contract(client):
     response = client.post(
@@ -132,7 +138,6 @@ def test_import_route_curl_response_shape_documents_editor_contract(client):
         "form_data": [],
     }
 
-
 def test_import_route_curl_form_data_response_shape_documents_editor_contract(client):
     response = client.post(
         "/api/import",
@@ -154,7 +159,6 @@ def test_import_route_curl_form_data_response_shape_documents_editor_contract(cl
             {"key": "avatar", "value": "@/tmp/a.png"},
         ],
     }
-
 
 def test_import_route_returns_structured_curl_errors(client):
     response = client.post(

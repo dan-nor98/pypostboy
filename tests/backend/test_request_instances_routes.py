@@ -14,7 +14,6 @@ def assert_error(response, status, message):
     assert payload["success"] is False
     assert message in payload["error"]
 
-
 def test_request_instances_crud_contract(client, request_record, user_a_headers):
     created = assert_success(
         client.post(
@@ -67,6 +66,39 @@ def test_request_instances_crud_contract(client, request_record, user_a_headers)
     assert deleted == {"deleted": 1}
 
 
+def test_request_instance_create_and_update_reject_malformed_json(
+    client, request_record, user_a_headers
+):
+    assert_error(
+        client.post(
+            f"/api/requests/{request_record['id']}/instances",
+            headers=user_a_headers,
+            data='{',
+            content_type="application/json",
+        ),
+        400,
+        "Invalid JSON request body",
+    )
+
+    created = assert_success(
+        client.post(
+            f"/api/requests/{request_record['id']}/instances",
+            headers=user_a_headers,
+            json={"name": "Valid snapshot"},
+        ),
+        201,
+    )
+    assert_error(
+        client.put(
+            f"/api/request-instances/{created['id']}",
+            headers=user_a_headers,
+            data='{',
+            content_type="application/json",
+        ),
+        400,
+        "Invalid JSON request body",
+    )
+
 def test_request_instances_error_contracts(client, user_a_headers):
     assert_error(
         client.get("/api/requests/404/instances", headers=user_a_headers),
@@ -85,7 +117,6 @@ def test_request_instances_error_contracts(client, user_a_headers):
         404,
         "Request not found",
     )
-
 
 def test_user_cannot_access_other_users_request_or_instance_ids(
     client, user_a_headers, user_b_headers

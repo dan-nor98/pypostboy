@@ -4,7 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from db import RequestInstances
 from pypostboy.auth import require_current_user
-from pypostboy.djangoapp.request import json_body
+from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
 
 
@@ -31,8 +31,12 @@ def get_request_instances(request, id):
 def create_request_instance(request, id):
     """Create a saved instance for a request."""
     try:
-        instance = RequestInstances.create(id, _current_user_id(request), json_body(request))
+        instance = RequestInstances.create(
+            id, _current_user_id(request), json_body(request, allow_blank=False)
+        )
         return created(instance)
+    except BadJsonBody:
+        return error('Invalid JSON request body', 400)
     except Exception as err:
         return error(err, _status_for_error(err))
 
@@ -54,6 +58,8 @@ def update_request_instance(request, instance_id):
     try:
         instance = RequestInstances.update(instance_id, _current_user_id(request), json_body(request))
         return ok(instance)
+    except BadJsonBody:
+        return error('Invalid JSON request body', 400)
     except Exception as err:
         return error(err, _status_for_error(err))
 
@@ -66,5 +72,7 @@ def delete_request_instance(request, instance_id):
         if result.get('deleted') == 0:
             return error('Request instance not found', 404)
         return ok(result)
+    except BadJsonBody:
+        return error('Invalid JSON request body', 400)
     except Exception as err:
         return error(err, _status_for_error(err))
