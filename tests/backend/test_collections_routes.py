@@ -14,7 +14,6 @@ def assert_error(response, status, message):
     assert payload["success"] is False
     assert message in payload["error"]
 
-
 def test_collections_crud_duplicate_and_reorder_contract(client, user_a_headers):
     created = assert_success(
         client.post(
@@ -97,6 +96,35 @@ def test_collections_crud_duplicate_and_reorder_contract(client, user_a_headers)
     )
 
 
+def test_collection_create_and_update_reject_malformed_json(client, user_a_headers):
+    assert_error(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            data='{',
+            content_type="application/json",
+        ),
+        400,
+        "Invalid JSON request body",
+    )
+
+    created = assert_success(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "Valid"}
+        ),
+        201,
+    )
+    assert_error(
+        client.put(
+            f"/api/collections/{created['id']}",
+            headers=user_a_headers,
+            data='{',
+            content_type="application/json",
+        ),
+        400,
+        "Invalid JSON request body",
+    )
+
 def test_collections_error_contracts(client, user_a_headers):
     assert_error(
         client.get("/api/collections/404", headers=user_a_headers),
@@ -118,7 +146,6 @@ def test_collections_error_contracts(client, user_a_headers):
         "duplicates",
     )
 
-
 def test_get_collections_only_lists_current_users_collections(
     client, user_a_headers, user_b_headers
 ):
@@ -138,7 +165,6 @@ def test_get_collections_only_lists_current_users_collections(
     user_a_list = assert_success(client.get("/api/collections", headers=user_a_headers))
     assert [item["id"] for item in user_a_list] == [user_a_collection["id"]]
     assert user_b_collection["id"] not in [item["id"] for item in user_a_list]
-
 
 def test_user_cannot_access_or_parent_to_other_users_collection(
     client, user_a_headers, user_b_headers
@@ -172,7 +198,6 @@ def test_user_cannot_access_or_parent_to_other_users_collection(
         404,
         "Parent collection not found",
     )
-
 
 def test_user_cannot_reorder_collections_with_other_users_ids(
     client, user_a_headers, user_b_headers

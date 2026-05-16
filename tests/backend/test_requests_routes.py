@@ -16,7 +16,6 @@ def assert_error(response, status, message):
     assert payload["success"] is False
     assert message in payload["error"]
 
-
 def test_requests_crud_duplicate_move_and_reorder_contract(
     client, collection, user_a, user_a_headers
 ):
@@ -103,6 +102,39 @@ def test_requests_crud_duplicate_move_and_reorder_contract(
     assert deleted == {"deleted": 1}
 
 
+def test_request_create_and_update_reject_malformed_json(
+    client, collection, user_a_headers
+):
+    assert_error(
+        client.post(
+            "/api/requests",
+            headers=user_a_headers,
+            data='{',
+            content_type="application/json",
+        ),
+        400,
+        "Invalid JSON request body",
+    )
+
+    created = assert_success(
+        client.post(
+            "/api/requests",
+            headers=user_a_headers,
+            json={"collection_id": collection["id"], "name": "Valid request"},
+        ),
+        201,
+    )
+    assert_error(
+        client.put(
+            f"/api/requests/{created['id']}",
+            headers=user_a_headers,
+            data='{',
+            content_type="application/json",
+        ),
+        400,
+        "Invalid JSON request body",
+    )
+
 def test_requests_error_contracts(client, user_a_headers):
     assert_error(
         client.get("/api/requests/404", headers=user_a_headers),
@@ -126,7 +158,6 @@ def test_requests_error_contracts(client, user_a_headers):
         400,
         "collection_id required",
     )
-
 
 def test_user_cannot_access_or_move_other_users_request(
     client, user_a_headers, user_b_headers
@@ -175,7 +206,6 @@ def test_user_cannot_access_or_move_other_users_request(
         "Target collection not found",
     )
 
-
 def test_user_cannot_reorder_requests_with_other_users_ids(
     client, user_a_headers, user_b_headers
 ):
@@ -220,7 +250,6 @@ def test_user_cannot_reorder_requests_with_other_users_ids(
         400,
         "exactly the requests",
     )
-
 
 def test_request_repository_move_and_reorder_validation(collection, user_a):
     from pypostboy.repositories.requests import Requests
