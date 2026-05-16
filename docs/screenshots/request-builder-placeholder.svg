@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Request builder screenshot placeholder</title>
+  <desc id="desc">Placeholder graphic for a future PostBoy request builder screenshot.</desc>
+  <rect width="960" height="540" fill="#f6f8fa"/>
+  <rect x="40" y="40" width="880" height="460" rx="24" fill="#ffffff" stroke="#d0d7de" stroke-width="3"/>
+  <rect x="80" y="92" width="170" height="44" rx="8" fill="#0969da" opacity="0.9"/>
+  <rect x="270" y="92" width="570" height="44" rx="8" fill="#eaeef2"/>
+  <rect x="80" y="170" width="760" height="48" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <rect x="80" y="248" width="360" height="190" rx="12" fill="#f6f8fa" stroke="#d0d7de"/>
+  <rect x="480" y="248" width="360" height="190" rx="12" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="480" y="484" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" fill="#57606a">Request Builder Screenshot Placeholder</text>
+</svg>
