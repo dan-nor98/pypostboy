@@ -3400,6 +3400,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const importFileInput = document.getElementById('importFileInput');
     const browseFileBtn = document.getElementById('browseFileBtn');
     const selectedFileName = document.getElementById('selectedFileName');
+    const exampleCurlBtn = document.getElementById('exampleCurlBtn');
     const importPreview = document.getElementById('importPreview');
     const importPreviewMethod = document.getElementById('importPreviewMethod');
     const importPreviewUrl = document.getElementById('importPreviewUrl');
@@ -3414,23 +3415,37 @@ document.addEventListener('DOMContentLoaded', () => {
     let importedFileContent = null;
     let currentImportTab = 'text';
     let pendingCurlImport = null;
+    const EXAMPLE_CURL_COMMAND = "curl -X POST https://api.example.com/users -H 'Content-Type: application/json' -H 'Authorization: Bearer demo-token' -d '{\"name\":\"Ada Lovelace\",\"role\":\"admin\"}'";
+
+    function switchImportTab(tabName) {
+        document.querySelectorAll('.import-tab').forEach(function(t) {
+            t.classList.toggle('active', t.dataset.importTab === tabName);
+        });
+        document.querySelectorAll('.import-panel').forEach(function(p) {
+            p.classList.remove('active');
+        });
+
+        currentImportTab = tabName;
+        var activePanel = document.getElementById('import-' + currentImportTab + '-panel');
+        if (activePanel) activePanel.classList.add('active');
+        clearCurlImportPreview();
+    }
 
     // Import tab switching
     document.querySelectorAll('.import-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
-            document.querySelectorAll('.import-tab').forEach(function(t) {
-                t.classList.remove('active');
-            });
-            document.querySelectorAll('.import-panel').forEach(function(p) {
-                p.classList.remove('active');
-            });
-
-            tab.classList.add('active');
-            currentImportTab = tab.dataset.importTab;
-            document.getElementById('import-' + currentImportTab + '-panel').classList.add('active');
-            clearCurlImportPreview();
+            switchImportTab(tab.dataset.importTab);
         });
     });
+
+    if (exampleCurlBtn) {
+        exampleCurlBtn.addEventListener('click', function() {
+            switchImportTab('text');
+            removeImportMessages();
+            importInput.value = EXAMPLE_CURL_COMMAND;
+            importInput.focus();
+        });
+    }
 
     // Open import modal
     importBtn.addEventListener('click', function() {
@@ -3505,13 +3520,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleFileSelect(file) {
         if (!file) return;
 
+        removeImportMessages();
+        clearCurlImportPreview();
+        importedFileContent = null;
+        selectedFileName.textContent = '';
+
         // Validate file type
         if (!file.name.endsWith('.json') && file.type !== 'application/json') {
-            showToast('Please select a JSON file', 'error');
+            var fileTypeMessage = 'Please select a Postman collection JSON file (.json).';
+            showImportError(fileTypeMessage);
+            showToast(fileTypeMessage, 'error');
             return;
         }
 
-        selectedFileName.textContent = '📄 ' + file.name;
+        var fileLabel = '📄 ' + file.name + ' (' + formatByteCount(file.size) + ')';
+        selectedFileName.textContent = fileLabel;
 
         var reader = new FileReader();
         reader.onload = function(e) {
@@ -3521,13 +3544,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 JSON.parse(importedFileContent);
                 showToast('File loaded: ' + file.name, 'success');
             } catch (err) {
-                showToast('Invalid JSON file: ' + err.message, 'error');
+                var invalidJsonMessage = 'Invalid Postman collection JSON: ' + err.message;
+                showImportError(invalidJsonMessage);
+                showToast(invalidJsonMessage, 'error');
                 importedFileContent = null;
                 selectedFileName.textContent = '';
             }
         };
         reader.onerror = function() {
-            showToast('Error reading file', 'error');
+            var readErrorMessage = 'Error reading Postman collection JSON file.';
+            showImportError(readErrorMessage);
+            showToast(readErrorMessage, 'error');
+            importedFileContent = null;
+            selectedFileName.textContent = '';
         };
         reader.readAsText(file);
     }
@@ -3676,9 +3705,13 @@ document.addEventListener('DOMContentLoaded', () => {
         var raw = '';
         var isFileImport = false;
 
+        removeImportMessages();
+
         if (currentImportTab === 'file') {
             if (!importedFileContent) {
-                showToast('Please select a file first', 'error');
+                var noFileMessage = 'Please select a Postman collection JSON file first.';
+                showImportError(noFileMessage);
+                showToast(noFileMessage, 'error');
                 return;
             }
             raw = importedFileContent;
@@ -3686,7 +3719,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             raw = importInput.value.trim();
             if (!raw) {
-                showToast('Please paste content to import', 'error');
+                var noTextMessage = 'Please paste a Postman collection JSON or cURL command to import.';
+                showImportError(noTextMessage);
+                showToast(noTextMessage, 'error');
                 return;
             }
         }
@@ -3695,23 +3730,22 @@ document.addEventListener('DOMContentLoaded', () => {
         importProgress.style.display = 'flex';
         importConfirmBtn.disabled = true;
 
-        // Remove previous messages
-        removeImportMessages();
+        // Remove previous preview state
         clearCurlImportPreview();
 
         try {
             if (raw.charAt(0) === '{' || raw.charAt(0) === '[') {
-                // Postman JSON — send to server for DB import
+                // Postman collection JSON — send to server for DB import
                 var data;
                 try {
                     data = JSON.parse(raw);
                 } catch (parseErr) {
-                    throw new Error('Invalid JSON format: ' + parseErr.message);
+                    throw new Error('Invalid Postman collection JSON format: ' + parseErr.message);
                 }
 
                 // Validate Postman format
                 if (!data.info && !Array.isArray(data) && !data.item) {
-                    throw new Error('This JSON file doesn\'t appear to be a valid Postman collection');
+                    throw new Error('This Postman collection JSON does not appear to be a valid Postman collection.');
                 }
 
                 await apiClient.importData({ type: 'postman', data: data });
@@ -3739,7 +3773,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     previewCurlLocal(raw, { showModalWarning: true });
                 }
             } else {
-                showImportError('Unrecognized format. Please paste a valid Postman JSON collection or cURL command.');
+                showImportError('Unrecognized format. Please paste a valid Postman collection JSON or cURL command.');
             }
         } catch (err) {
             console.error('Import error:', err);
@@ -3760,6 +3794,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showImportError(message) {
+        importModal.querySelectorAll('.import-errors').forEach(function(el) { el.remove(); });
         var messages = Array.isArray(message) ? message : [message];
         var errorDiv = document.createElement('div');
         errorDiv.className = 'import-errors';
