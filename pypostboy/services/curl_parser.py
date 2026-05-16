@@ -121,16 +121,14 @@ def parse_curl_to_request(cmd):
     body_content = _build_body_content(body_parts, has_form_data)
     body_type = _infer_body_type(body_content, headers, has_urlencoded_data, has_form_data)
 
-    result = {
+    return {
         'method': method,
         'url': url,
         'headers': headers,
         'body_type': body_type,
-        'body_content': body_content
+        'body_content': body_content,
+        'form_data': form_data
     }
-    if has_form_data or form_data:
-        result['form_data'] = form_data
-    return result
 
 
 def _normalize_line_continuations(cmd):
