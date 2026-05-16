@@ -1,6 +1,7 @@
 """Outbound HTTP proxy service."""
 
 import json
+import os
 from datetime import datetime, timezone
 
 import requests as http_requests
@@ -65,6 +66,8 @@ class ProxyConnectionError(ProxyError):
 
 def get_proxy_timeout():
     """Return the configured outbound proxy timeout."""
+    if not settings.configured:
+        return BaseConfig.PROXY_TIMEOUT
     return getattr(settings, 'PROXY_TIMEOUT', BaseConfig.PROXY_TIMEOUT)
 
 
@@ -92,9 +95,18 @@ def proxy_http_request(body):
     # know how to decode, which makes the response viewer display mojibake.
     fetch_headers['Accept-Encoding'] = 'identity'
 
-    if req_body and method not in ('GET', 'HEAD'):
-        if content_type and content_type != 'multipart/form-data':
-            fetch_headers['Content-Type'] = content_type
+    is_multipart_form_data = _is_multipart_form_data(content_type)
+    if is_multipart_form_data:
+        _remove_header(fetch_headers, 'content-type')
+    elif req_body and method not in ('GET', 'HEAD') and content_type:
+        fetch_headers['Content-Type'] = content_type
+
+    files = None
+    opened_files = []
+    request_data = req_body if req_body else None
+    if is_multipart_form_data and method not in ('GET', 'HEAD'):
+        files = _multipart_files_from_form_data(body.get('formData', []), opened_files)
+        request_data = None
 
     start_time = datetime.now(timezone.utc)
     proxy_timeout = get_proxy_timeout()
@@ -104,7 +116,8 @@ def proxy_http_request(body):
             method=method,
             url=url,
             headers=fetch_headers,
-            data=req_body if req_body else None,
+            data=request_data,
+            files=files,
             allow_redirects=True,
             timeout=proxy_timeout
         )
@@ -114,6 +127,9 @@ def proxy_http_request(body):
         raise ProxyConnectionError(str(err)) from err
     except Exception as err:
         raise ProxyError(str(err)) from err
+    finally:
+        for file_obj in opened_files:
+            file_obj.close()
 
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 
@@ -130,3 +146,48 @@ def proxy_http_request(body):
         'body': parsed_body,
         'time': int(elapsed)
     }
+
+
+def _is_multipart_form_data(content_type):
+    """Return whether a content type identifies multipart form data."""
+    media_type = str(content_type or '').split(';', 1)[0].strip().lower()
+    return media_type == 'multipart/form-data'
+
+
+def _remove_header(headers, header_name):
+    """Remove a header from a dict using case-insensitive matching."""
+    for existing_name in list(headers):
+        if existing_name.lower() == header_name:
+            headers.pop(existing_name, None)
+
+
+def _multipart_files_from_form_data(form_data, opened_files):
+    """Return requests-compatible multipart fields from serialized editor form data."""
+    multipart_fields = []
+    if not isinstance(form_data, list):
+        return multipart_fields
+
+    for field in form_data:
+        if not isinstance(field, dict):
+            continue
+        key = str(field.get('key', '')).strip()
+        if not key:
+            continue
+        value = '' if field.get('value') is None else str(field.get('value'))
+        file_tuple = _multipart_file_tuple(value, opened_files)
+        multipart_fields.append((key, file_tuple if file_tuple else (None, value)))
+    return multipart_fields
+
+
+def _multipart_file_tuple(value, opened_files):
+    """Return a requests file tuple for cURL-style @path values when readable."""
+    if not value.startswith('@') or value.startswith('@@'):
+        return None
+
+    file_path = value[1:]
+    if not file_path or not os.path.isfile(file_path):
+        return None
+
+    file_obj = open(file_path, 'rb')
+    opened_files.append(file_obj)
+    return (os.path.basename(file_path), file_obj)

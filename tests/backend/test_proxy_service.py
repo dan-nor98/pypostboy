@@ -124,3 +124,84 @@ def test_proxy_route_returns_proxy_payload_and_validation_errors(client, monkeyp
     invalid = client.post("/api/proxy", json={})
     assert invalid.status_code == 400
     assert invalid.get_json() == {"error": "URL is required"}
+
+
+def test_proxy_http_request_serializes_form_data_as_multipart(monkeypatch):
+    calls = []
+
+    def fake_request(**kwargs):
+        calls.append(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", fake_request)
+
+    proxy_http_request(
+        {
+            "url": "https://api.example.test/upload",
+            "method": "POST",
+            "headers": {"Content-Type": "multipart/form-data", "Accept": "application/json"},
+            "contentType": "multipart/form-data",
+            "formData": [{"key": "name", "value": "Ada"}],
+        }
+    )
+
+    assert "Content-Type" not in calls[0]["headers"]
+    assert calls[0]["data"] is None
+    assert calls[0]["files"] == [("name", (None, "Ada"))]
+
+
+def test_proxy_route_sends_imported_curl_form_data_to_echo_endpoint_as_multipart(client):
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from pypostboy.services.curl_parser import parse_curl_to_request
+
+    class EchoMultipartHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            content_length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(content_length).decode("utf-8", errors="replace")
+            response = json.dumps(
+                {
+                    "content_type": self.headers.get("Content-Type", ""),
+                    "body": body,
+                }
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        def log_message(self, *args):
+            pass
+
+    parsed_curl = parse_curl_to_request(
+        "curl http://example.test/echo -F 'name=Ada'"
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), EchoMultipartHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        response = client.post(
+            "/api/proxy",
+            json={
+                "url": f"http://127.0.0.1:{server.server_port}/echo",
+                "method": "POST",
+                "headers": {"Content-Type": "multipart/form-data"},
+                "contentType": "multipart/form-data",
+                "formData": parsed_curl["form_data"],
+            },
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert response.status_code == 200
+    echoed = response.get_json()["body"]
+    assert echoed["content_type"].startswith("multipart/form-data; boundary=")
+    assert "application/json" not in echoed["content_type"]
+    assert 'name="name"' in echoed["body"]
+    assert "Ada" in echoed["body"]

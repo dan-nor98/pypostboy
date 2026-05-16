@@ -3150,10 +3150,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function buildClientFetchHeaders(headers, contentType) {
         var fetchHeaders = new Headers();
         var skippedHeaders = [];
+        var isMultipartFormData = contentType === 'multipart/form-data';
 
         Object.keys(headers || {}).forEach(function(name) {
             var value = headers[name];
-            if (isForbiddenClientHeaderName(name)) {
+            var normalizedName = String(name || '').trim().toLowerCase();
+            if (isForbiddenClientHeaderName(name) || (isMultipartFormData && normalizedName === 'content-type')) {
                 skippedHeaders.push(name);
                 return;
             }
@@ -3166,7 +3168,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        if (contentType && contentType !== 'multipart/form-data' && !fetchHeaders.has('Content-Type')) {
+        if (contentType && !isMultipartFormData && !fetchHeaders.has('Content-Type')) {
             fetchHeaders.set('Content-Type', contentType);
         }
 
@@ -3231,11 +3233,20 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function buildServerProxyPayload(payload) {
+        var proxyPayload = Object.assign({}, payload);
+        if (payload.contentType === 'multipart/form-data') {
+            delete proxyPayload.body;
+            proxyPayload.formData = Array.isArray(payload.formData) ? payload.formData : [];
+        }
+        return proxyPayload;
+    }
+
     async function executeRequest(payload, executionMode) {
         if (executionMode === 'client') {
             return sendClientRequest(payload);
         }
-        return apiClient.sendProxyRequest(payload);
+        return apiClient.sendProxyRequest(buildServerProxyPayload(payload));
     }
 
     // ═══════════════════════════════════════════════════════
@@ -3303,18 +3314,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 body = pairs.join('&');
                 contentType = 'application/x-www-form-urlencoded';
             } else if (bodyType === 'form-data') {
-                var fd = {};
+                var fd = new FormData();
+                var formData = [];
                 formDataRows.querySelectorAll('.form-data-row').forEach(function(r) {
                     var k = replaceEnvVars(r.children[0].value.trim());
                     var v = replaceEnvVars(r.children[1].value);
-                    if (k) fd[k] = v;
+                    if (k) {
+                        fd.append(k, v);
+                        formData.push({ key: k, value: v });
+                    }
                 });
-                body = JSON.stringify(fd);
+                body = fd;
                 contentType = 'multipart/form-data';
             }
         }
 
-        var payload = { url: url, method: method, headers: headers, body: body, contentType: contentType };
+        var payload = { url: url, method: method, headers: headers, body: body, contentType: contentType, formData: formData || [] };
         var executionMode = getSelectedExecutionMode();
 
         showLoading(true);
