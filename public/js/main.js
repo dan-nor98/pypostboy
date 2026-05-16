@@ -622,9 +622,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (authPassword) authPassword.value = '';
     }
 
-    function clearUserScopedUiState() {
-        history = loadHistory(userState.currentUser);
-        envVars = loadEnvVars(userState.currentUser);
+    function clearUserScopedUiState(options) {
+        var resetStorageBackedState = options && options.resetStorageBackedState;
+        var resetEditorState = options && options.resetEditorState;
+
+        history = resetStorageBackedState ? [] : loadHistory(userState.currentUser);
+        envVars = resetStorageBackedState ? {} : loadEnvVars(userState.currentUser);
         renderHistory();
         renderEnvVars();
         collectionsData = [];
@@ -633,7 +636,10 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedSnapshotId = '';
         loadingSnapshotId = '';
         snapshotContextTargetId = '';
+        snapshotContextTrigger = null;
         contextTarget = null;
+        dragState = null;
+        draggedTabId = null;
         clearLegacyOpenTabsSnapshot();
         openTabs = [];
         activeTabId = null;
@@ -641,6 +647,18 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCollections([]);
         renderRequestTabs();
         renderInstancesBar([]);
+
+        if (resetEditorState) {
+            activeRequestTab = 'params';
+            activateRequestTab(activeRequestTab);
+            loadStateIntoEditor(getBlankState(), 'GET');
+            restoreResponsePane(getBlankState());
+        }
+    }
+
+    function clearLogoutUiState() {
+        clearUserScopedUiState({ resetStorageBackedState: true, resetEditorState: true });
+        workspaceInitialized = false;
     }
 
     async function reloadUserScopedData() {
@@ -698,6 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
             logoutBtn.addEventListener('click', async function() {
                 try {
                     await logoutUser();
+                    clearLogoutUiState();
                     showToast('Signed out', 'success');
                     setAuthenticatedViewVisible(false);
                 } catch (err) {
