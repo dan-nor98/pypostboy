@@ -116,17 +116,23 @@
                         
                         <!-- Text Import -->
                         <div class="import-panel active" id="import-text-panel">
-                            <textarea id="importInput" placeholder="Paste Postman JSON collection or cURL command here..." rows="10"></textarea>
+                            <p class="import-helper-text">Supported formats: Postman collection JSON or cURL command text.</p>
+                            <div class="import-example-row">
+                                <button class="btn-example-curl" id="exampleCurlBtn" type="button">Example cURL</button>
+                            </div>
+                            <textarea id="importInput" placeholder="Paste Postman collection JSON or cURL command text here..." rows="10" aria-describedby="importTextHelper"></textarea>
+                            <p class="import-helper-text" id="importTextHelper">Paste a complete Postman collection JSON object, or a cURL command starting with <code>curl</code>.</p>
                         </div>
                         
                         <!-- File Import -->
                         <div class="import-panel" id="import-file-panel">
+                            <p class="import-helper-text">Supported file import: Postman collection JSON (.json).</p>
                             <div class="file-upload-area" id="fileDropZone">
                                 <p>📁 Drag & drop a Postman collection JSON file here</p>
                                 <p>or</p>
-                                <input type="file" id="importFileInput" accept=".json" style="display: none;">
-                                <button class="btn-import" id="browseFileBtn">Browse Files</button>
-                                <p id="selectedFileName" class="file-name"></p>
+                                <input type="file" id="importFileInput" accept=".json,application/json" style="display: none;">
+                                <button class="btn-import" id="browseFileBtn" type="button">Browse Files</button>
+                                <p id="selectedFileName" class="file-name" aria-live="polite"></p>
                             </div>
                         </div>
                         
