@@ -93,3 +93,64 @@ def test_import_route_supports_curl_postman_and_unknown_type(client):
     unknown_type = client.post("/api/import", json={"type": "har", "data": {"ok": True}})
     assert unknown_type.status_code == 400
     assert 'Unknown import type' in unknown_type.get_json()["error"]
+
+
+def test_import_route_curl_response_shape_documents_editor_contract(client):
+    response = client.post(
+        "/api/import",
+        json={
+            "type": "curl",
+            "data": (
+                "curl -X PATCH 'https://api.example.test/widgets/1' "
+                "-H 'Accept: application/json' "
+                "-H 'Content-Type: application/json' "
+                "--data '{\"name\":\"Ada\"}'"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert set(payload["data"].keys()) == {
+        "method",
+        "url",
+        "headers",
+        "body_type",
+        "body_content",
+        "form_data",
+    }
+    assert payload["data"] == {
+        "method": "PATCH",
+        "url": "https://api.example.test/widgets/1",
+        "headers": [
+            {"key": "Accept", "value": "application/json"},
+            {"key": "Content-Type", "value": "application/json"},
+        ],
+        "body_type": "json",
+        "body_content": '{"name":"Ada"}',
+        "form_data": [],
+    }
+
+
+def test_import_route_curl_form_data_response_shape_documents_editor_contract(client):
+    response = client.post(
+        "/api/import",
+        json={
+            "type": "curl",
+            "data": "curl https://api.example.test/upload -F 'name=Ada' --form 'avatar=@/tmp/a.png'",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["data"] == {
+        "method": "POST",
+        "url": "https://api.example.test/upload",
+        "headers": [],
+        "body_type": "form-data",
+        "body_content": "",
+        "form_data": [
+            {"key": "name", "value": "Ada"},
+            {"key": "avatar", "value": "@/tmp/a.png"},
+        ],
+    }

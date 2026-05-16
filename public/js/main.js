@@ -12,7 +12,7 @@ import { countTotalRequests } from './features/collections.js';
 import { getBlankState } from './features/requests.js';
 import { buildSnapshotDefaultName } from './features/snapshots.js';
 import { parseResponseTimeMs } from './features/proxy.js';
-import { tokenize } from './features/import-export.js';
+import { applyParsedImportPayload, parseCurlFallback } from './features/import-export.js';
 import { detectBodyFormat, formatByteCount, escapeHtml, highlightByFormat, highlightJson } from './utils/format.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2179,14 +2179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!headersContainer.children.length) addHeaderRow();
 
         // Body type
-        var bt = state.body_type || 'none';
-        var bodyRadio = document.querySelector('input[name="bodyType"][value="' + bt + '"]');
-        if (bodyRadio) {
-            bodyRadio.checked = true;
-            var isForm = (bt === 'form-data' || bt === 'form-urlencoded');
-            bodyContent.style.display = (isForm || bt === 'none') ? 'none' : '';
-            formDataContainer.style.display = isForm ? '' : 'none';
-        }
+        setEditorBodyType(state.body_type || 'none');
         bodyContent.value = state.body_content || '';
 
         // Form data
@@ -2998,6 +2991,44 @@ document.addEventListener('DOMContentLoaded', () => {
         return headers;
     }
 
+    function getImportEditorAdapter() {
+        return {
+            setMethod: function(method) { methodSelect.value = method || 'GET'; },
+            setUrl: function(url) { urlInput.value = url || ''; },
+            syncParamsFromUrl: syncParamsFromUrl,
+            clearHeaders: function() { headersContainer.innerHTML = ''; },
+            addHeaderRow: addHeaderRow,
+            ensureHeaderRow: function() {
+                if (!headersContainer.children.length) addHeaderRow();
+            },
+            setBodyType: setEditorBodyType,
+            setBodyContent: function(content) { bodyContent.value = content || ''; },
+            clearFormData: function() { formDataRows.innerHTML = ''; },
+            addFormDataRow: addFormDataRow
+        };
+    }
+
+    function applyParsedImportToEditor(payload) {
+        var parsed = applyParsedImportPayload(payload, getImportEditorAdapter());
+        markActiveTabUnsaved();
+        return parsed;
+    }
+
+    function setEditorBodyType(bodyType) {
+        var value = bodyType || 'none';
+        var bodyRadio = document.querySelector('input[name="bodyType"][value="' + value + '"]');
+        if (!bodyRadio) {
+            value = 'none';
+            bodyRadio = document.querySelector('input[name="bodyType"][value="none"]');
+        }
+        if (!bodyRadio) return;
+        bodyRadio.checked = true;
+        var isForm = (value === 'form-data' || value === 'form-urlencoded');
+        bodyContent.style.display = (isForm || value === 'none') ? 'none' : '';
+        formDataContainer.style.display = isForm ? '' : 'none';
+    }
+
+
     function getAuthQueryString() {
         var type = document.querySelector('input[name="authType"]:checked').value;
         if (type === 'apikey') {
@@ -3486,12 +3517,12 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     }
 
-    // Paste cURL directly into URL input (keep existing)
+    // Paste cURL directly into URL input.
     urlInput.addEventListener('paste', function() {
         setTimeout(function() {
             var v = urlInput.value.trim();
             if (/^curl\s/i.test(v)) {
-                importCurlLocal(v);
+                importCurl(v);
             }
         }, 50);
     });
@@ -3551,7 +3582,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // cURL — parse on server and load into editor
                 try {
                     var parsed = await apiClient.importData({ type: 'curl', data: raw });
-                    loadStateIntoEditor(reqToState(parsed));
+                    applyParsedImportToEditor(parsed);
 
                     showToast('cURL imported into editor', 'success');
                     importModal.classList.remove('active');
@@ -3589,167 +3620,21 @@ document.addEventListener('DOMContentLoaded', () => {
         importConfirmBtn.parentNode.insertBefore(successDiv, importConfirmBtn);
     }
 
-    // Local cURL parser (fallback) - ENHANCED
+    async function importCurl(cmd) {
+        try {
+            var parsed = await apiClient.importData({ type: 'curl', data: cmd });
+            applyParsedImportToEditor(parsed);
+            showToast('cURL command parsed successfully', 'success');
+        } catch (e) {
+            console.warn('Server cURL parse failed, using local parser:', e);
+            importCurlLocal(cmd);
+        }
+    }
+
     function importCurlLocal(cmd) {
         try {
-            cmd = cmd.replace(/\\\n/g, ' ').replace(/\\\r\n/g, ' ').trim();
-
-            // Enhanced parsing with support for more curl options
-            var method = 'GET';
-            var url = '';
-            var headers = [];
-            var bodyData = '';
-            var formFields = [];
-            var isMultipart = false;
-
-            var tokens = tokenize(cmd);
-
-            for (var i = 0; i < tokens.length; i++) {
-                var t = tokens[i];
-                if (t === 'curl') continue;
-
-                // Method
-                if (t === '-X' || t === '--request') {
-                    method = (tokens[++i] || '').toUpperCase();
-                    continue;
-                }
-
-                // Headers
-                if (t === '-H' || t === '--header') {
-                    var hdr = tokens[++i] || '';
-                    var ci = hdr.indexOf(':');
-                    if (ci > 0) {
-                        headers.push({
-                            key: hdr.substring(0, ci).trim(),
-                            value: hdr.substring(ci + 1).trim()
-                        });
-                    }
-                    continue;
-                }
-
-                // Data/Body
-                if (['-d', '--data', '--data-raw', '--data-binary'].includes(t)) {
-                    bodyData = tokens[++i] || '';
-                    continue;
-                }
-
-                // URL-encoded data
-                if (t === '--data-urlencode') {
-                    var encodedData = tokens[++i] || '';
-                    var eqIdx = encodedData.indexOf('=');
-                    if (eqIdx > 0) {
-                        formFields.push({
-                            key: encodedData.substring(0, eqIdx),
-                            value: encodedData.substring(eqIdx + 1)
-                        });
-                    }
-                    continue;
-                }
-
-                // Form fields
-                var formValue = null;
-                if (t === '-F' || t === '--form') {
-                    formValue = tokens[++i] || '';
-                } else if (t.indexOf('--form=') === 0) {
-                    formValue = t.substring('--form='.length);
-                } else if (t.indexOf('-F') === 0 && t.length > 2) {
-                    formValue = t.substring(2);
-                }
-                if (formValue !== null) {
-                    isMultipart = true;
-                    var feqIdx = formValue.indexOf('=');
-                    if (feqIdx > 0) {
-                        formFields.push({
-                            key: formValue.substring(0, feqIdx),
-                            value: formValue.substring(feqIdx + 1)
-                        });
-                    }
-                    continue;
-                }
-
-                // Basic auth
-                if (t === '-u' || t === '--user') {
-                    var cred = tokens[++i] || '';
-                    headers.push({
-                        key: 'Authorization',
-                        value: 'Basic ' + btoa(cred)
-                    });
-                    continue;
-                }
-
-                // URL
-                if (t === '--url') {
-                    url = tokens[++i] || '';
-                    continue;
-                }
-
-                // Skip common flags
-                if (['--compressed', '-k', '--insecure', '-s', '--silent',
-                     '-S', '-L', '--location', '-v', '--verbose'].includes(t)) {
-                    continue;
-                }
-
-                // Assume any non-flag token is the URL
-                if (t.charAt(0) !== '-' && !url) {
-                    url = t;
-                }
-            }
-
-            // Auto-detect method if body exists
-            if ((bodyData || formFields.length > 0) && method === 'GET') {
-                method = 'POST';
-            }
-
-            // Populate editor
-            methodSelect.value = method;
-            urlInput.value = url;
-            syncParamsFromUrl();
-
-            // Clear and populate headers
-            headersContainer.innerHTML = '';
-            headers.forEach(function(h) {
-                addHeaderRow(h.key, h.value);
-            });
-            if (!headersContainer.children.length) addHeaderRow();
-
-            // Handle body or form data
-            if (formFields.length > 0) {
-                // Form data
-                formDataRows.innerHTML = '';
-                formFields.forEach(function(f) {
-                    addFormDataRow(f.key, f.value);
-                });
-
-                var bodyType = isMultipart ? 'form-data' : 'form-urlencoded';
-                var radio = document.querySelector('input[name="bodyType"][value="' + bodyType + '"]');
-                if (radio) {
-                    radio.checked = true;
-                    bodyContent.style.display = 'none';
-                    formDataContainer.style.display = '';
-                }
-            } else if (bodyData) {
-                // Regular body
-                bodyContent.value = bodyData;
-
-                // Auto-detect content type
-                var detectedType = 'text';
-                try {
-                    JSON.parse(bodyData);
-                    detectedType = 'json';
-                } catch (e) {
-                    if (bodyData.startsWith('<?xml') || bodyData.startsWith('<')) {
-                        detectedType = 'xml';
-                    }
-                }
-
-                var bodyRadio = document.querySelector('input[name="bodyType"][value="' + detectedType + '"]');
-                if (bodyRadio) bodyRadio.checked = true;
-                bodyContent.style.display = '';
-                formDataContainer.style.display = 'none';
-            }
-
-            showToast('cURL command parsed successfully', 'success');
-
+            applyParsedImportToEditor(parseCurlFallback(cmd));
+            showToast('cURL command parsed locally', 'success');
         } catch (err) {
             console.error('cURL parse error:', err);
             showToast('Failed to parse cURL command', 'error');

@@ -21,6 +21,7 @@ def test_parse_curl_extracts_method_url_headers_and_json_body():
         ],
         "body_type": "json",
         "body_content": '{"name":"Ada"}',
+        "form_data": [],
     }
 
 
@@ -174,7 +175,7 @@ def test_parse_curl_accumulates_repeated_data_flags_with_ampersands():
     assert result["method"] == "POST"
     assert result["body_type"] == "form-urlencoded"
     assert result["body_content"] == "q=postboy&page=2&sort=created"
-    assert "form_data" not in result
+    assert result["form_data"] == []
 
 
 def test_parse_curl_accumulates_data_urlencode_as_structured_form_data():
