@@ -3189,7 +3189,7 @@ document.addEventListener('DOMContentLoaded', () => {
             '',
             'Browser execution is subject to browser security rules. The request may be blocked by CORS, forbidden/request-controlled headers, cookie or credentials policy, mixed-content rules, redirects, Private Network Access, or other browser restrictions.',
             '',
-            'Try switching the execution mode to Server proxy if you intentionally want PostBoy's server to make this request.'
+            "Try switching the execution mode to Server proxy if you intentionally want PostBoy's server to make this request."
         ].join('\n');
     }
 
