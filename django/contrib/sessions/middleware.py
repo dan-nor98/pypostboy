@@ -4,8 +4,6 @@ import base64
 import hashlib
 import hmac
 import json
-from http.cookies import SimpleCookie
-
 from django.conf import settings
 
 _COOKIE_SALT = b'django.contrib.sessions.middleware.SessionMiddleware'
@@ -59,24 +57,31 @@ def save_session(response, session):
     if not getattr(session, 'modified', False):
         return response
 
-    cookie = SimpleCookie()
     name = _session_cookie_name()
-    if session:
-        cookie[name] = _encode_session(session)
-    else:
-        cookie[name] = ''
-        cookie[name]['max-age'] = 0
-        cookie[name]['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT'
-
-    cookie[name]['path'] = getattr(settings, 'SESSION_COOKIE_PATH', '/')
-    cookie[name]['httponly'] = True
     samesite = _session_cookie_samesite()
-    if samesite:
-        cookie[name]['samesite'] = samesite
-    if getattr(settings, 'SESSION_COOKIE_SECURE', False):
-        cookie[name]['secure'] = True
+    path = getattr(settings, 'SESSION_COOKIE_PATH', '/')
+    secure = getattr(settings, 'SESSION_COOKIE_SECURE', False)
+    if session:
+        response.set_cookie(
+            name,
+            _encode_session(session),
+            path=path,
+            httponly=True,
+            samesite=samesite,
+            secure=secure,
+        )
+    else:
+        response.set_cookie(
+            name,
+            '',
+            max_age=0,
+            expires='Thu, 01 Jan 1970 00:00:00 GMT',
+            path=path,
+            httponly=True,
+            samesite=samesite,
+            secure=secure,
+        )
 
-    response.headers['Set-Cookie'] = cookie.output(header='').strip()
     return response
 
 

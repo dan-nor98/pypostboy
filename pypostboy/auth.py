@@ -6,6 +6,26 @@ from pypostboy.djangoapp.context import get_current_request
 
 USER_ID_HEADER_NAMES = ('HTTP_X_POSTBOY_USER_ID', 'HTTP_X_USER_ID')
 USER_ID_COOKIE_NAMES = ('postboy_user_id', 'user_id')
+INVALID_IDENTITY_COOKIES_ATTR = '_postboy_invalid_identity_cookies'
+
+
+def _mark_invalid_identity_cookies(request):
+    """Mark legacy identity cookies for deletion on the response."""
+    invalid_cookies = set(getattr(request, INVALID_IDENTITY_COOKIES_ATTR, ()))
+    invalid_cookies.update(USER_ID_COOKIE_NAMES)
+    setattr(request, INVALID_IDENTITY_COOKIES_ATTR, invalid_cookies)
+
+
+def legacy_identity_cookies_to_clear(request):
+    """Return legacy identity cookies that should be cleared from the response."""
+    return tuple(getattr(request, INVALID_IDENTITY_COOKIES_ATTR, ()))
+
+
+def clear_legacy_identity_cookies(response, cookie_names=USER_ID_COOKIE_NAMES):
+    """Expire legacy identity cookies that predate session-backed auth."""
+    for cookie_name in cookie_names:
+        response.delete_cookie(cookie_name)
+    return response
 
 
 class AuthenticationError(Exception):
@@ -29,23 +49,29 @@ def _user_from_id(user_id):
     ).fetchone()
 
 
-def _request_user_id(request):
-    """Resolve an explicitly supplied user ID from headers, session, or cookies."""
+def _request_identity(request):
+    """Resolve an explicitly supplied identity with its source metadata."""
+    value = request.session.get('user_id')
+    if value:
+        return 'session', 'user_id', value
+
     for header_name in USER_ID_HEADER_NAMES:
         value = request.META.get(header_name)
         if value:
-            return value
-
-    value = request.session.get('user_id')
-    if value:
-        return value
+            return 'header', header_name, value
 
     for cookie_name in USER_ID_COOKIE_NAMES:
         value = request.COOKIES.get(cookie_name)
         if value:
-            return value
+            return 'cookie', cookie_name, value
 
-    return None
+    return None, None, None
+
+
+def _request_user_id(request):
+    """Resolve an explicitly supplied user ID from session, headers, or cookies."""
+    _source, _name, value = _request_identity(request)
+    return value
 
 
 def get_current_user(request=None):
@@ -64,13 +90,19 @@ def get_current_user(request=None):
         cached = getattr(request, 'current_user', None)
         if cached is not None:
             return cached
-        explicit_user_id = _request_user_id(request)
+        identity_source, _identity_name, explicit_user_id = _request_identity(request)
 
     if explicit_user_id is None:
         explicit_user_id = ensure_default_local_user(_conn().cursor())
         _conn().commit()
 
     user = _user_from_id(explicit_user_id)
+    if user is None and request is not None and identity_source == 'cookie':
+        _mark_invalid_identity_cookies(request)
+        explicit_user_id = ensure_default_local_user(_conn().cursor())
+        _conn().commit()
+        user = _user_from_id(explicit_user_id)
+
     current_user = dict(user) if user else None
     if request is not None:
         request.current_user = current_user

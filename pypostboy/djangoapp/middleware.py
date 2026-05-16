@@ -1,6 +1,11 @@
 """Django middleware for request context, API auth, and shared headers."""
 
-from pypostboy.auth import AuthenticationError, get_current_user
+from pypostboy.auth import (
+    AuthenticationError,
+    clear_legacy_identity_cookies,
+    get_current_user,
+    legacy_identity_cookies_to_clear,
+)
 from pypostboy.djangoapp.context import reset_current_request, set_current_request
 from pypostboy.http.responses import error
 
@@ -26,6 +31,10 @@ class PostBoyMiddleware:
         finally:
             reset_current_request(token)
 
+        clear_legacy_identity_cookies(
+            response,
+            legacy_identity_cookies_to_clear(request),
+        )
         response.headers.pop('Content-Security-Policy', None)
         response.headers.pop('X-Content-Security-Policy', None)
         response.headers.pop('X-WebKit-CSP', None)
