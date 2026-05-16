@@ -142,3 +142,67 @@ def test_wsgi_browser_session_cookie_persists_login_for_collections(app, sqlite_
     assert persisted_collection['id'] == collection['id']
     assert persisted_collection['name'] == 'WSGI browser collection'
     assert persisted_collection['user_id'] == user_id
+
+
+def _set_cookie(client, name, value):
+    client._client.cookies[name] = value
+
+
+def _assert_deletes_legacy_identity_cookies(response):
+    for cookie_name in ("postboy_user_id", "user_id"):
+        assert cookie_name in response.cookies
+        assert response.cookies[cookie_name]["max-age"] == 0
+
+
+def test_invalid_user_id_cookie_continue_as_guest_clears_cookie(client):
+    _set_cookie(client, "user_id", "999999")
+
+    response = client.get("/api/auth/me")
+    current = assert_success(response)
+
+    assert current["username"] == "local_user"
+    assert current["is_guest"] is True
+    _assert_deletes_legacy_identity_cookies(response)
+
+
+def test_invalid_cookie_does_not_override_login(client):
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "cookie-login-user", "password": "password123"},
+        ),
+        201,
+    )
+    assert registered["username"] == "cookie-login-user"
+    assert_success(client.post("/api/auth/logout"))
+
+    _set_cookie(client, "user_id", "999999")
+    login_response = client.post(
+        "/api/auth/login",
+        json={"username": "cookie-login-user", "password": "password123"},
+    )
+    logged_in = assert_success(login_response)
+
+    assert logged_in["id"] == registered["id"]
+    assert logged_in["is_guest"] is False
+    _assert_deletes_legacy_identity_cookies(login_response)
+
+
+def test_stale_cookie_does_not_override_session_and_logout_clears_it(client, user_b):
+    session_user = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "session-user", "password": "password123"},
+        ),
+        201,
+    )
+    _set_cookie(client, "user_id", str(user_b["id"]))
+
+    current = assert_success(client.get("/api/auth/me"))
+    assert current["id"] == session_user["id"]
+
+    logout_response = client.post("/api/auth/logout")
+    current_after_logout = assert_success(logout_response)
+    assert current_after_logout["username"] == "local_user"
+    assert current_after_logout["is_guest"] is True
+    _assert_deletes_legacy_identity_cookies(logout_response)

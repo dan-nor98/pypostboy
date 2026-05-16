@@ -3,7 +3,11 @@
 from django.contrib.auth.hashers import check_password, make_password
 from django.views.decorators.csrf import csrf_exempt
 
-from pypostboy.auth import get_current_user
+from pypostboy.auth import (
+    USER_ID_COOKIE_NAMES,
+    clear_legacy_identity_cookies,
+    get_current_user,
+)
 from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
 from pypostboy.db.serializers import timestamp
@@ -57,7 +61,7 @@ def login(request):
     request.session['user_id'] = user['id']
     request.session.modified = True
     request.current_user = dict(user)
-    return ok(_public_user(user))
+    return clear_legacy_identity_cookies(ok(_public_user(user)))
 
 
 @csrf_exempt
@@ -93,7 +97,7 @@ def register(request):
     request.session['user_id'] = user['id']
     request.session.modified = True
     request.current_user = dict(user)
-    return created(_public_user(user))
+    return clear_legacy_identity_cookies(created(_public_user(user)))
 
 
 @csrf_exempt
@@ -101,6 +105,8 @@ def logout(request):
     """Clear the current browser session."""
     request.session.pop('user_id', None)
     request.session.modified = True
+    for cookie_name in USER_ID_COOKIE_NAMES:
+        request.COOKIES.pop(cookie_name, None)
     if hasattr(request, 'current_user'):
         delattr(request, 'current_user')
-    return ok(_public_user(get_current_user(request)))
+    return clear_legacy_identity_cookies(ok(_public_user(get_current_user(request))))

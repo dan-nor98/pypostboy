@@ -1,6 +1,7 @@
 """Minimal HTTP classes compatible with the subset PostBoy uses."""
 
 import json
+from http.cookies import SimpleCookie
 
 
 class Http404(Exception):
@@ -17,6 +18,7 @@ class HttpResponse:
         self.content = content
         self.status_code = status
         self.headers = {'Content-Type': content_type}
+        self.cookies = SimpleCookie()
         if headers:
             self.headers.update(headers)
 
@@ -25,6 +27,45 @@ class HttpResponse:
 
     def __getitem__(self, key):
         return self.headers[key]
+
+    def set_cookie(
+        self,
+        key,
+        value='',
+        max_age=None,
+        expires=None,
+        path='/',
+        domain=None,
+        secure=False,
+        httponly=False,
+        samesite=None,
+    ):
+        self.cookies[key] = value
+        if max_age is not None:
+            self.cookies[key]['max-age'] = max_age
+        if expires is not None:
+            self.cookies[key]['expires'] = expires
+        if path is not None:
+            self.cookies[key]['path'] = path
+        if domain is not None:
+            self.cookies[key]['domain'] = domain
+        if secure:
+            self.cookies[key]['secure'] = True
+        if httponly:
+            self.cookies[key]['httponly'] = True
+        if samesite:
+            self.cookies[key]['samesite'] = samesite
+
+    def delete_cookie(self, key, path='/', domain=None, samesite=None):
+        self.set_cookie(
+            key,
+            '',
+            max_age=0,
+            expires='Thu, 01 Jan 1970 00:00:00 GMT',
+            path=path,
+            domain=domain,
+            samesite=samesite,
+        )
 
 
 class JsonResponse(HttpResponse):

@@ -110,7 +110,12 @@ class WSGIApplication:
         )
         response = self.handle(request)
         status = f'{response.status_code} OK'
-        start_response(status, list(response.headers.items()))
+        headers = list(response.headers.items())
+        headers.extend(
+            ('Set-Cookie', morsel.OutputString())
+            for morsel in getattr(response, 'cookies', {}).values()
+        )
+        start_response(status, headers)
         return [response.content]
 
 
