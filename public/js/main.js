@@ -1,7 +1,7 @@
 import { getDomElements } from './dom.js';
 import { apiClient } from './api/client.js';
 import { clearLegacyGuestHistory, loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
-import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot } from './state/tabs.js';
+import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot, clearLegacyOpenTabsSnapshot } from './state/tabs.js';
 import { initTheme } from './state/theme.js';
 import { canUseWorkspace, continueAsGuest, initializeCurrentUser, isExplicitGuestSession, loginUser, logoutUser, registerUser, subscribeToUserState, userState, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
@@ -634,21 +634,18 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingSnapshotId = '';
         snapshotContextTargetId = '';
         contextTarget = null;
-        clearOpenTabsSnapshot();
+        clearLegacyOpenTabsSnapshot();
         openTabs = [];
         activeTabId = null;
         collectionList.innerHTML = '<p class="empty-state">Loading your collections…</p>';
         renderCollections([]);
         renderRequestTabs();
         renderInstancesBar([]);
-        openNewTab();
     }
 
     async function reloadUserScopedData() {
         clearUserScopedUiState();
-        await loadCollections();
-        renderRequestTabs();
-        persistOpenTabs(false);
+        await initializeRequestTabs();
     }
 
     async function ensureWorkspaceReady() {
@@ -720,6 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await waitForAuth();
         if (!canUseWorkspace(userState)) return;
         clearLegacyGuestHistory();
+        clearLegacyOpenTabsSnapshot();
         history = loadHistory(userState.currentUser);
         envVars = loadEnvVars(userState.currentUser);
         renderHistory();
@@ -863,7 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function restoreSavedTabs() {
-        var raw = loadOpenTabsSnapshot();
+        var raw = loadOpenTabsSnapshot(userState.currentUser);
         if (!raw) return false;
 
         try {
@@ -892,7 +890,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         } catch (err) {
             console.warn('Failed to restore saved tabs:', err);
-            clearOpenTabsSnapshot();
+            clearOpenTabsSnapshot(userState.currentUser);
             return false;
         }
     }
@@ -920,7 +918,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         state:        tab.state || getBlankState()
                     };
                 })
-            });
+            }, userState.currentUser);
         } catch (err) {
             console.warn('Failed to persist tabs:', err);
         }
