@@ -15,6 +15,16 @@ _LONG_CONSUME_VALUE_OPTIONS = {
     '--connect-timeout', '--max-time', '--output', '--user-agent', '--referer',
 }
 _SHORT_CONSUME_VALUE_OPTIONS = {'-o', '-A', '-e'}
+_DATA_OPTIONS = ('--data', '--data-raw', '--data-binary')
+
+
+class CurlParseError(ValueError):
+    """Raised when a cURL command cannot be safely imported."""
+
+    def __init__(self, message, errors=None, warnings=None):
+        super().__init__(message)
+        self.errors = errors or [_issue('invalid_curl', message)]
+        self.warnings = warnings or []
 
 
 def parse_curl_to_request(cmd):
@@ -29,6 +39,8 @@ def parse_curl_to_request(cmd):
     form_data = []
     has_form_data = False
     method_forced_by_option = False
+    errors = []
+    warnings = []
 
     tokens = _tokenize(cmd)
 
@@ -38,64 +50,87 @@ def parse_curl_to_request(cmd):
         if t == 'curl':
             i += 1
             continue
+        if t == '':
+            if not url:
+                errors.append(_issue('empty_url', 'The cURL command contains an empty URL.'))
+            i += 1
+            continue
 
         long_name, long_value, has_long_value = _split_long_option(t)
         short_name, short_value, has_short_value = _split_short_option(t)
 
         if long_name == '--request':
-            value, i = _option_value(tokens, i, long_value, has_long_value)
-            method = value.upper()
-            method_forced_by_option = True
+            value, i = _option_value(tokens, i, long_value, has_long_value, '--request', errors)
+            if value:
+                method = value.upper()
+                method_forced_by_option = True
         elif short_name == '-X':
-            value, i = _option_value(tokens, i, short_value, has_short_value)
-            method = value.upper()
-            method_forced_by_option = True
+            value, i = _option_value(tokens, i, short_value, has_short_value, '-X', errors)
+            if value:
+                method = value.upper()
+                method_forced_by_option = True
         elif long_name == '--url':
-            url, i = _option_value(tokens, i, long_value, has_long_value)
+            url, i = _option_value(
+                tokens, i, long_value, has_long_value, '--url', errors,
+                error_code='empty_url'
+            )
         elif long_name in ('--header',) or short_name == '-H':
+            option = long_name or short_name
             value, i = _option_value(
                 tokens, i, long_value or short_value,
-                has_long_value or has_short_value
+                has_long_value or has_short_value, option, errors,
+                error_code='missing_header_value'
             )
-            _add_header(headers, value)
+            if value:
+                _add_header(headers, value)
         elif long_name in ('--data-urlencode',):
-            value, i = _option_value(tokens, i, long_value, has_long_value)
-            body_parts.append(_encode_urlencoded_argument(value))
-            has_urlencoded_data = True
-            field = _form_field_from_assignment(value)
-            if field:
-                form_data.append(field)
-        elif long_name in ('--data', '--data-raw', '--data-binary') or short_name == '-d':
+            value, i = _option_value(tokens, i, long_value, has_long_value, '--data-urlencode', errors, error_code='missing_body_value')
+            if value:
+                body_parts.append(_encode_urlencoded_argument(value))
+                has_urlencoded_data = True
+                field = _form_field_from_assignment(value)
+                if field:
+                    form_data.append(field)
+        elif long_name in _DATA_OPTIONS or short_name == '-d':
+            option = long_name or short_name
             value, i = _option_value(
                 tokens, i, long_value or short_value,
-                has_long_value or has_short_value
+                has_long_value or has_short_value, option, errors,
+                error_code='missing_body_value'
             )
-            body_parts.append(value)
+            if value:
+                body_parts.append(value)
         elif long_name in _FORM_OPTIONS or short_name == '-F':
+            option = long_name or short_name
             value, i = _option_value(
                 tokens, i, long_value or short_value,
-                has_long_value or has_short_value
+                has_long_value or has_short_value, option, errors,
+                error_code='missing_form_value'
             )
-            has_form_data = True
-            field = _form_field_from_assignment(value)
-            if field:
-                form_data.append(field)
+            if value:
+                has_form_data = True
+                field = _form_field_from_assignment(value)
+                if field:
+                    form_data.append(field)
         elif long_name == '--user' or short_name == '-u':
+            option = long_name or short_name
             value, i = _option_value(
                 tokens, i, long_value or short_value,
-                has_long_value or has_short_value
+                has_long_value or has_short_value, option, errors
             )
-            encoded = base64.b64encode(value.encode()).decode()
-            headers.append({
-                'key': 'Authorization',
-                'value': f'Basic {encoded}'
-            })
+            if value:
+                encoded = base64.b64encode(value.encode()).decode()
+                headers.append({
+                    'key': 'Authorization',
+                    'value': f'Basic {encoded}'
+                })
         elif long_name == '--cookie' or short_name == '-b':
+            option = long_name or short_name
             value, i = _option_value(
                 tokens, i, long_value or short_value,
-                has_long_value or has_short_value
+                has_long_value or has_short_value, option, errors
             )
-            if _is_inline_cookie(value):
+            if value and _is_inline_cookie(value):
                 _add_cookie_header(headers, value)
         elif t in ('-I', '--head'):
             method = 'HEAD'
@@ -104,15 +139,29 @@ def parse_curl_to_request(cmd):
             method = 'GET'
             method_forced_by_option = True
         elif long_name in _LONG_CONSUME_VALUE_OPTIONS:
-            _, i = _option_value(tokens, i, long_value, has_long_value)
+            _, i = _option_value(tokens, i, long_value, has_long_value, long_name, errors)
         elif short_name in _SHORT_CONSUME_VALUE_OPTIONS:
-            _, i = _option_value(tokens, i, short_value, has_short_value)
+            _, i = _option_value(tokens, i, short_value, has_short_value, short_name, errors)
         elif t in _FLAG_OPTIONS:
             pass
         elif t[0] != '-' and not url:
             url = t
+        elif t[0] == '-':
+            warnings.append(_issue(
+                'unsupported_option',
+                f'Unsupported cURL option {t} was ignored. Import accuracy may be limited.',
+                option=t
+            ))
 
         i += 1
+
+    if not url and not _has_issue(errors, 'empty_url'):
+        errors.append(_issue('missing_url', 'The cURL command must include a URL before it can be imported.'))
+    elif url and not str(url).strip():
+        errors.append(_issue('empty_url', 'The cURL command contains an empty URL.'))
+
+    if errors:
+        raise CurlParseError('Unable to import cURL command.', errors=errors, warnings=warnings)
 
     has_body = bool(body_parts or has_form_data)
     if has_body and method == 'GET' and not method_forced_by_option:
@@ -121,7 +170,7 @@ def parse_curl_to_request(cmd):
     body_content = _build_body_content(body_parts, has_form_data)
     body_type = _infer_body_type(body_content, headers, has_urlencoded_data, has_form_data)
 
-    return {
+    result = {
         'method': method,
         'url': url,
         'headers': headers,
@@ -129,11 +178,27 @@ def parse_curl_to_request(cmd):
         'body_content': body_content,
         'form_data': form_data
     }
+    if warnings:
+        result['warnings'] = warnings
+    return result
+
+
+def _issue(code, message, option=None):
+    """Return a structured parser issue."""
+    issue = {'code': code, 'message': message}
+    if option:
+        issue['option'] = option
+    return issue
 
 
 def _normalize_line_continuations(cmd):
     """Replace shell line continuations with spaces before tokenizing."""
-    return re.sub(r'\\\r?\n', ' ', cmd)
+    return re.sub(r'\\\r?\n', ' ', cmd or '')
+
+
+def _has_issue(errors, code):
+    """Return whether an issue with the given code already exists."""
+    return any(error.get('code') == code for error in errors)
 
 
 def _tokenize(cmd):
@@ -142,7 +207,7 @@ def _tokenize(cmd):
         return shlex.split(cmd)
     except ValueError as err:
         message = f'Invalid cURL command: unable to parse quoted arguments ({err}).'
-        raise ValueError(message) from err
+        raise CurlParseError(message, errors=[_issue('invalid_quoting', message)]) from err
 
 
 def _split_long_option(token):
@@ -165,12 +230,23 @@ def _split_short_option(token):
     return token, '', False
 
 
-def _option_value(tokens, index, inline_value, has_inline_value):
+def _option_value(tokens, index, inline_value, has_inline_value, option, errors, error_code='missing_option_value'):
     """Return the value for an option and the index it consumed through."""
     if has_inline_value:
+        if inline_value == '':
+            errors.append(_issue(error_code, f'The {option} option requires a value.', option=option))
         return inline_value, index
+
     next_index = index + 1
-    return (tokens[next_index] if next_index < len(tokens) else ''), next_index
+    if next_index >= len(tokens) or tokens[next_index] == '' or _looks_like_option(tokens[next_index]):
+        errors.append(_issue(error_code, f'The {option} option requires a value.', option=option))
+        return '', index
+    return tokens[next_index], next_index
+
+
+def _looks_like_option(token):
+    """Return whether a token appears to start the next cURL option."""
+    return bool(token and token.startswith('-'))
 
 
 def _build_body_content(body_parts, has_form_data):

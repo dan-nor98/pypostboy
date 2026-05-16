@@ -3445,7 +3445,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedFileName.textContent = '';
         importProgress.style.display = 'none';
         // Remove any error/success messages
-        var errors = importModal.querySelectorAll('.import-errors, .import-success');
+        var errors = importModal.querySelectorAll('.import-errors, .import-success, .import-warnings');
         errors.forEach(function(el) { el.remove(); });
     }
 
@@ -3552,7 +3552,7 @@ document.addEventListener('DOMContentLoaded', () => {
         importConfirmBtn.disabled = true;
 
         // Remove previous messages
-        var prevMessages = importModal.querySelectorAll('.import-errors, .import-success');
+        var prevMessages = importModal.querySelectorAll('.import-errors, .import-success, .import-warnings');
         prevMessages.forEach(function(el) { el.remove(); });
 
         try {
@@ -3584,15 +3584,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     var parsed = await apiClient.importData({ type: 'curl', data: raw });
                     applyParsedImportToEditor(parsed);
 
-                    showToast('cURL imported into editor', 'success');
-                    importModal.classList.remove('active');
-                    resetImportModal();
+                    if (parsed.warnings && parsed.warnings.length) {
+                        showImportWarning(parsed.warnings);
+                        showImportSuccess('cURL imported into editor. Review the warning details before continuing.');
+                    } else {
+                        showToast('cURL imported into editor', 'success');
+                        importModal.classList.remove('active');
+                        resetImportModal();
+                    }
                 } catch (e) {
-                    // Fallback: parse locally
+                    if (hasStructuredImportErrors(e)) {
+                        showImportError(getImportErrorMessages(e));
+                        return;
+                    }
+
+                    // Fallback: parse locally when the server parser is unavailable.
                     console.warn('Server cURL parse failed, using local parser:', e);
-                    importCurlLocal(raw);
-                    importModal.classList.remove('active');
-                    resetImportModal();
+                    importCurlLocal(raw, { showModalWarning: true });
                 }
             } else {
                 showImportError('Unrecognized format. Please paste a valid Postman JSON collection or cURL command.');
@@ -3607,10 +3615,43 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function showImportError(message) {
+        var messages = Array.isArray(message) ? message : [message];
         var errorDiv = document.createElement('div');
         errorDiv.className = 'import-errors';
-        errorDiv.innerHTML = '<h4>⚠️ Import Error</h4><p>' + escHtml(message) + '</p>';
+        errorDiv.innerHTML = '<h4>⚠️ Import Error</h4>' + formatImportMessages(messages);
         importConfirmBtn.parentNode.insertBefore(errorDiv, importConfirmBtn);
+    }
+
+    function showImportWarning(message) {
+        var messages = Array.isArray(message) ? message : [message];
+        var warningDiv = document.createElement('div');
+        warningDiv.className = 'import-warnings';
+        warningDiv.innerHTML = '<h4>⚠️ Import Warning</h4>' + formatImportMessages(messages);
+        importConfirmBtn.parentNode.insertBefore(warningDiv, importConfirmBtn);
+    }
+
+    function formatImportMessages(messages) {
+        if (messages.length > 1) {
+            return '<ul>' + messages.map(function(message) {
+                return '<li>' + escHtml(importIssueMessage(message)) + '</li>';
+            }).join('') + '</ul>';
+        }
+        return '<p>' + escHtml(importIssueMessage(messages[0])) + '</p>';
+    }
+
+    function importIssueMessage(issue) {
+        if (!issue) return 'Import failed';
+        if (typeof issue === 'string') return issue;
+        return issue.message || issue.error || 'Import failed';
+    }
+
+    function hasStructuredImportErrors(err) {
+        return !!(err && err.payload && Array.isArray(err.payload.errors) && err.payload.errors.length);
+    }
+
+    function getImportErrorMessages(err) {
+        if (hasStructuredImportErrors(err)) return err.payload.errors;
+        return [(err && err.message) || 'Import failed'];
     }
 
     function showImportSuccess(message) {
@@ -3624,19 +3665,38 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             var parsed = await apiClient.importData({ type: 'curl', data: cmd });
             applyParsedImportToEditor(parsed);
-            showToast('cURL command parsed successfully', 'success');
+            if (parsed.warnings && parsed.warnings.length) {
+                showToast(importIssueMessage(parsed.warnings[0]), 'warning');
+            } else {
+                showToast('cURL command parsed successfully', 'success');
+            }
         } catch (e) {
+            if (hasStructuredImportErrors(e)) {
+                showToast(importIssueMessage(e.payload.errors[0]), 'error');
+                return;
+            }
             console.warn('Server cURL parse failed, using local parser:', e);
-            importCurlLocal(cmd);
+            importCurlLocal(cmd, { showToastWarning: true });
         }
     }
 
-    function importCurlLocal(cmd) {
+    function importCurlLocal(cmd, options) {
+        options = options || {};
         try {
-            applyParsedImportToEditor(parseCurlFallback(cmd));
-            showToast('cURL command parsed locally', 'success');
+            var parsed = parseCurlFallback(cmd);
+            if (!parsed.url || !String(parsed.url).trim()) {
+                throw new Error('The cURL command must include a URL before it can be imported.');
+            }
+            applyParsedImportToEditor(parsed);
+            var warning = 'Using the local fallback cURL parser. Import accuracy may be limited.';
+            if (options.showModalWarning) {
+                showImportWarning(warning);
+                showImportSuccess('cURL imported into editor. Review the warning details before continuing.');
+            }
+            showToast(options.showToastWarning ? warning : 'cURL command parsed locally', options.showToastWarning ? 'warning' : 'success');
         } catch (err) {
             console.error('cURL parse error:', err);
+            if (options.showModalWarning) showImportError(err.message || 'Failed to parse cURL command');
             showToast('Failed to parse cURL command', 'error');
         }
     }

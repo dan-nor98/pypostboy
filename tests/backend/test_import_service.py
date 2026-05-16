@@ -154,3 +154,22 @@ def test_import_route_curl_form_data_response_shape_documents_editor_contract(cl
             {"key": "avatar", "value": "@/tmp/a.png"},
         ],
     }
+
+
+def test_import_route_returns_structured_curl_errors(client):
+    response = client.post(
+        "/api/import",
+        json={"type": "curl", "data": "curl https://api.example.test --data-raw"},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["errors"] == [
+        {
+            "code": "missing_body_value",
+            "message": "The --data-raw option requires a value.",
+            "option": "--data-raw",
+        }
+    ]
+    assert payload["warnings"] == []

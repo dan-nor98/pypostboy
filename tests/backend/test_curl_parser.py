@@ -243,3 +243,66 @@ def test_parse_curl_parses_mixed_form_fields_as_form_data():
         {"key": "name", "value": "Ada"},
         {"key": "avatar", "value": "@/tmp/a.png"},
     ]
+
+
+def test_parse_curl_raises_structured_error_for_missing_url():
+    with pytest.raises(ValueError) as exc_info:
+        parse_curl_to_request("curl -H 'Accept: application/json'")
+
+    err = exc_info.value
+    assert err.errors == [
+        {
+            "code": "missing_url",
+            "message": "The cURL command must include a URL before it can be imported.",
+        }
+    ]
+
+
+def test_parse_curl_raises_structured_error_for_missing_header_value():
+    with pytest.raises(ValueError) as exc_info:
+        parse_curl_to_request("curl https://api.example.test -H")
+
+    err = exc_info.value
+    assert err.errors == [
+        {
+            "code": "missing_header_value",
+            "message": "The -H option requires a value.",
+            "option": "-H",
+        }
+    ]
+
+
+def test_parse_curl_raises_structured_error_for_missing_body_value():
+    with pytest.raises(ValueError) as exc_info:
+        parse_curl_to_request("curl https://api.example.test --data-raw")
+
+    err = exc_info.value
+    assert err.errors == [
+        {
+            "code": "missing_body_value",
+            "message": "The --data-raw option requires a value.",
+            "option": "--data-raw",
+        }
+    ]
+
+
+def test_parse_curl_raises_structured_error_for_malformed_command():
+    with pytest.raises(ValueError) as exc_info:
+        parse_curl_to_request("curl 'https://api.example.test")
+
+    err = exc_info.value
+    assert err.errors[0]["code"] == "invalid_quoting"
+    assert "unable to parse quoted arguments" in err.errors[0]["message"]
+
+
+def test_parse_curl_returns_structured_warning_for_unsupported_option():
+    result = parse_curl_to_request("curl --http2 https://api.example.test")
+
+    assert result["url"] == "https://api.example.test"
+    assert result["warnings"] == [
+        {
+            "code": "unsupported_option",
+            "message": "Unsupported cURL option --http2 was ignored. Import accuracy may be limited.",
+            "option": "--http2",
+        }
+    ]
