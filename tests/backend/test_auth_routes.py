@@ -165,6 +165,18 @@ def test_invalid_user_id_cookie_continue_as_guest_clears_cookie(client):
     _assert_deletes_legacy_identity_cookies(response)
 
 
+def test_valid_legacy_user_id_cookie_is_ignored_and_cleared(client, user_b):
+    _set_cookie(client, "user_id", str(user_b["id"]))
+
+    response = client.get("/api/auth/me")
+    current = assert_success(response)
+
+    assert current["username"] == "local_user"
+    assert current["is_guest"] is True
+    assert current["id"] != user_b["id"]
+    _assert_deletes_legacy_identity_cookies(response)
+
+
 def test_invalid_cookie_does_not_override_login(client):
     registered = assert_success(
         client.post(

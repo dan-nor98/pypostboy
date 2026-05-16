@@ -17,6 +17,14 @@ def _int_from_env(name, default):
         return default
 
 
+def _bool_from_env(name, default=False):
+    """Read a boolean environment variable with common truthy values."""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 class BaseConfig:
     """Shared defaults for all PostBoy environments."""
 
@@ -31,6 +39,7 @@ class BaseConfig:
     )
     SECRET_KEY = os.environ.get('POSTBOY_SECRET_KEY', 'postboy-dev-secret-key')
     SESSION_COOKIE_SAMESITE = 'Lax'
+    POSTBOY_ALLOW_USER_ID_HEADER = _bool_from_env('POSTBOY_ALLOW_USER_ID_HEADER', False)
     TESTING = False
 
 

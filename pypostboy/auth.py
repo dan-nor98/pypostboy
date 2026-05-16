@@ -1,5 +1,7 @@
 """Authentication helpers for resolving the current PostBoy user."""
 
+from django.conf import settings
+
 from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.djangoapp.context import get_current_request
@@ -49,21 +51,33 @@ def _user_from_id(user_id):
     ).fetchone()
 
 
+def _allow_user_id_header():
+    """Return whether unsigned test/development user-id headers are enabled."""
+    return bool(getattr(settings, 'POSTBOY_ALLOW_USER_ID_HEADER', False))
+
+
 def _request_identity(request):
-    """Resolve an explicitly supplied identity with its source metadata."""
+    """Resolve an explicitly supplied identity with its source metadata.
+
+    Browser identities are accepted only from Django's signed-cookie session.
+    Legacy unsigned user-id headers are disabled by default and are available
+    only when a test/development configuration explicitly opts in. Legacy
+    unsigned identity cookies are never accepted and are marked for deletion.
+    """
     value = request.session.get('user_id')
     if value:
         return 'session', 'user_id', value
 
-    for header_name in USER_ID_HEADER_NAMES:
-        value = request.META.get(header_name)
-        if value:
-            return 'header', header_name, value
+    if _allow_user_id_header():
+        for header_name in USER_ID_HEADER_NAMES:
+            value = request.META.get(header_name)
+            if value:
+                return 'header', header_name, value
 
     for cookie_name in USER_ID_COOKIE_NAMES:
-        value = request.COOKIES.get(cookie_name)
-        if value:
-            return 'cookie', cookie_name, value
+        if request.COOKIES.get(cookie_name):
+            _mark_invalid_identity_cookies(request)
+            break
 
     return None, None, None
 
@@ -77,10 +91,11 @@ def _request_user_id(request):
 def get_current_user(request=None):
     """Return the current user from request state, falling back to local user.
 
-    API clients can identify a user through ``X-Postboy-User-Id``/``X-User-Id``,
-    Django signed-cookie session ``user_id``, or ``postboy_user_id``/``user_id``
-    cookies. When no explicit identity is supplied, the default local user is
-    returned to keep single-user/local installations and legacy tests working.
+    Browser clients identify a user through Django's signed-cookie session
+    ``user_id``. Unsigned user-id headers are accepted only when explicitly
+    enabled for tests/development, and legacy unsigned identity cookies are
+    ignored and cleared. When no trusted identity is supplied, the default local
+    user is returned to keep single-user/local installations working.
     """
     request = request or get_current_request()
     if request is None:

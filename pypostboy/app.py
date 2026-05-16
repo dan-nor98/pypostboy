@@ -123,6 +123,12 @@ def _apply_django_settings(config_dict):
     settings.SESSION_COOKIE_SAMESITE = config_dict.get(
         'SESSION_COOKIE_SAMESITE', getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax')
     )
+    settings.POSTBOY_ALLOW_USER_ID_HEADER = bool(
+        config_dict.get(
+            'POSTBOY_ALLOW_USER_ID_HEADER',
+            getattr(settings, 'POSTBOY_ALLOW_USER_ID_HEADER', False),
+        )
+    )
 
 
 def create_app(config=None):

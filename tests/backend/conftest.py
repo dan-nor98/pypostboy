@@ -77,6 +77,7 @@ def app(sqlite_connection):
             "TESTING": True,
             "DATABASE": sqlite_connection,
             "WTF_CSRF_ENABLED": False,
+            "POSTBOY_ALLOW_USER_ID_HEADER": True,
         }
     )
 

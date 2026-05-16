@@ -97,3 +97,49 @@ def test_request_instances_scope_to_current_user(
         404,
         "Request instance not found",
     )
+
+
+def test_unsigned_user_id_header_is_ignored_by_default(
+    client, monkeypatch, collection, request_record, user_b
+):
+    """A forged user-id header cannot switch identity when the dev/test opt-in is off."""
+    from django.conf import settings
+
+    monkeypatch.setattr(settings, "POSTBOY_ALLOW_USER_ID_HEADER", False)
+    forged_headers = {"X-Postboy-User-Id": str(user_b["id"])}
+
+    collections = assert_success(client.get("/api/collections", headers=forged_headers))
+    assert collections == []
+    assert_error(
+        client.get(f"/api/collections/{collection['id']}", headers=forged_headers),
+        404,
+        "Collection not found",
+    )
+    assert_error(
+        client.get(f"/api/requests/{request_record['id']}", headers=forged_headers),
+        404,
+        "Request not found",
+    )
+
+
+def test_session_identity_wins_over_forged_user_id_header(client, collection, user_b):
+    """Signed session identity is used for browsers even with a forged user-id header."""
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "signed-session-user", "password": "password123"},
+        ),
+        201,
+    )
+    own_collection = assert_success(
+        client.post("/api/collections", json={"name": "Signed session collection"}),
+        201,
+    )
+    forged_headers = {"X-Postboy-User-Id": str(user_b["id"])}
+
+    current = assert_success(client.get("/api/auth/me", headers=forged_headers))
+    assert current["id"] == registered["id"]
+
+    collections = assert_success(client.get("/api/collections", headers=forged_headers))
+    assert [item["id"] for item in collections] == [own_collection["id"]]
+    assert collection["id"] not in [item["id"] for item in collections]
