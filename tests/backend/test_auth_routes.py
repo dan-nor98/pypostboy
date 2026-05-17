@@ -223,3 +223,22 @@ def test_stale_cookie_does_not_override_session_and_logout_clears_it(client, use
     assert current_after_logout["username"] == "local_user"
     assert current_after_logout["is_guest"] is True
     _assert_deletes_legacy_identity_cookies(logout_response)
+
+
+def test_registration_conflict_query_omits_nullable_email_parameter_when_absent():
+    """PostgreSQL cannot infer a standalone NULL parameter in IS NOT NULL."""
+    from pypostboy.routes.auth import _registration_conflict_query
+
+    sql, params = _registration_conflict_query("new-user", None)
+
+    assert sql == "SELECT id FROM users WHERE username = ?"
+    assert params == ("new-user",)
+
+
+def test_registration_conflict_query_checks_email_when_provided():
+    from pypostboy.routes.auth import _registration_conflict_query
+
+    sql, params = _registration_conflict_query("new-user", "new-user@example.test")
+
+    assert sql == "SELECT id FROM users WHERE username = ? OR email = ?"
+    assert params == ("new-user", "new-user@example.test")
