@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bodyContent, prettifyJsonBtn, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
         importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
-        copyExportBtn, copyResponseBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
+        copyExportBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
         responseResizeHandle, loginScreen, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
@@ -174,6 +174,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (responseSheetHandle) responseSheetHandle.addEventListener('click', toggleResponseSheet);
         if (responseSheetToggle) responseSheetToggle.addEventListener('click', toggleResponseSheet);
         setResponseSheetState(responseSection && responseSection.classList.contains('is-open') ? 'open' : 'collapsed');
+    }
+
+
+    // ─── Response Viewer Fullscreen ───────────────────────
+    function setResponseFullscreen(isFullscreen) {
+        if (!responseSection || !responseFullscreenBtn) return;
+
+        responseSection.classList.toggle('is-fullscreen', isFullscreen);
+        document.body.classList.toggle('response-viewer-fullscreen-active', isFullscreen);
+        responseFullscreenBtn.setAttribute('aria-pressed', isFullscreen ? 'true' : 'false');
+        responseFullscreenBtn.textContent = isFullscreen ? '↙ Exit Fullscreen' : '⛶ Fullscreen';
+        responseFullscreenBtn.setAttribute('title', isFullscreen ? 'Exit response fullscreen' : 'Expand response viewer');
+    }
+
+    function toggleResponseFullscreen() {
+        if (!responseSection) return;
+        setResponseFullscreen(!responseSection.classList.contains('is-fullscreen'));
+    }
+
+    function initResponseFullscreenControl() {
+        if (!responseFullscreenBtn || !responseSection) return;
+
+        responseFullscreenBtn.addEventListener('click', toggleResponseFullscreen);
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && responseSection.classList.contains('is-fullscreen')) {
+                setResponseFullscreen(false);
+                responseFullscreenBtn.focus();
+            }
+        });
+        setResponseFullscreen(false);
     }
 
     // ─── Panel Resizing ───────────────────────────────────
@@ -424,6 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ─── Init ──────────────────────────────────────────────
     initTheme(themeToggleBtn);
     initResponseSheetControls();
+    initResponseFullscreenControl();
     initPanelResizing();
     renderHistory();
     renderEnvVars();

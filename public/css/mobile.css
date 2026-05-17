@@ -417,3 +417,42 @@
     max-height: 42vh;
   }
 }
+
+@media (max-width: 1024px) {
+  .response-section.is-fullscreen {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: max(8px, env(safe-area-inset-left));
+    width: auto;
+    height: auto !important;
+    max-height: none;
+    min-height: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 12px;
+    transform: none;
+    z-index: 1000;
+  }
+
+  .response-section.is-fullscreen .response-sheet-handle {
+    display: none;
+  }
+
+  .response-section.is-fullscreen.is-open,
+  .response-section.is-fullscreen.is-collapsed,
+  .response-section.is-fullscreen.is-closed {
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .response-section.is-fullscreen .response-meta .btn-copy-response {
+    flex: 1 1 auto;
+  }
+
+  .response-section.is-fullscreen #responseBody,
+  .response-section.is-fullscreen #responseHeaders {
+    max-height: none;
+  }
+}
