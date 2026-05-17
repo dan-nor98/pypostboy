@@ -7,6 +7,23 @@ DEFAULT_DATABASE_PATH = os.path.abspath(
     os.path.join(BASE_DIR, 'postboy-data.db')
 )
 DEFAULT_STATIC_FOLDER = os.path.join(BASE_DIR, 'public')
+DEFAULT_DATABASE_URL = os.environ.get('POSTBOY_DATABASE_URL')
+
+
+def get_database_backend(database_url=None, explicit_backend=None):
+    """Return the configured database backend while defaulting to SQLite."""
+    backend = (
+        explicit_backend or os.environ.get('POSTBOY_DB_BACKEND') or ''
+    ).strip().lower()
+    if backend in {'postgres', 'postgresql'}:
+        return 'postgresql'
+    if backend == 'sqlite':
+        return 'sqlite'
+
+    url = database_url or os.environ.get('POSTBOY_DATABASE_URL') or ''
+    if url.startswith(('postgres://', 'postgresql://')):
+        return 'postgresql'
+    return 'sqlite'
 
 
 def _int_from_env(name, default):
@@ -31,6 +48,8 @@ class BaseConfig:
     DATABASE_PATH = os.path.abspath(
         os.environ.get('POSTBOY_DB_PATH', DEFAULT_DATABASE_PATH)
     )
+    DATABASE_URL = DEFAULT_DATABASE_URL
+    DB_BACKEND = get_database_backend(DATABASE_URL)
     DEBUG = False
     MAX_CONTENT_LENGTH = _int_from_env('POSTBOY_MAX_CONTENT_LENGTH', 10 * 1024 * 1024)
     PROXY_TIMEOUT = _int_from_env('POSTBOY_PROXY_TIMEOUT', 30)
