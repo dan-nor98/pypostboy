@@ -86,3 +86,38 @@
 .syntax-header-value { color: var(--color-success); }
 .syntax-keyword      { color: var(--color-warning); }
 .syntax-url          { color: var(--color-purple); }
+
+/* ===== RESPONSE VIEWER FULLSCREEN ===== */
+body.response-viewer-fullscreen-active {
+  overflow: hidden;
+}
+
+.response-section.is-fullscreen {
+  position: fixed;
+  inset: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  z-index: 1000;
+  width: auto;
+  height: auto !important;
+  max-height: none;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: 0 24px 80px var(--color-shadow-strong);
+  transform: none;
+}
+
+.response-section.is-fullscreen .response-header,
+.response-section.is-fullscreen .response-tabs {
+  flex: 0 0 auto;
+}
+
+.response-section.is-fullscreen .response-tab-content.active {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.response-section.is-fullscreen .response-code-viewer,
+.response-section.is-fullscreen #responseHeaders {
+  height: 100%;
+  max-height: none;
+}
