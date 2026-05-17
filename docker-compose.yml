@@ -13,7 +13,9 @@ services:
       - "${PORT:-3001}:${PORT:-3001}"
 
   db:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
     environment:
       POSTGRES_DB: postboy
       POSTGRES_USER: postboy
