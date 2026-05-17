@@ -46,6 +46,13 @@ def current_user(request):
     return ok(_public_user(get_current_user(request)))
 
 
+def _registration_conflict_query(username, email):
+    """Return SQL and params for detecting conflicting register identities."""
+    if email is None:
+        return "SELECT id FROM users WHERE username = ?", (username,)
+    return "SELECT id FROM users WHERE username = ? OR email = ?", (username, email)
+
+
 @csrf_exempt
 def login(request):
     """Start a session for a username/password user."""
@@ -91,11 +98,8 @@ def register(request):
         return error("Password must be at least 8 characters", 400)
 
     conn = get_connection()
-    existing = db_execute(
-        conn,
-        "SELECT id FROM users WHERE username = ? OR (? IS NOT NULL AND email = ?)",
-        (username, email, email),
-    ).fetchone()
+    conflict_sql, conflict_params = _registration_conflict_query(username, email)
+    existing = db_execute(conn, conflict_sql, conflict_params).fetchone()
     if existing:
         return error("Username or email already exists", 409)
 

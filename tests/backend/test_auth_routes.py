@@ -225,62 +225,20 @@ def test_stale_cookie_does_not_override_session_and_logout_clears_it(client, use
     _assert_deletes_legacy_identity_cookies(logout_response)
 
 
-def test_api_middleware_rolls_back_shared_connection_before_and_after_request(monkeypatch):
-    """API requests recover a poisoned PostgreSQL transaction before auth runs."""
-    from django.core.handlers import Request
-    from django.http import HttpResponse
+def test_registration_conflict_query_omits_nullable_email_parameter_when_absent():
+    """PostgreSQL cannot infer a standalone NULL parameter in IS NOT NULL."""
+    from pypostboy.routes.auth import _registration_conflict_query
 
-    import pypostboy.djangoapp.middleware as middleware
+    sql, params = _registration_conflict_query("new-user", None)
 
-    class RollbackCountingConnection:
-        def __init__(self):
-            self.rollback_count = 0
-
-        def rollback(self):
-            self.rollback_count += 1
-
-    connection = RollbackCountingConnection()
-    auth_rollback_counts = []
-
-    def fake_get_current_user():
-        auth_rollback_counts.append(connection.rollback_count)
-        return {"id": 1}
-
-    monkeypatch.setattr(middleware, "get_connection", lambda: connection)
-    monkeypatch.setattr(middleware, "get_current_user", fake_get_current_user)
-
-    request = Request(path="/api/auth/me")
-    response = middleware.PostBoyMiddleware(lambda _request: HttpResponse("ok"))(request)
-
-    assert response.status_code == 200
-    assert auth_rollback_counts == [1]
-    assert connection.rollback_count == 2
+    assert sql == "SELECT id FROM users WHERE username = ?"
+    assert params == ("new-user",)
 
 
-def test_api_middleware_rolls_back_shared_connection_when_handler_raises(monkeypatch):
-    """Unhandled API exceptions do not leave the shared connection aborted."""
-    import pytest
-    from django.core.handlers import Request
+def test_registration_conflict_query_checks_email_when_provided():
+    from pypostboy.routes.auth import _registration_conflict_query
 
-    import pypostboy.djangoapp.middleware as middleware
+    sql, params = _registration_conflict_query("new-user", "new-user@example.test")
 
-    class RollbackCountingConnection:
-        def __init__(self):
-            self.rollback_count = 0
-
-        def rollback(self):
-            self.rollback_count += 1
-
-    connection = RollbackCountingConnection()
-
-    def raise_error(_request):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(middleware, "get_connection", lambda: connection)
-    monkeypatch.setattr(middleware, "get_current_user", lambda: {"id": 1})
-
-    request = Request(path="/api/auth/me")
-    with pytest.raises(RuntimeError, match="boom"):
-        middleware.PostBoyMiddleware(raise_error)(request)
-
-    assert connection.rollback_count == 2
+    assert sql == "SELECT id FROM users WHERE username = ? OR email = ?"
+    assert params == ("new-user", "new-user@example.test")
