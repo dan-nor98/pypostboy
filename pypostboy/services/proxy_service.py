@@ -1,13 +1,18 @@
 """Outbound HTTP proxy service."""
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 import requests as http_requests
 from django.conf import settings
 
 from pypostboy.config import BaseConfig
+
+
+logger = logging.getLogger(__name__)
 
 
 HOP_BY_HOP_HEADERS = {
@@ -64,6 +69,15 @@ class ProxyConnectionError(ProxyError):
     status_text = 'Connection Error'
 
 
+def _safe_url_parts(url):
+    """Return non-secret URL parts for outbound request logging."""
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return '', ''
+    return parsed.hostname or '', parsed.path or '/'
+
+
 def get_proxy_timeout():
     """Return the configured outbound proxy timeout."""
     if not settings.configured:
@@ -83,11 +97,16 @@ def proxy_http_request(body):
         raise ValueError('URL is required')
 
     fetch_headers = {}
+    skipped_headers_count = 0
     if isinstance(headers, dict):
         for k, v in headers.items():
             header_name = str(k).strip() if k else ''
-            if header_name and v and header_name.lower() not in REQUEST_CONTROLLED_HEADERS:
-                fetch_headers[header_name] = v
+            if not header_name or not v:
+                continue
+            if header_name.lower() in REQUEST_CONTROLLED_HEADERS:
+                skipped_headers_count += 1
+                continue
+            fetch_headers[header_name] = v
 
     # Do not forward client-provided compression preferences. If an imported
     # cURL/browser request includes ``Accept-Encoding: gzip, deflate, br, zstd``,
@@ -97,7 +116,8 @@ def proxy_http_request(body):
 
     is_multipart_form_data = _is_multipart_form_data(content_type)
     if is_multipart_form_data:
-        _remove_header(fetch_headers, 'content-type')
+        if _remove_header(fetch_headers, 'content-type'):
+            skipped_headers_count += 1
     elif req_body and method not in ('GET', 'HEAD') and content_type:
         fetch_headers['Content-Type'] = content_type
 
@@ -110,6 +130,15 @@ def proxy_http_request(body):
 
     start_time = datetime.now(timezone.utc)
     proxy_timeout = get_proxy_timeout()
+    url_hostname, url_path = _safe_url_parts(url)
+
+    logger.info(
+        'Proxy outbound request started: method=%s host=%s path=%s skipped_headers_count=%s',
+        method,
+        url_hostname,
+        url_path,
+        skipped_headers_count,
+    )
 
     try:
         response = http_requests.request(
@@ -122,16 +151,53 @@ def proxy_http_request(body):
             timeout=proxy_timeout
         )
     except http_requests.exceptions.Timeout as err:
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        logger.warning(
+            'Proxy outbound request timed out: method=%s host=%s path=%s elapsed_ms=%s timeout=%s skipped_headers_count=%s',
+            method,
+            url_hostname,
+            url_path,
+            int(elapsed),
+            proxy_timeout,
+            skipped_headers_count,
+        )
         raise ProxyTimeoutError(proxy_timeout) from err
     except http_requests.exceptions.ConnectionError as err:
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        logger.warning(
+            'Proxy outbound connection failed: method=%s host=%s path=%s elapsed_ms=%s skipped_headers_count=%s',
+            method,
+            url_hostname,
+            url_path,
+            int(elapsed),
+            skipped_headers_count,
+        )
         raise ProxyConnectionError(str(err)) from err
     except Exception as err:
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        logger.exception(
+            'Proxy outbound request failed: method=%s host=%s path=%s elapsed_ms=%s skipped_headers_count=%s',
+            method,
+            url_hostname,
+            url_path,
+            int(elapsed),
+            skipped_headers_count,
+        )
         raise ProxyError(str(err)) from err
     finally:
         for file_obj in opened_files:
             file_obj.close()
 
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+    logger.info(
+        'Proxy outbound request completed: method=%s host=%s path=%s elapsed_ms=%s status=%s skipped_headers_count=%s',
+        method,
+        url_hostname,
+        url_path,
+        int(elapsed),
+        response.status_code,
+        skipped_headers_count,
+    )
 
     resp_text = response.text
     try:
@@ -156,9 +222,12 @@ def _is_multipart_form_data(content_type):
 
 def _remove_header(headers, header_name):
     """Remove a header from a dict using case-insensitive matching."""
+    removed = False
     for existing_name in list(headers):
         if existing_name.lower() == header_name:
             headers.pop(existing_name, None)
+            removed = True
+    return removed
 
 
 def _multipart_files_from_form_data(form_data, opened_files):

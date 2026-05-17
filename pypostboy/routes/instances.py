@@ -1,11 +1,16 @@
 """Request snapshot/instance API views."""
 
+import logging
+
 from django.views.decorators.csrf import csrf_exempt
 
 from db import RequestInstances
 from pypostboy.auth import require_current_user
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
+
+
+logger = logging.getLogger(__name__)
 
 
 def _current_user_id(request):
@@ -16,6 +21,27 @@ def _status_for_error(err):
     return 404 if 'not found' in str(err).lower() else 400
 
 
+def _log_user_id(request):
+    current_user = getattr(request, 'current_user', None)
+    if isinstance(current_user, dict):
+        return current_user.get('id')
+    return None
+
+
+def _log_exception(route_name, request, **context):
+    details = ', '.join(
+        f'{key}={value}' for key, value in context.items() if value is not None
+    )
+    if details:
+        details = f', {details}'
+    logger.exception(
+        '%s failed: user_id=%s%s',
+        route_name,
+        _log_user_id(request),
+        details,
+    )
+
+
 def get_request_instances(request, id):
     """Get saved instances for a request."""
     try:
@@ -24,6 +50,7 @@ def get_request_instances(request, id):
     except ValueError as err:
         return error(err, 404)
     except Exception as err:
+        _log_exception('get_request_instances', request, request_id=id)
         return error(err, 500)
 
 
@@ -38,6 +65,7 @@ def create_request_instance(request, id):
     except BadJsonBody:
         return error('Invalid JSON request body', 400)
     except Exception as err:
+        _log_exception('create_request_instance', request, request_id=id)
         return error(err, _status_for_error(err))
 
 
@@ -49,6 +77,7 @@ def get_request_instance(request, instance_id):
             return error('Request instance not found', 404)
         return ok(instance)
     except Exception as err:
+        _log_exception('get_request_instance', request, instance_id=instance_id)
         return error(err, 500)
 
 
@@ -61,6 +90,7 @@ def update_request_instance(request, instance_id):
     except BadJsonBody:
         return error('Invalid JSON request body', 400)
     except Exception as err:
+        _log_exception('update_request_instance', request, instance_id=instance_id)
         return error(err, _status_for_error(err))
 
 
@@ -75,4 +105,5 @@ def delete_request_instance(request, instance_id):
     except BadJsonBody:
         return error('Invalid JSON request body', 400)
     except Exception as err:
+        _log_exception('delete_request_instance', request, instance_id=instance_id)
         return error(err, _status_for_error(err))

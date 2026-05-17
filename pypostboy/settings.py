@@ -46,3 +46,28 @@ POSTBOY_ALLOW_USER_ID_HEADER = BaseConfig.POSTBOY_ALLOW_USER_ID_HEADER
 PUBLIC_DIR = os.path.abspath(os.environ.get('POSTBOY_STATIC_FOLDER', DEFAULT_STATIC_FOLDER))
 PROXY_TIMEOUT = BaseConfig.PROXY_TIMEOUT
 DATA_UPLOAD_MAX_MEMORY_SIZE = BaseConfig.MAX_CONTENT_LENGTH
+
+LOG_LEVEL = os.environ.get('POSTBOY_LOG_LEVEL', 'INFO').upper()
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s %(levelname)s [%(name)s] %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+            'level': LOG_LEVEL,
+        },
+    },
+    'loggers': {
+        'pypostboy': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}
