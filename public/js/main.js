@@ -2435,7 +2435,7 @@ document.addEventListener('DOMContentLoaded', () => {
         responseTime.textContent = '0 ms';
         responseSize.textContent = '0 B';
         responseHeaders.textContent = '';
-        responseBody.textContent = EMPTY_RESPONSE_MESSAGE;
+        displayResponse(EMPTY_RESPONSE_MESSAGE, '');
     }
 
     function restoreResponsePane(state) {
@@ -3662,7 +3662,7 @@ document.addEventListener('DOMContentLoaded', () => {
             responseTime.textContent = errorElapsed + ' ms';
             responseSize.textContent = formatBytes(new Blob([errorBody]).size);
             responseHeaders.textContent = buildDiagnosticsText(errorDiagnostics);
-            responseBody.textContent = errorBody;
+            displayResponse(errorBody, responseHeaders.textContent);
             storeResponseOnActiveTab({
                 response_status: null,
                 response_status_text: 'Error',

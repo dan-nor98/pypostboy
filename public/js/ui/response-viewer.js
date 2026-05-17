@@ -22,6 +22,35 @@ function getHeaderValue(headers, name) {
     return '';
 }
 
+
+function getResponseCodeElement(element) {
+    if (!element) return null;
+    return element.querySelector('code') || element;
+}
+
+function getLineNumbersElement(element) {
+    if (!element || !element.parentElement) return null;
+    return element.parentElement.querySelector('.response-line-numbers');
+}
+
+function getLineCount(text) {
+    if (text === '') return 1;
+    return text.split('\n').length;
+}
+
+function updateResponseLineNumbers(element) {
+    var codeElement = getResponseCodeElement(element);
+    var lineNumbersElement = getLineNumbersElement(element);
+    if (!codeElement || !lineNumbersElement) return;
+
+    var lineCount = getLineCount(codeElement.textContent || '');
+    var lines = [];
+    for (var i = 1; i <= lineCount; i++) {
+        lines.push(i);
+    }
+    lineNumbersElement.textContent = lines.join('\n');
+}
+
 function normalizeBody(body) {
     if (typeof body === 'object' && body !== null) {
         return {
@@ -39,9 +68,13 @@ function normalizeBody(body) {
 export function renderResponseBody(element, body, headers) {
     if (!element) return;
 
+    var codeElement = getResponseCodeElement(element);
+    if (!codeElement) return;
+
     var normalized = normalizeBody(body);
     if (normalized.format === 'json') {
-        element.innerHTML = highlightJson(normalized.text);
+        codeElement.innerHTML = highlightJson(normalized.text);
+        updateResponseLineNumbers(element);
         return;
     }
 
@@ -49,11 +82,13 @@ export function renderResponseBody(element, body, headers) {
     var format = detectBodyFormat(normalized.text, contentType);
     if (format === 'json') {
         try {
-            element.innerHTML = highlightJson(JSON.stringify(JSON.parse(normalized.text), null, 2));
+            codeElement.innerHTML = highlightJson(JSON.stringify(JSON.parse(normalized.text), null, 2));
+            updateResponseLineNumbers(element);
             return;
         } catch (e) {
             // Fall through to safe escaped text highlighting when the content type claims JSON but parsing fails.
         }
     }
-    element.innerHTML = highlightByFormat(normalized.text, format);
+    codeElement.innerHTML = highlightByFormat(normalized.text, format);
+    updateResponseLineNumbers(element);
 }
