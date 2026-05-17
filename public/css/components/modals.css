@@ -293,14 +293,16 @@
   border-color: var(--color-accent);
 }
 
-.file-upload-area {
+.file-upload-control {
   text-align: center;
+}
+
+.file-upload-area {
   padding: 30px;
   background: none;
   color: var(--color-accent);
   border: 1px dashed var(--color-text);
   border-radius: var(--radius-sm);
-  cursor: pointer;
   transition: all 0.3s;
 }
 
@@ -317,6 +319,15 @@
 .file-upload-area p {
   margin: 8px 0;
   color: var(--color-text-dim);
+}
+
+.file-upload-separator {
+  margin: 12px 0;
+  color: var(--color-text-dim);
+}
+
+.file-browse-button {
+  cursor: pointer;
 }
 
 .file-name {

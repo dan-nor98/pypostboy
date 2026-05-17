@@ -3801,30 +3801,36 @@ document.addEventListener('DOMContentLoaded', () => {
         importFileInput.click();
     });
 
-    fileDropZone.addEventListener('click', function() {
-        importFileInput.click();
-    });
-
     importFileInput.addEventListener('change', function(e) {
         handleFileSelect(e.target.files[0]);
     });
 
-    // Drag and drop handling
-    fileDropZone.addEventListener('dragover', function(e) {
+    function keepDropEventInDropZone(e) {
         e.preventDefault();
         e.stopPropagation();
+    }
+
+    // Drag and drop handling
+    fileDropZone.addEventListener('dragenter', function(e) {
+        keepDropEventInDropZone(e);
+        fileDropZone.classList.add('drag-over');
+    });
+
+    fileDropZone.addEventListener('dragover', function(e) {
+        keepDropEventInDropZone(e);
         fileDropZone.classList.add('drag-over');
     });
 
     fileDropZone.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
+        keepDropEventInDropZone(e);
+        if (fileDropZone.contains(e.relatedTarget)) {
+            return;
+        }
         fileDropZone.classList.remove('drag-over');
     });
 
     fileDropZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
+        keepDropEventInDropZone(e);
         fileDropZone.classList.remove('drag-over');
 
         var files = e.dataTransfer.files;

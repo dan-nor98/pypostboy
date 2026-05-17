@@ -131,11 +131,13 @@
                         <!-- File Import -->
                         <div class="import-panel" id="import-file-panel">
                             <p class="import-helper-text">Supported file import: Postman collection JSON (.json).</p>
-                            <div class="file-upload-area" id="fileDropZone">
-                                <p>📁 Drag & drop a Postman collection JSON file here</p>
-                                <p>or</p>
+                            <div class="file-upload-control">
+                                <div class="file-upload-area" id="fileDropZone" aria-label="Drop a Postman collection JSON file here">
+                                    <p>📁 Drag & drop a Postman collection JSON file here</p>
+                                </div>
+                                <p class="file-upload-separator">or</p>
                                 <input type="file" id="importFileInput" accept=".json,application/json" style="display: none;">
-                                <button class="btn-import" id="browseFileBtn" type="button">Browse Files</button>
+                                <button class="btn-import file-browse-button" id="browseFileBtn" type="button">Browse Files</button>
                                 <p id="selectedFileName" class="file-name" aria-live="polite"></p>
                             </div>
                         </div>
