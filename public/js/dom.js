@@ -3,6 +3,7 @@ export function getDomElements() {
         methodSelect: document.getElementById('methodSelect'),
         urlInput: document.getElementById('urlInput'),
         executionModeSelect: document.getElementById('executionModeSelect'),
+        clientCredentialsSelect: document.getElementById('clientCredentialsSelect'),
         sendBtn: document.getElementById('sendBtn'),
         loopBtn: document.getElementById('loopBtn'),
         loopControls: document.getElementById('loopControls'),
