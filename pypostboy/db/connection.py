@@ -1,5 +1,6 @@
 """Database connection lifecycle and transaction helpers."""
 
+import logging
 import os
 import re
 import sqlite3
@@ -14,6 +15,8 @@ from pypostboy.config import (
 )
 
 from .schema import initialize_schema
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.abspath(os.environ.get('POSTBOY_DB_PATH', DEFAULT_DATABASE_PATH))
 DB_URL = os.environ.get('POSTBOY_DATABASE_URL', DEFAULT_DATABASE_URL)
@@ -208,7 +211,7 @@ class Database:
         self.backend = 'sqlite'
         self._owns_connection = True
         self._ready = True
-        print(f'[DB] SQLite database initialized at {resolved_path}')
+        logger.info('SQLite database initialized at %s', resolved_path)
 
     def _init_postgres(self, database_url):
         """Initialize database and create tables at the configured PostgreSQL URL."""
@@ -233,7 +236,7 @@ class Database:
         self.backend = 'postgresql'
         self._owns_connection = True
         self._ready = True
-        print('[DB] PostgreSQL database initialized')
+        logger.info('PostgreSQL database initialized')
 
     def use_connection(self, connection):
         """Use an externally managed database connection."""
