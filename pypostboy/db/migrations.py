@@ -1,4 +1,4 @@
-"""SQLite schema migration helpers."""
+"""Database schema migration helpers."""
 
 from pypostboy.db.serializers import timestamp
 
@@ -15,8 +15,25 @@ REQUEST_INSTANCE_COLUMN_MIGRATIONS = {
 }
 
 
+def _cursor_backend(cursor):
+    """Return the backend associated with a cursor."""
+    return getattr(getattr(cursor, 'connection', None), 'backend', 'sqlite')
+
+
 def table_columns(cursor, table_name):
-    """Return SQLite column metadata for a table keyed by column name."""
+    """Return column metadata for a table keyed by column name."""
+    if _cursor_backend(cursor) == 'postgresql':
+        rows = cursor.execute(
+            """SELECT column_name AS name, is_nullable AS nullable
+               FROM information_schema.columns
+               WHERE table_schema = current_schema() AND table_name = ?""",
+            (table_name,),
+        ).fetchall()
+        return {
+            row['name']: {**dict(row), 'notnull': row['nullable'] == 'NO'}
+            for row in rows
+        }
+
     return {
         row['name']: row
         for row in cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
@@ -33,10 +50,15 @@ def migrate_request_instances(cursor):
 
 
 def create_users_table(cursor):
-    """Create the users table for new and existing SQLite databases."""
-    cursor.execute("""
+    """Create the users table for new and existing databases."""
+    id_definition = (
+        'SERIAL PRIMARY KEY'
+        if _cursor_backend(cursor) == 'postgresql'
+        else 'INTEGER PRIMARY KEY AUTOINCREMENT'
+    )
+    cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {id_definition},
             username TEXT NOT NULL UNIQUE,
             email TEXT UNIQUE,
             password_hash TEXT,
@@ -79,6 +101,10 @@ def migrate_ownership(cursor):
     default_user_id = ensure_default_local_user(cursor)
 
     if not _ownership_rebuild_required(cursor):
+        _backfill_ownership(cursor, default_user_id)
+        return
+
+    if _cursor_backend(cursor) == 'postgresql':
         _backfill_ownership(cursor, default_user_id)
         return
 
