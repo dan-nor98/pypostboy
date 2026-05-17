@@ -36,6 +36,64 @@ On Windows, activate the virtual environment with:
 venv\Scripts\activate
 ```
 
+
+## Docker
+
+PostBoy includes Docker assets for both local SQLite development and production-like PostgreSQL runs. Both modes build the same image, install `requirements.txt`, and serve the WSGI app with Gunicorn.
+
+### Dev SQLite mode
+
+Use the development compose file when you want a quick local container with SQLite persistence:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Open `http://localhost:3001` in your browser. SQLite data is stored in the named `postboy-sqlite-data` Docker volume at `/data/postboy-data.db` inside the container.
+
+To use a different host port, set `PORT` before running compose:
+
+```bash
+PORT=8080 docker compose -f docker-compose.dev.yml up --build
+```
+
+### Production-like PostgreSQL mode
+
+Use the default compose file to run PostBoy with a PostgreSQL service:
+
+```bash
+POSTBOY_SECRET_KEY=replace-with-a-long-random-value docker compose up --build
+```
+
+Open `http://localhost:3001` in your browser. PostgreSQL data is stored in the named `postboy-postgres-data` Docker volume.
+
+To stop containers without deleting persisted data:
+
+```bash
+docker compose down
+```
+
+To remove the PostgreSQL volume as well:
+
+```bash
+docker compose down -v
+```
+
+### Docker environment variables and volumes
+
+| Variable | Docker usage |
+| --- | --- |
+| `POSTBOY_CONFIG` | Set to `development` in `docker-compose.dev.yml` and `production` in `docker-compose.yml`. |
+| `POSTBOY_DATABASE_URL` | Required for PostgreSQL mode; the default compose file points at the `db` service. Leave unset for SQLite mode. |
+| `POSTBOY_DB_PATH` | SQLite database path for dev mode; `docker-compose.dev.yml` sets it to `/data/postboy-data.db`. |
+| `POSTBOY_SECRET_KEY` | Required for signed sessions. Override the local defaults with a strong random value before sharing or deploying. |
+| `PORT` | Container and host port, defaulting to `3001`. |
+
+| Volume | Used by | Purpose |
+| --- | --- | --- |
+| `postboy-sqlite-data` | `docker-compose.dev.yml` | Persists the SQLite database under `/data`. |
+| `postboy-postgres-data` | `docker-compose.yml` | Persists PostgreSQL data under `/var/lib/postgresql/data`. |
+
 ## Configuration
 
 PostBoy works out of the box for local development. Useful environment variables:

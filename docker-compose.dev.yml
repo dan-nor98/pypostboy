@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    environment:
+      POSTBOY_CONFIG: development
+      POSTBOY_DB_PATH: /data/postboy-data.db
+      POSTBOY_SECRET_KEY: ${POSTBOY_SECRET_KEY:-postboy-dev-secret-key}
+      PORT: ${PORT:-3001}
+    ports:
+      - "${PORT:-3001}:${PORT:-3001}"
+    volumes:
+      - postboy-sqlite-data:/data
+
+volumes:
+  postboy-sqlite-data:

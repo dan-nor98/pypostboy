@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTBOY_CONFIG: production
+      POSTBOY_DATABASE_URL: postgresql://postboy:postboy@db:5432/postboy
+      POSTBOY_SECRET_KEY: ${POSTBOY_SECRET_KEY:-change-me-for-local-compose-only}
+      PORT: ${PORT:-3001}
+    ports:
+      - "${PORT:-3001}:${PORT:-3001}"
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: postboy
+      POSTGRES_USER: postboy
+      POSTGRES_PASSWORD: postboy
+    volumes:
+      - postboy-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postboy -d postboy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postboy-postgres-data:
