@@ -79,6 +79,63 @@
 .json-number  { color: var(--color-info); }
 .json-boolean { color: var(--color-warning); }
 .json-null    { color: var(--color-purple); }
+
+.json-tree {
+  display: block;
+  min-width: max-content;
+}
+
+.json-tree-line {
+  min-height: 1.45em;
+  padding-left: calc(var(--json-depth, 0) * 2ch);
+}
+
+.json-tree-toggle,
+.json-tree-toggle-spacer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35em;
+  height: 1.35em;
+  margin: 0 0.35em 0 0;
+  vertical-align: text-bottom;
+  font: inherit;
+}
+
+.json-tree-toggle {
+  padding: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.json-tree-toggle:hover,
+.json-tree-toggle:focus-visible {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.json-tree-summary {
+  display: none;
+  color: var(--color-text-muted);
+}
+
+.json-tree-node.is-collapsed > .json-tree-line .json-tree-open {
+  display: none;
+}
+
+.json-tree-node.is-collapsed > .json-tree-line .json-tree-summary {
+  display: inline;
+}
+
+.json-tree-node.is-collapsed > .json-tree-children {
+  display: none;
+}
 .syntax-tag          { color: var(--color-info); }
 .syntax-attr-name    { color: var(--color-warning); }
 .syntax-attr-value   { color: var(--color-success); }

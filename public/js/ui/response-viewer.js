@@ -1,4 +1,4 @@
-import { detectBodyFormat, highlightByFormat, highlightJson } from '../utils/format.js';
+import { detectBodyFormat, escapeHtml, highlightByFormat, highlightJson } from '../utils/format.js';
 
 function getHeaderValue(headers, name) {
     if (!headers || !name) return '';
@@ -38,12 +38,37 @@ function getLineCount(text) {
     return text.split('\n').length;
 }
 
+function isJsonTreeLineHidden(line, root) {
+    var node = line.parentElement;
+    while (node && node !== root) {
+        if (node.classList && node.classList.contains('json-tree-children')) {
+            var parentNode = node.parentElement;
+            if (parentNode && parentNode.classList && parentNode.classList.contains('is-collapsed')) return true;
+        }
+        node = node.parentElement;
+    }
+    return false;
+}
+
+function getVisibleJsonTreeLineCount(codeElement) {
+    var lines = codeElement.querySelectorAll('.json-tree-line');
+    if (!lines.length) return 0;
+
+    var count = 0;
+    for (var i = 0; i < lines.length; i++) {
+        if (!isJsonTreeLineHidden(lines[i], codeElement)) count += 1;
+    }
+    return count || 1;
+}
+
 function updateResponseLineNumbers(element) {
     var codeElement = getResponseCodeElement(element);
     var lineNumbersElement = getLineNumbersElement(element);
     if (!codeElement || !lineNumbersElement) return;
 
-    var lineCount = getLineCount(codeElement.textContent || '');
+    var lineCount = codeElement.classList.contains('json-tree')
+        ? getVisibleJsonTreeLineCount(codeElement)
+        : getLineCount(codeElement.textContent || '');
     var lines = [];
     for (var i = 1; i <= lineCount; i++) {
         lines.push(i);
@@ -65,6 +90,103 @@ function normalizeBody(body) {
     };
 }
 
+function isContainer(value) {
+    return value !== null && typeof value === 'object';
+}
+
+function isArray(value) {
+    return Object.prototype.toString.call(value) === '[object Array]';
+}
+
+
+function renderJsonKey(key) {
+    if (key === null || key === undefined) return '';
+    return '<span class="json-key">' + escapeHtml(JSON.stringify(String(key))) + ':</span> ';
+}
+
+function renderJsonPrimitive(value) {
+    return highlightJson(JSON.stringify(value));
+}
+
+function renderJsonToggle(type, childCount) {
+    var label = type === 'array' ? 'Toggle array with ' : 'Toggle object with ';
+    label += childCount + (childCount === 1 ? ' child' : ' children');
+    return '<button class="json-tree-toggle" type="button" aria-expanded="true" aria-label="' + escapeHtml(label) + '">▾</button>';
+}
+
+function renderJsonNode(value, key, depth, hasTrailingComma) {
+    var trailingComma = hasTrailingComma ? ',' : '';
+    var indent = ' style="--json-depth: ' + depth + '"';
+
+    if (!isContainer(value)) {
+        return '<div class="json-tree-line"' + indent + '>' + renderJsonKey(key) + renderJsonPrimitive(value) + trailingComma + '</div>';
+    }
+
+    var arrayValue = isArray(value);
+    var keys = arrayValue ? value.map(function(_, index) { return index; }) : Object.keys(value);
+    var childCount = keys.length;
+    var openToken = arrayValue ? '[' : '{';
+    var closeToken = arrayValue ? ']' : '}';
+    var summary = arrayValue ? '[…]' : '{…}';
+    var type = arrayValue ? 'array' : 'object';
+    var html = '<div class="json-tree-node" data-json-type="' + type + '">';
+
+    html += '<div class="json-tree-line"' + indent + '>';
+    if (childCount) html += renderJsonToggle(type, childCount);
+    else html += '<span class="json-tree-toggle-spacer"></span>';
+    html += renderJsonKey(key);
+    html += '<span class="json-tree-open">' + openToken + '</span>';
+    html += '<span class="json-tree-summary" aria-hidden="true">' + summary + trailingComma + '</span>';
+    html += '</div>';
+
+    html += '<div class="json-tree-children">';
+    for (var i = 0; i < keys.length; i++) {
+        var childKey = keys[i];
+        html += renderJsonNode(value[childKey], arrayValue ? null : childKey, depth + 1, i < keys.length - 1);
+    }
+    html += '<div class="json-tree-line json-tree-close"' + indent + '>' + closeToken + trailingComma + '</div>';
+    html += '</div>';
+    html += '</div>';
+    return html;
+}
+
+function renderJsonTree(value) {
+    if (!isContainer(value)) return highlightJson(JSON.stringify(value, null, 2));
+    return renderJsonNode(value, null, 0, false);
+}
+
+function setRawResponseText(element, codeElement, text) {
+    var rawText = String(text || '');
+    if (element) element.dataset.rawBody = rawText;
+    if (codeElement && codeElement !== element) codeElement.dataset.rawBody = rawText;
+}
+
+function setCodeMode(codeElement, isJsonTree) {
+    codeElement.classList.toggle('json-tree', isJsonTree);
+}
+
+function renderParsedJson(element, codeElement, value) {
+    var prettyJson = JSON.stringify(value, null, 2);
+    setRawResponseText(element, codeElement, prettyJson);
+    setCodeMode(codeElement, isContainer(value));
+    codeElement.innerHTML = renderJsonTree(value);
+    updateResponseLineNumbers(element);
+}
+
+export function toggleJsonTreeNode(element, toggle) {
+    if (!element || !toggle) return;
+
+    var codeElement = getResponseCodeElement(element);
+    var node = toggle.closest('.json-tree-node');
+    if (!codeElement || !node || !codeElement.contains(node)) return;
+
+    var collapsed = !node.classList.contains('is-collapsed');
+    node.classList.toggle('is-collapsed', collapsed);
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    toggle.textContent = collapsed ? '▸' : '▾';
+    updateResponseLineNumbers(element);
+}
+
 export function renderResponseBody(element, body, headers) {
     if (!element) return;
 
@@ -73,8 +195,7 @@ export function renderResponseBody(element, body, headers) {
 
     var normalized = normalizeBody(body);
     if (normalized.format === 'json') {
-        codeElement.innerHTML = highlightJson(normalized.text);
-        updateResponseLineNumbers(element);
+        renderParsedJson(element, codeElement, JSON.parse(normalized.text));
         return;
     }
 
@@ -82,13 +203,15 @@ export function renderResponseBody(element, body, headers) {
     var format = detectBodyFormat(normalized.text, contentType);
     if (format === 'json') {
         try {
-            codeElement.innerHTML = highlightJson(JSON.stringify(JSON.parse(normalized.text), null, 2));
-            updateResponseLineNumbers(element);
+            renderParsedJson(element, codeElement, JSON.parse(normalized.text));
             return;
         } catch (e) {
             // Fall through to safe escaped text highlighting when the content type claims JSON but parsing fails.
         }
     }
+
+    setRawResponseText(element, codeElement, normalized.text);
+    setCodeMode(codeElement, false);
     codeElement.innerHTML = highlightByFormat(normalized.text, format);
     updateResponseLineNumbers(element);
 }
