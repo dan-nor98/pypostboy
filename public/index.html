@@ -375,7 +375,10 @@
                     <button class="response-tab" data-rtab="headers">Headers</button>
                 </div>
                 <div class="response-tab-content active" id="response-body-tab">
-                    <pre id="responseBody">Send a request to see the response here.</pre>
+                    <div class="response-code-viewer" id="responseBodyViewer" role="region" aria-label="Response body with line numbers">
+                        <pre class="response-line-numbers" id="responseBodyLineNumbers" aria-hidden="true">1</pre>
+                        <pre class="response-code-area" id="responseBody"><code id="responseBodyCode">Send a request to see the response here.</code></pre>
+                    </div>
                 </div>
                 <div class="response-tab-content" id="response-headers-tab">
                     <pre id="responseHeaders"></pre>
