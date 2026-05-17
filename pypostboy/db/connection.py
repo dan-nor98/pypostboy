@@ -14,7 +14,7 @@ from pypostboy.config import (
     get_database_backend,
 )
 
-from .schema import initialize_schema
+from .schema import initialize_schema as initialize_database_schema
 
 logger = logging.getLogger(__name__)
 
@@ -156,15 +156,17 @@ class Database:
         self._owns_connection = False
         self._ready = False
 
-    def init_database(self, database_path=None, database_url=None, backend=None):
-        """Initialize SQLite or PostgreSQL and create tables."""
+    def init_database(
+        self, database_path=None, database_url=None, backend=None, initialize_schema=True
+    ):
+        """Initialize SQLite or PostgreSQL and optionally create tables."""
         global DB_PATH, DB_URL, DB_BACKEND
 
         resolved_url = database_url or DB_URL
         selected_backend = get_database_backend(resolved_url, backend or DB_BACKEND)
 
         if selected_backend == 'postgresql':
-            self._init_postgres(resolved_url)
+            self._init_postgres(resolved_url, initialize_schema=initialize_schema)
             DB_URL = resolved_url
             DB_BACKEND = selected_backend
             return
@@ -203,7 +205,7 @@ class Database:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
 
-        initialize_schema(self.conn.cursor(), backend='sqlite')
+        initialize_database_schema(self.conn.cursor(), backend='sqlite')
 
         self.conn.commit()
         self.database_path = resolved_path
@@ -213,8 +215,12 @@ class Database:
         self._ready = True
         logger.info('SQLite database initialized at %s', resolved_path)
 
-    def _init_postgres(self, database_url):
-        """Initialize database and create tables at the configured PostgreSQL URL."""
+    def _init_postgres(self, database_url, initialize_schema=True):
+        """Initialize a connection to the configured PostgreSQL URL.
+
+        Schema initialization can be skipped for already-migrated runtime
+        processes such as Gunicorn workers.
+        """
         if not database_url:
             raise RuntimeError(
                 'POSTBOY_DATABASE_URL is required when POSTBOY_DB_BACKEND=postgresql'
@@ -229,8 +235,9 @@ class Database:
 
         self.close()
         self.conn = PostgresConnection(database_url)
-        initialize_schema(self.conn.cursor(), backend='postgresql')
-        self.conn.commit()
+        if initialize_schema:
+            initialize_database_schema(self.conn.cursor(), backend='postgresql')
+            self.conn.commit()
         self.database_path = None
         self.database_url = database_url
         self.backend = 'postgresql'
@@ -281,8 +288,13 @@ class Database:
 db = Database()
 
 
-def configure_database(config):
-    """Configure the compatibility singleton from Django app config."""
+def configure_database(config, initialize_schema=True):
+    """Configure the compatibility singleton from Django app config.
+
+    Set ``initialize_schema`` to ``False`` to establish a PostgreSQL runtime
+    connection without running migrations/schema setup. SQLite always retains
+    automatic schema initialization for local development and tests.
+    """
     external_connection = config.get('DATABASE')
     if external_connection is not None:
         db.use_connection(external_connection)
@@ -296,6 +308,7 @@ def configure_database(config):
             or DB_URL
         ),
         backend=config.get('DB_BACKEND') or config.get('POSTBOY_DB_BACKEND') or DB_BACKEND,
+        initialize_schema=initialize_schema,
     )
 
 

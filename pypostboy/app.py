@@ -8,7 +8,12 @@ from django.core.wsgi import get_wsgi_application
 from django.test import Client as DjangoClient
 from django.utils.module_loading import import_string
 
-from pypostboy.config import DevelopmentConfig, ProductionConfig, TestingConfig
+from pypostboy.config import (
+    DevelopmentConfig,
+    ProductionConfig,
+    TestingConfig,
+    get_database_backend,
+)
 from pypostboy.db.connection import configure_database
 
 CONFIG_BY_NAME = {
@@ -140,6 +145,10 @@ def create_app(config=None):
     # settings are then synchronized for tests and local entrypoints.
     wsgi_application = get_wsgi_application()
     _apply_django_settings(config_dict)
-    configure_database(config_dict)
+    backend = get_database_backend(
+        config_dict.get('DATABASE_URL') or config_dict.get('POSTBOY_DATABASE_URL'),
+        config_dict.get('DB_BACKEND') or config_dict.get('POSTBOY_DB_BACKEND'),
+    )
+    configure_database(config_dict, initialize_schema=backend != 'postgresql')
 
     return PostBoyDjangoApplication(wsgi_application, config_dict)
