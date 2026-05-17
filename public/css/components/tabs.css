@@ -296,6 +296,7 @@
 }
 
 .response-code-viewer {
+  --response-line-number-gutter: 4.25em;
   flex: 1 1 auto;
   width: 100%;
   min-width: 0;
@@ -305,7 +306,11 @@
   display: flex;
   align-items: stretch;
   overflow: auto;
-  background: var(--color-bg);
+  background: linear-gradient(
+    to right,
+    var(--color-surface) 0 var(--response-line-number-gutter),
+    var(--color-bg) var(--response-line-number-gutter) 100%
+  );
   border-radius: var(--radius-md);
   color: var(--color-text);
 }
@@ -323,8 +328,9 @@
 }
 
 .response-line-numbers {
-  flex: 0 0 auto;
-  min-width: 4.25em;
+  flex: 0 0 var(--response-line-number-gutter);
+  width: var(--response-line-number-gutter);
+  min-height: 100%;
   padding-left: 12px;
   padding-right: 12px;
   text-align: right;
@@ -334,7 +340,13 @@
   user-select: none;
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: 2;
+}
+
+.response-line-numbers span {
+  display: block;
+  height: 1.45em;
+  line-height: 1.45;
 }
 
 .response-code-area {
@@ -343,6 +355,7 @@
   padding-left: 14px;
   padding-right: 14px;
   color: var(--color-text);
+  background: var(--color-bg);
   overflow: visible;
 }
 
