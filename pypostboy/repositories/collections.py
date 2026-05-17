@@ -6,7 +6,7 @@ from pypostboy.db.adapter import (
     row_to_mapping,
     rows_to_mappings,
 )
-from pypostboy.db.connection import db, get_connection
+from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import safe_parse, timestamp
 
@@ -165,6 +165,7 @@ class Collections:
             ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (user_id, name, description, parent_id, max_order + 1, now, now),
         )
+        conn.commit()
 
         return Collections.get_by_id(collection_id, user_id)
 
@@ -214,6 +215,7 @@ class Collections:
             f"UPDATE collections SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
             params,
         )
+        conn.commit()
 
         return Collections.get_by_id(id, user_id)
 
@@ -316,7 +318,7 @@ class Collections:
                 (col_id, user_id),
             )
 
-        db.save()
+        conn.commit()
 
         return {"deleted": len(ids_to_delete)}
 
