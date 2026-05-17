@@ -132,3 +132,49 @@ def test_request_instances_require_user_owned_request_and_instance(sqlite_connec
         item["id"]
         for item in RequestInstances.get_by_request(request_one["id"], user_one)
     ] == [instance_one["id"]]
+
+
+def test_collection_and_request_writes_are_visible_to_new_connections(sqlite_connection):
+    """SQLite dev mode uses multiple worker connections, so writes must commit."""
+    import sqlite3
+
+    db_path = sqlite_connection.execute("PRAGMA database_list").fetchone()["file"]
+    user_id = _create_user(sqlite_connection, "commit_visibility")
+
+    collection = Collections.create(user_id, {"name": "Visible collection"})
+    request = Requests.create(
+        user_id,
+        {"collection_id": collection["id"], "name": "Visible request"},
+    )
+
+    with sqlite3.connect(db_path) as observer:
+        observer.row_factory = sqlite3.Row
+        assert observer.execute(
+            "SELECT name FROM collections WHERE id = ?", (collection["id"],)
+        ).fetchone()["name"] == "Visible collection"
+        assert observer.execute(
+            "SELECT name FROM requests WHERE id = ?", (request["id"],)
+        ).fetchone()["name"] == "Visible request"
+
+    Collections.update(collection["id"], user_id, {"name": "Renamed collection"})
+    Requests.update(request["id"], user_id, {"name": "Renamed request"})
+
+    with sqlite3.connect(db_path) as observer:
+        observer.row_factory = sqlite3.Row
+        assert observer.execute(
+            "SELECT name FROM collections WHERE id = ?", (collection["id"],)
+        ).fetchone()["name"] == "Renamed collection"
+        assert observer.execute(
+            "SELECT name FROM requests WHERE id = ?", (request["id"],)
+        ).fetchone()["name"] == "Renamed request"
+
+    assert Requests.delete(request["id"], user_id) == {"deleted": 1}
+    assert Collections.delete(collection["id"], user_id) == {"deleted": 1}
+
+    with sqlite3.connect(db_path) as observer:
+        assert observer.execute(
+            "SELECT id FROM requests WHERE id = ?", (request["id"],)
+        ).fetchone() is None
+        assert observer.execute(
+            "SELECT id FROM collections WHERE id = ?", (collection["id"],)
+        ).fetchone() is None

@@ -121,6 +121,7 @@ class Requests:
                 now,
             ),
         )
+        conn.commit()
 
         return Requests.get_by_id(request_id, user_id)
 
@@ -189,6 +190,7 @@ class Requests:
             f"UPDATE requests SET {', '.join(updates)} WHERE id = ? AND user_id = ?",
             params,
         )
+        conn.commit()
 
         return Requests.get_by_id(id, user_id)
 
@@ -248,6 +250,7 @@ class Requests:
             "DELETE FROM requests WHERE id = ? AND user_id = ?",
             (id, user_id),
         )
+        conn.commit()
         return {"deleted": 1}
 
     @staticmethod
@@ -304,5 +307,6 @@ class Requests:
             "UPDATE requests SET collection_id = ?, updated_at = ? WHERE id = ? AND user_id = ?",
             (new_collection_id, timestamp(), id, user_id),
         )
+        conn.commit()
 
         return Requests.get_by_id(id, user_id)
