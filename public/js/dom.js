@@ -92,6 +92,8 @@ export function getDomElements() {
         requestModalTitle: document.getElementById('requestModalTitle'),
         reqCollectionPickerWrap: document.getElementById('reqCollectionPickerWrap'),
         reqCollectionSelect: document.getElementById('reqCollectionSelect'),
+        reqNewCollectionWrap: document.getElementById('reqNewCollectionWrap'),
+        reqNewCollectionName: document.getElementById('reqNewCollectionName'),
         requestTabsEl: document.getElementById('requestTabs'),
         newTabBtn: document.getElementById('newTabBtn'),
         contextMenu: document.getElementById('contextMenu'),

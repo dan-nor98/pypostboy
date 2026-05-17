@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newCollectionBtn, newCollectionModal, newColModalClose, newColName, newColDesc, newColSaveBtn,
         newColCancelBtn, editCollectionId, collectionModalTitle, requestModal, reqModalClose, reqNameInput,
         reqSaveBtn, reqCancelBtn, editRequestId, editRequestCollectionId, requestModalTitle,
-        reqCollectionPickerWrap, reqCollectionSelect, requestTabsEl, newTabBtn, contextMenu, requestContextMenu,
+        reqCollectionPickerWrap, reqCollectionSelect, reqNewCollectionWrap, reqNewCollectionName, requestTabsEl, newTabBtn, contextMenu, requestContextMenu,
         tabContextMenu, snapshotContextMenu, authStatus, appAuthStatus, authUsername, authPassword, loginBtn, registerBtn, logoutBtn, guestLoginBtn
     } = getDomElements();
 
@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let dragState             = null;
     let draggedTabId          = null;
     let activeRequestInstances = [];
+    const CREATE_NEW_COLLECTION_VALUE = '__new_collection__';
     let selectedSnapshotId     = '';
     let loadingSnapshotId      = '';
     let snapshotContextTargetId = '';
@@ -1692,6 +1693,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editRequestId.value = '';
         editRequestCollectionId.value = collectionId;
         reqCollectionPickerWrap.style.display = 'none';
+        resetRequestCollectionPicker();
         requestModalTitle.textContent = 'New Request';
         reqNameInput.value = '';
         requestModal.classList.add('active');
@@ -1702,15 +1704,30 @@ document.addEventListener('DOMContentLoaded', () => {
         editRequestId.value = id;
         editRequestCollectionId.value = collectionId;
         reqCollectionPickerWrap.style.display = 'none';
+        resetRequestCollectionPicker();
         requestModalTitle.textContent = 'Rename Request';
         reqNameInput.value = name;
         requestModal.classList.add('active');
         setTimeout(function() { reqNameInput.focus(); reqNameInput.select(); }, 100);
     }
 
+    function syncNewCollectionFields() {
+        if (!reqNewCollectionWrap || !reqCollectionSelect) return;
+        var creatingCollection = reqCollectionSelect.value === CREATE_NEW_COLLECTION_VALUE;
+        reqNewCollectionWrap.style.display = creatingCollection ? '' : 'none';
+        if (!creatingCollection && reqNewCollectionName) reqNewCollectionName.value = '';
+    }
+
+    function resetRequestCollectionPicker() {
+        if (reqCollectionSelect) reqCollectionSelect.value = '';
+        if (reqNewCollectionName) reqNewCollectionName.value = '';
+        syncNewCollectionFields();
+    }
+
     function closeRequestModal() {
         requestModal.classList.remove('active');
         reqCollectionPickerWrap.style.display = 'none';
+        resetRequestCollectionPicker();
         if (pendingSaveToCollectionResolver) {
             pendingSaveToCollectionResolver(false);
             pendingSaveToCollectionResolver = null;
@@ -1719,6 +1736,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     reqModalClose.addEventListener('click', closeRequestModal);
     reqCancelBtn.addEventListener('click', closeRequestModal);
+    if (reqCollectionSelect) reqCollectionSelect.addEventListener('change', syncNewCollectionFields);
 
     // Enter key in request name input
     reqNameInput.addEventListener('keydown', function(e) {
@@ -1727,6 +1745,15 @@ document.addEventListener('DOMContentLoaded', () => {
             reqSaveBtn.click();
         }
     });
+
+    if (reqNewCollectionName) {
+        reqNewCollectionName.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                reqSaveBtn.click();
+            }
+        });
+    }
 
     reqSaveBtn.addEventListener('click', async function() {
         var name = reqNameInput.value.trim();
@@ -1737,9 +1764,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         var id = editRequestId.value;
         var collectionId = editRequestCollectionId.value || (reqCollectionSelect && reqCollectionSelect.value) || '';
+        var shouldCreateCollection = !id && collectionId === CREATE_NEW_COLLECTION_VALUE;
+        var newCollectionName = reqNewCollectionName ? reqNewCollectionName.value.trim() : '';
 
         if (!id && !collectionId) {
             showToast('Please select a collection', 'error');
+            return;
+        }
+
+        if (shouldCreateCollection && !newCollectionName) {
+            showToast('Please enter a collection name', 'error');
+            if (reqNewCollectionName) reqNewCollectionName.focus();
             return;
         }
 
@@ -1759,15 +1794,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadCollections();
                 requestSaveSucceeded = true;
             } else {
+                if (shouldCreateCollection) {
+                    var createdCollection = await apiClient.createCollection({ name: newCollectionName, description: '' });
+                    collectionId = createdCollection && createdCollection.id;
+                    if (!collectionId) {
+                        showToast('Collection created but ID not found in response', 'warning');
+                        await loadCollections();
+                        return;
+                    }
+                }
+
+                var numericCollectionId = parseInt(collectionId);
+                if (!numericCollectionId) {
+                    showToast('Please select a collection', 'error');
+                    return;
+                }
+
                 // Create new request with current editor state
                 var payload = gatherRequestState();
-                payload.collection_id = parseInt(collectionId);
+                payload.collection_id = numericCollectionId;
                 payload.name = name;
 
-                console.log('Creating request with payload:', payload);
-
                 var createdRequest = await apiClient.createRequest(payload);
-                console.log('Create request response:', createdRequest);
 
                 // Extract the new request ID
                 var newRequestId = createdRequest && createdRequest.id;
@@ -1779,16 +1827,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     var createdTab = openTabs.find(function(t){ return t.id === activeTabId; });
                     if (createdTab) {
                         createdTab.requestId = newRequestId;
-                        createdTab.collectionId = parseInt(collectionId);
+                        createdTab.collectionId = numericCollectionId;
                         createdTab.label = name;
                         createdTab.unsaved = false;
-                        createdTab.state = gatherRequestState();
+                        createdTab.state = mergeStoredResponseState(gatherRequestState(), createdTab.state);
                         renderRequestTabs();
-                        persistOpenTabs(false);
                     }
 
-                    // Reload collections to show the new request
+                    // Reload collections to show the new collection/request, then persist the saved tab state.
                     await loadCollections();
+                    persistOpenTabs(false);
 
                     requestSaveSucceeded = true;
 
@@ -1810,6 +1858,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             requestModal.classList.remove('active');
             reqCollectionPickerWrap.style.display = 'none';
+            resetRequestCollectionPicker();
             if (pendingSaveToCollectionResolver) {
                 pendingSaveToCollectionResolver(true);
                 pendingSaveToCollectionResolver = null;
@@ -2232,6 +2281,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Populate collection picker
         reqCollectionPickerWrap.style.display = '';
         reqCollectionSelect.innerHTML = '<option value="">— Select collection —</option>';
+        var newCollectionOpt = document.createElement('option');
+        newCollectionOpt.value = CREATE_NEW_COLLECTION_VALUE;
+        newCollectionOpt.textContent = '+ New collection…';
+        reqCollectionSelect.appendChild(newCollectionOpt);
+        if (reqNewCollectionName) reqNewCollectionName.value = '';
+        syncNewCollectionFields();
         try {
             var collections = await apiClient.getCollections();
             (collections || []).forEach(function flattenCollection(col) {
@@ -2735,7 +2790,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function saveActiveTab() {
         var tab = openTabs.find(function(t) { return t.id === activeTabId; });
         if (!tab) return false;
-        if (!tab.requestId) {
+        if (tab.requestId === null) {
             return await openSaveToCollectionModal({ waitForSave: true });
         }
 
@@ -2761,8 +2816,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
             e.preventDefault();
-            var tab = openTabs.find(function(t) { return t.id === activeTabId; });
-            if (tab) {
+            if (activeTabId) {
                 saveActiveTab();
             }
         }
