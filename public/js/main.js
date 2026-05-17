@@ -7,7 +7,7 @@ import { canUseWorkspace, continueAsGuest, initializeCurrentUser, isExplicitGues
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
 import { loadPanelSizes, savePanelSize } from './state/panels.js';
 import { createToast } from './ui/toast.js';
-import { renderResponseBody } from './ui/response-viewer.js';
+import { renderResponseBody, toggleJsonTreeNode } from './ui/response-viewer.js';
 import { countTotalRequests } from './features/collections.js';
 import { getBlankState } from './features/requests.js';
 import { buildSnapshotDefaultName } from './features/snapshots.js';
@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ─── Element References ────────────────────────────────
     const {
         methodSelect, urlInput, executionModeSelect, clientCredentialsSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
-        bodyContent, prettifyJsonBtn, responseBody, responseHeaders, statusCode, responseTime, responseSize,
+        bodyContent, prettifyJsonBtn, responseBodyViewer, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
         importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
         copyExportBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
@@ -176,6 +176,20 @@ document.addEventListener('DOMContentLoaded', () => {
         setResponseSheetState(responseSection && responseSection.classList.contains('is-open') ? 'open' : 'collapsed');
     }
 
+
+
+    function initResponseJsonTreeControls() {
+        if (!responseBodyViewer || !responseBody) return;
+
+        responseBodyViewer.addEventListener('click', function(event) {
+            if (!event.target.closest) return;
+            var toggle = event.target.closest('.json-tree-toggle');
+            if (!toggle || !responseBodyViewer.contains(toggle)) return;
+
+            event.preventDefault();
+            toggleJsonTreeNode(responseBody, toggle);
+        });
+    }
 
     // ─── Response Viewer Fullscreen ───────────────────────
     function setResponseFullscreen(isFullscreen) {
@@ -455,6 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTheme(themeToggleBtn);
     initResponseSheetControls();
     initResponseFullscreenControl();
+    initResponseJsonTreeControls();
     initPanelResizing();
     renderHistory();
     renderEnvVars();
@@ -2506,7 +2521,7 @@ document.addEventListener('DOMContentLoaded', () => {
             response_status: parsedStatus,
             response_status_text: statusCode.dataset.statusText || '',
             response_headers: responseHeaders.textContent || '',
-            response_body: responseBody.textContent || '',
+            response_body: responseBody.dataset.rawBody || responseBody.textContent || '',
             response_time_ms: parseResponseTimeMs(responseTime.textContent),
             response_size: responseSize.textContent || ''
         });
@@ -4334,7 +4349,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════
 
     copyResponseBtn.addEventListener('click', function() {
-        var text = responseBody.textContent;
+        var text = responseBody.dataset.rawBody || responseBody.textContent;
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(function() {
                 showToast('Response copied', 'success');
