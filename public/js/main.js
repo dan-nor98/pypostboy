@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let loadingSnapshotId      = '';
     let snapshotContextTargetId = '';
     let snapshotContextTrigger  = null;
+    let pendingSaveToCollectionResolver = null;
     let workspaceInitialized = false;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
@@ -1704,8 +1705,17 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(function() { reqNameInput.focus(); reqNameInput.select(); }, 100);
     }
 
-    reqModalClose.addEventListener('click', function() { requestModal.classList.remove('active'); reqCollectionPickerWrap.style.display = 'none'; });
-    reqCancelBtn.addEventListener('click', function() { requestModal.classList.remove('active'); reqCollectionPickerWrap.style.display = 'none'; });
+    function closeRequestModal() {
+        requestModal.classList.remove('active');
+        reqCollectionPickerWrap.style.display = 'none';
+        if (pendingSaveToCollectionResolver) {
+            pendingSaveToCollectionResolver(false);
+            pendingSaveToCollectionResolver = null;
+        }
+    }
+
+    reqModalClose.addEventListener('click', closeRequestModal);
+    reqCancelBtn.addEventListener('click', closeRequestModal);
 
     // Enter key in request name input
     reqNameInput.addEventListener('keydown', function(e) {
@@ -1730,6 +1740,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        var requestSaveSucceeded = false;
+
         try {
             if (id) {
                 // Rename existing request
@@ -1742,6 +1754,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     persistOpenTabs();
                 }
                 loadCollections();
+                requestSaveSucceeded = true;
             } else {
                 // Create new request with current editor state
                 var payload = gatherRequestState();
@@ -1774,6 +1787,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Reload collections to show the new request
                     await loadCollections();
 
+                    requestSaveSucceeded = true;
+
                     // Highlight the new request in sidebar
                     setTimeout(() => {
                         var newReqEl = document.querySelector('.request-item[data-id="' + newRequestId + '"]');
@@ -1788,8 +1803,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            if (!requestSaveSucceeded) return;
+
             requestModal.classList.remove('active');
             reqCollectionPickerWrap.style.display = 'none';
+            if (pendingSaveToCollectionResolver) {
+                pendingSaveToCollectionResolver(true);
+                pendingSaveToCollectionResolver = null;
+            }
         } catch (err) {
             console.error('Request save error:', err);
             showToast('Error: ' + err.message, 'error');
@@ -1813,7 +1834,9 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Request deleted', 'success');
             // Close any tab that had this request open
             var deletedTabIds = openTabs.filter(function(t){ return t.requestId === id; }).map(function(t){ return t.id; });
-            deletedTabIds.forEach(function(tid) { closeTab(tid); });
+            for (var i = 0; i < deletedTabIds.length; i++) {
+                await closeTab(deletedTabIds[i], { force: true });
+            }
             loadCollections();
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
@@ -1893,9 +1916,47 @@ document.addEventListener('DOMContentLoaded', () => {
         persistOpenTabs(false);
     }
 
-    function closeTab(tabId) {
+    function showUnsavedClosePrompt(tab) {
+        return new Promise(function(resolve) {
+            var modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = '' +
+                '<div class="modal-content unsaved-close-modal" role="dialog" aria-modal="true" aria-labelledby="unsavedCloseTitle">' +
+                    '<h3 id="unsavedCloseTitle">Unsaved changes</h3>' +
+                    '<p>Save changes to "' + escapeHtml(tab.label || 'this request') + '" before closing?</p>' +
+                    '<div class="modal-buttons">' +
+                        '<button class="btn-cancel" data-choice="cancel">Cancel</button>' +
+                        '<button class="btn-cancel" data-choice="discard">Discard</button>' +
+                        '<button class="btn-send" data-choice="save">Save</button>' +
+                    '</div>' +
+                '</div>';
+
+            function finish(choice) {
+                document.removeEventListener('keydown', onKeyDown);
+                modal.remove();
+                resolve(choice);
+            }
+
+            function onKeyDown(e) {
+                if (e.key === 'Escape') finish('cancel');
+            }
+
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) finish('cancel');
+                var button = e.target.closest('[data-choice]');
+                if (button) finish(button.dataset.choice);
+            });
+
+            document.addEventListener('keydown', onKeyDown);
+            document.body.appendChild(modal);
+            var cancelBtn = modal.querySelector('[data-choice="cancel"]');
+            if (cancelBtn) cancelBtn.focus();
+        });
+    }
+
+    function performCloseTab(tabId) {
         var idx = openTabs.findIndex(function(t) { return t.id === tabId; });
-        if (idx === -1) return;
+        if (idx === -1) return false;
 
         openTabs.splice(idx, 1);
 
@@ -1904,19 +1965,44 @@ document.addEventListener('DOMContentLoaded', () => {
             if (openTabs.length > 0) {
                 var nextIdx = Math.min(idx, openTabs.length - 1);
                 switchToTab(openTabs[nextIdx].id);
-                return;
+                return true;
             } else {
                 openNewTab();
-                return;
+                return true;
             }
         }
         renderRequestTabs();
         persistOpenTabs();
+        return true;
+    }
+
+    async function saveTabBeforeClose(tab) {
+        if (!tab) return false;
+        if (activeTabId !== tab.id) switchToTab(tab.id);
+        if (tab.requestId) return await saveActiveTab();
+        return await openSaveToCollectionModal({ waitForSave: true });
+    }
+
+    async function closeTab(tabId, options) {
+        options = options || {};
+        var tab = openTabs.find(function(t) { return t.id === tabId; });
+        if (!tab) return false;
+
+        if (!options.force && tab.unsaved === true) {
+            var choice = await showUnsavedClosePrompt(tab);
+            if (choice === 'cancel') return false;
+            if (choice === 'save') {
+                var saved = await saveTabBeforeClose(tab);
+                if (!saved) return false;
+            }
+        }
+
+        return performCloseTab(tabId);
     }
 
     function markActiveTabUnsaved() {
         var tab = openTabs.find(function(t) { return t.id === activeTabId; });
-        if (tab && tab.requestId && !tab.unsaved) {
+        if (tab && !tab.unsaved) {
             tab.unsaved = true;
             renderRequestTabs();
         }
@@ -1959,9 +2045,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 switchToTab(tab.id);
             });
 
-            closeBtn.addEventListener('click', function(e) {
+            closeBtn.addEventListener('click', async function(e) {
                 e.stopPropagation();
-                closeTab(tab.id);
+                await closeTab(tab.id);
             });
 
             // Double-click tab name to rename (for saved tabs)
@@ -2096,7 +2182,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     tabContextMenu.querySelectorAll('.context-menu-item').forEach(function(item) {
-        item.addEventListener('click', function(e) {
+        item.addEventListener('click', async function(e) {
             e.stopPropagation();
             tabContextMenu.classList.remove('active');
             if (!tabCtxTarget) return;
@@ -2105,24 +2191,35 @@ document.addEventListener('DOMContentLoaded', () => {
             if (action === 'save') {
                 // Switch to that tab first, then save
                 switchToTab(tabCtxTarget.id);
-                saveActiveTab();
+                await saveActiveTab();
             } else if (action === 'save-as') {
                 // Switch to that tab, then open "save to collection" modal
                 switchToTab(tabCtxTarget.id);
                 openSaveToCollectionModal();
             } else if (action === 'close') {
-                closeTab(tabCtxTarget.id);
+                await closeTab(tabCtxTarget.id);
             } else if (action === 'close-others') {
                 var keep = tabCtxTarget.id;
-                openTabs.slice().forEach(function(t) { if (t.id !== keep) closeTab(t.id); });
+                var otherTabs = openTabs.slice();
+                for (var i = 0; i < otherTabs.length; i++) {
+                    if (otherTabs[i].id !== keep) await closeTab(otherTabs[i].id);
+                }
             } else if (action === 'close-all') {
-                openTabs.slice().forEach(function(t) { closeTab(t.id); });
+                var tabsToClose = openTabs.slice();
+                for (var j = 0; j < tabsToClose.length; j++) {
+                    await closeTab(tabsToClose[j].id);
+                }
             }
         });
     });
 
     // Open "Save to Collection" modal for the current tab (no requestId)
-    async function openSaveToCollectionModal() {
+    async function openSaveToCollectionModal(options) {
+        options = options || {};
+        if (pendingSaveToCollectionResolver) {
+            pendingSaveToCollectionResolver(false);
+            pendingSaveToCollectionResolver = null;
+        }
         editRequestId.value = '';
         editRequestCollectionId.value = '';
         requestModalTitle.textContent = 'Save to Collection';
@@ -2145,6 +2242,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         requestModal.classList.add('active');
         setTimeout(function() { reqNameInput.focus(); }, 100);
+
+        if (options.waitForSave) {
+            return new Promise(function(resolve) {
+                pendingSaveToCollectionResolver = resolve;
+            });
+        }
+        return false;
     }
 
     // ═══════════════════════════════════════════════════════
@@ -2627,9 +2731,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // ─── Save active tab's request ─────────────────────────
     async function saveActiveTab() {
         var tab = openTabs.find(function(t) { return t.id === activeTabId; });
-        if (!tab || !tab.requestId) {
-            showToast('No saved request in this tab', 'error');
-            return;
+        if (!tab) return false;
+        if (!tab.requestId) {
+            return await openSaveToCollectionModal({ waitForSave: true });
         }
 
         var state = gatherRequestState();
@@ -2643,8 +2747,10 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Request saved', 'success');
             refreshInstancesForActiveTab();
             loadCollections();
+            return true;
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
+            return false;
         }
     }
 
@@ -2653,7 +2759,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
             e.preventDefault();
             var tab = openTabs.find(function(t) { return t.id === activeTabId; });
-            if (tab && tab.requestId) {
+            if (tab) {
                 saveActiveTab();
             }
         }
