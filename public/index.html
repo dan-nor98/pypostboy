@@ -233,6 +233,14 @@
                         <option value="server">Server proxy</option>
                     </select>
                 </label>
+                <label class="execution-mode-control client-credentials-control" for="clientCredentialsSelect">
+                    <span>Credentials</span>
+                    <select id="clientCredentialsSelect" title="Credentials mode for direct browser requests">
+                        <option value="omit">omit</option>
+                        <option value="same-origin">same-origin</option>
+                        <option value="include">include</option>
+                    </select>
+                </label>
                 <button class="btn-send" id="sendBtn">Send</button>
                 <button class="btn-loop" id="loopBtn" title="Loop Request">🔁</button>
             </div>

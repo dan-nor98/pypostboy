@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ─── Element References ────────────────────────────────
     const {
-        methodSelect, urlInput, executionModeSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
+        methodSelect, urlInput, executionModeSelect, clientCredentialsSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
         bodyContent, prettifyJsonBtn, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
         importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
@@ -64,7 +64,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
     const EXECUTION_MODE_STORAGE_KEY = 'postboy.executionMode';
+    const CLIENT_CREDENTIALS_MODE_STORAGE_KEY = 'postboy.clientCredentialsMode';
     const DEFAULT_EXECUTION_MODE = 'server';
+    const DEFAULT_CLIENT_CREDENTIALS_MODE = 'same-origin';
+    const CLIENT_CREDENTIALS_MODES = new Set(['omit', 'same-origin', 'include']);
     const FORBIDDEN_CLIENT_HEADERS = new Set([
         'accept-charset', 'accept-encoding', 'access-control-request-headers',
         'access-control-request-method', 'connection', 'content-length', 'cookie',
@@ -3232,16 +3235,57 @@ document.addEventListener('DOMContentLoaded', () => {
         return executionModeSelect.value === 'client' ? 'client' : 'server';
     }
 
+    function getStoredClientCredentialsMode() {
+        var stored = null;
+        try {
+            stored = localStorage.getItem(CLIENT_CREDENTIALS_MODE_STORAGE_KEY);
+        } catch (err) {
+            stored = null;
+        }
+        return CLIENT_CREDENTIALS_MODES.has(stored) ? stored : DEFAULT_CLIENT_CREDENTIALS_MODE;
+    }
+
+    function getSelectedClientCredentialsMode() {
+        if (!clientCredentialsSelect) return DEFAULT_CLIENT_CREDENTIALS_MODE;
+        return CLIENT_CREDENTIALS_MODES.has(clientCredentialsSelect.value)
+            ? clientCredentialsSelect.value
+            : DEFAULT_CLIENT_CREDENTIALS_MODE;
+    }
+
+    function persistClientCredentialsModePreference() {
+        try {
+            localStorage.setItem(CLIENT_CREDENTIALS_MODE_STORAGE_KEY, getSelectedClientCredentialsMode());
+        } catch (err) {
+            showToast('Could not persist client credentials preference', 'warning');
+        }
+    }
+
+    function syncClientCredentialsControlVisibility() {
+        if (!clientCredentialsSelect) return;
+        var control = clientCredentialsSelect.closest('.client-credentials-control');
+        if (!control) return;
+        control.hidden = getSelectedExecutionMode() !== 'client';
+    }
+
     function initExecutionModeControl() {
-        if (!executionModeSelect) return;
-        executionModeSelect.value = getStoredExecutionMode();
-        executionModeSelect.addEventListener('change', function() {
-            try {
-                localStorage.setItem(EXECUTION_MODE_STORAGE_KEY, getSelectedExecutionMode());
-            } catch (err) {
-                showToast('Could not persist execution mode preference', 'warning');
-            }
-        });
+        if (executionModeSelect) {
+            executionModeSelect.value = getStoredExecutionMode();
+            executionModeSelect.addEventListener('change', function() {
+                try {
+                    localStorage.setItem(EXECUTION_MODE_STORAGE_KEY, getSelectedExecutionMode());
+                } catch (err) {
+                    showToast('Could not persist execution mode preference', 'warning');
+                }
+                syncClientCredentialsControlVisibility();
+            });
+        }
+
+        if (clientCredentialsSelect) {
+            clientCredentialsSelect.value = getStoredClientCredentialsMode();
+            clientCredentialsSelect.addEventListener('change', persistClientCredentialsModePreference);
+        }
+
+        syncClientCredentialsControlVisibility();
     }
 
     function isForbiddenClientHeaderName(headerName) {
@@ -3289,22 +3333,89 @@ document.addEventListener('DOMContentLoaded', () => {
         return result;
     }
 
-    function getClientFetchFailureMessage(err) {
-        return [
+    function getUrlOrigin(url) {
+        try {
+            return new URL(url, window.location.href).origin;
+        } catch (err) {
+            return 'Invalid URL';
+        }
+    }
+
+    function inferFailureCategory(executionMode, url, err) {
+        if (getUrlOrigin(url) === 'Invalid URL') return 'Invalid request URL';
+
+        if (executionMode === 'client') {
+            var targetUrl;
+            try {
+                targetUrl = new URL(url, window.location.href);
+            } catch (parseErr) {
+                targetUrl = null;
+            }
+
+            if (targetUrl && window.location.protocol === 'https:' && targetUrl.protocol === 'http:') {
+                return 'Mixed content blocked by the browser';
+            }
+            if (targetUrl && targetUrl.origin !== window.location.origin) {
+                return 'Likely CORS/browser network restriction';
+            }
+            return 'Likely browser fetch/network restriction';
+        }
+
+        if (err && err.name === 'AbortError') return 'Backend proxy timeout or cancellation';
+        return 'PostBoy backend proxy or upstream network failure';
+    }
+
+    function createClientFetchError(err, diagnostics) {
+        var message = [
             'Direct client-side request failed: ' + (err && err.message ? err.message : 'Browser blocked the request.'),
             '',
             'Browser execution is subject to browser security rules. The request may be blocked by CORS, forbidden/request-controlled headers, cookie or credentials policy, mixed-content rules, redirects, Private Network Access, or other browser restrictions.',
             '',
             "Try switching the execution mode to Server proxy if you intentionally want PostBoy's server to make this request."
         ].join('\n');
+        var fetchError = new Error(message);
+        fetchError.cause = err;
+        fetchError.postboyDiagnostics = diagnostics || {};
+        return fetchError;
+    }
+
+    function buildDiagnosticsText(diagnostics) {
+        diagnostics = diagnostics || {};
+        var lines = ['Diagnostics:'];
+        if (diagnostics.executionMode) lines.push('- Execution mode: ' + diagnostics.executionMode);
+        if (diagnostics.urlOrigin) lines.push('- Requested URL origin: ' + diagnostics.urlOrigin);
+        if (diagnostics.method) lines.push('- Method: ' + diagnostics.method);
+        if (diagnostics.credentialsMode) lines.push('- Credentials mode: ' + diagnostics.credentialsMode);
+        if (Array.isArray(diagnostics.skippedHeaders)) {
+            lines.push('- Skipped browser-controlled headers: ' + (diagnostics.skippedHeaders.length ? diagnostics.skippedHeaders.join(', ') : 'None'));
+        }
+        if (diagnostics.failureCategory) lines.push('- Likely failure category: ' + diagnostics.failureCategory);
+        return lines.join('\n');
+    }
+
+    function formatResponseHeadersWithDiagnostics(headers, diagnostics) {
+        var headerText = stringifyHeadersForDisplay(headers);
+        if (!diagnostics || !Array.isArray(diagnostics.skippedHeaders) || !diagnostics.skippedHeaders.length) {
+            return headerText;
+        }
+        return (headerText ? headerText + '\n\n' : '') + buildDiagnosticsText(diagnostics);
     }
 
     async function sendClientRequest(payload) {
         var start = performance.now();
         var headerResult = buildClientFetchHeaders(payload.headers, payload.contentType);
+        var credentialsMode = getSelectedClientCredentialsMode();
+        var diagnostics = {
+            executionMode: 'client',
+            urlOrigin: getUrlOrigin(payload.url),
+            method: payload.method,
+            credentialsMode: credentialsMode,
+            skippedHeaders: headerResult.skippedHeaders.slice()
+        };
         var options = {
             method: payload.method,
-            headers: headerResult.headers
+            headers: headerResult.headers,
+            credentials: credentialsMode
         };
 
         if (payload.body != null && ['GET', 'HEAD'].indexOf(payload.method) === -1) {
@@ -3315,7 +3426,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             response = await fetch(payload.url, options);
         } catch (err) {
-            throw new Error(getClientFetchFailureMessage(err));
+            diagnostics.failureCategory = inferFailureCategory('client', payload.url, err);
+            throw createClientFetchError(err, diagnostics);
         }
 
         var responseBody = await response.text();
@@ -3335,7 +3447,8 @@ document.addEventListener('DOMContentLoaded', () => {
             statusText: response.statusText,
             headers: headersToObject(response.headers),
             body: parsedBody,
-            time: Math.round(performance.now() - start)
+            time: Math.round(performance.now() - start),
+            diagnostics: diagnostics
         };
     }
 
@@ -3457,14 +3570,14 @@ document.addEventListener('DOMContentLoaded', () => {
             responseSize.textContent = sizeText;
 
             var responseHeadersValue = data.headers || {};
-            responseHeaders.textContent = stringifyHeadersForDisplay(responseHeadersValue);
+            responseHeaders.textContent = formatResponseHeadersWithDiagnostics(responseHeadersValue, data.diagnostics);
 
             displayResponse(data.body, responseHeadersValue);
 
             storeResponseOnActiveTab({
                 response_status: sc,
                 response_status_text: data.statusText || '',
-                response_headers: responseHeadersValue,
+                response_headers: formatResponseHeadersWithDiagnostics(responseHeadersValue, data.diagnostics),
                 response_body: data.body,
                 response_time_ms: elapsed,
                 response_size: sizeText
@@ -3474,21 +3587,32 @@ document.addEventListener('DOMContentLoaded', () => {
             openResponseSheetForMobile();
         } catch (err) {
             var errorElapsed = Math.round(performance.now() - start);
+            var errorDiagnostics = Object.assign({
+                executionMode: executionMode,
+                urlOrigin: getUrlOrigin(payload.url),
+                method: method,
+                skippedHeaders: []
+            }, err.postboyDiagnostics || {});
+            if (!errorDiagnostics.failureCategory) {
+                errorDiagnostics.failureCategory = inferFailureCategory(executionMode, payload.url, err);
+            }
+
             var errorBody = 'Error: ' + err.message;
             if (executionMode === 'server') {
-                errorBody += '\n\nMake sure the proxy server is running (npm start).';
+                errorBody += '\n\nMake sure the Django/PostBoy backend is running and reachable, then check the backend logs for proxy or upstream network errors.';
             }
+            errorBody += '\n\n' + buildDiagnosticsText(errorDiagnostics);
             statusCode.textContent = 'ERR';
             statusCode.className = 'status-badge s5xx';
             statusCode.dataset.statusText = 'Error';
             responseTime.textContent = errorElapsed + ' ms';
             responseSize.textContent = formatBytes(new Blob([errorBody]).size);
-            responseHeaders.textContent = '';
+            responseHeaders.textContent = buildDiagnosticsText(errorDiagnostics);
             responseBody.textContent = errorBody;
             storeResponseOnActiveTab({
                 response_status: null,
                 response_status_text: 'Error',
-                response_headers: '',
+                response_headers: responseHeaders.textContent,
                 response_body: errorBody,
                 response_time_ms: errorElapsed,
                 response_size: responseSize.textContent

@@ -15,9 +15,16 @@ PostBoy is a local-first API client and lightweight HTTP proxy built with Python
 - Organize API requests into nested collections.
 - Build requests with custom methods, headers, auth, and body content.
 - Import Postman collections and cURL commands.
-- Send requests through the built-in local proxy.
+- Send requests directly from the browser in client mode or through the built-in Django/PostBoy server proxy.
 - View status, timing, headers, and formatted response bodies.
 - Store data locally in SQLite.
+
+## Execution modes and CORS
+
+PostBoy can execute a request in two ways from the request URL bar:
+
+- **Client side** sends the request with the browser `fetch` API. This mode can only call APIs that allow browser requests with compatible CORS response headers, browser-allowed request headers, the selected browser credentials mode (`omit`, `same-origin`, or `include`), and other browser security policies.
+- **Server proxy** sends the request from the Django/PostBoy backend. Because the backend makes the outbound request instead of the browser, this mode bypasses browser CORS checks while still depending on backend connectivity, proxy timeout settings, and upstream API availability.
 
 ## Quick Start
 
