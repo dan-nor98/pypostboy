@@ -193,8 +193,61 @@ def _issue(code, message, option=None):
 
 def _normalize_line_continuations(cmd):
     """Replace shell line continuations with spaces before tokenizing."""
-    return re.sub(r'\\\r?\n', ' ', cmd or '')
+    cmd = re.sub(r'\\\r?\n', ' ', cmd or '')
 
+    normalized = []
+    index = 0
+    quote = None
+    length = len(cmd)
+
+    while index < length:
+        char = cmd[index]
+
+        if quote:
+            normalized.append(char)
+            if char == '\\' and quote == '"' and index + 1 < length:
+                index += 1
+                normalized.append(cmd[index])
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+
+        if char in ('"', "'"):
+            quote = char
+            normalized.append(char)
+            index += 1
+            continue
+
+        literal_newline_length = _literal_newline_separator_length(cmd, index)
+        if literal_newline_length:
+            normalized.append(' ')
+            index += literal_newline_length
+            continue
+
+        normalized.append(char)
+        index += 1
+
+    return ''.join(normalized)
+
+
+def _literal_newline_separator_length(cmd, index):
+    """Return the length of a literal escaped newline used as an arg separator."""
+    if cmd.startswith('\\r\\n', index):
+        sequence_length = 4
+    elif cmd.startswith('\\n', index):
+        sequence_length = 2
+    else:
+        return 0
+
+    if index > 0 and not cmd[index - 1].isspace():
+        return 0
+
+    next_index = index + sequence_length
+    if next_index < len(cmd) and not cmd[next_index].isspace():
+        return 0
+
+    return sequence_length
 
 def _has_issue(errors, code):
     """Return whether an issue with the given code already exists."""

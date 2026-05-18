@@ -2,7 +2,11 @@
 
 import pytest
 
-from pypostboy.services.curl_parser import parse_curl_to_request
+from pypostboy.services.curl_parser import (
+    _normalize_line_continuations,
+    _tokenize,
+    parse_curl_to_request,
+)
 
 
 def test_parse_curl_extracts_method_url_headers_and_json_body():
@@ -55,6 +59,27 @@ def test_parse_curl_handles_multiline_commands_with_quoted_json_body():
     ]
     assert result["body_type"] == "json"
     assert result["body_content"] == '{"name":"Ada Lovelace","active":true}'
+
+
+def test_parse_curl_handles_literal_escaped_newline_argument_separators():
+    cmd = "curl 'https://example.test' \\n  -H 'accept: application/json' \\n  -H 'apikey: key'"
+
+    tokens = _tokenize(_normalize_line_continuations(cmd))
+    result = parse_curl_to_request(cmd)
+
+    assert tokens == [
+        "curl",
+        "https://example.test",
+        "-H",
+        "accept: application/json",
+        "-H",
+        "apikey: key",
+    ]
+    assert result["url"] == "https://example.test"
+    assert result["headers"] == [
+        {"key": "accept", "value": "application/json"},
+        {"key": "apikey", "value": "key"},
+    ]
 
 
 def test_parse_curl_handles_escaped_quotes_in_double_quoted_json_body():
