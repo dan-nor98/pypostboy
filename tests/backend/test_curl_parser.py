@@ -230,6 +230,52 @@ def test_parse_curl_accumulates_data_urlencode_as_structured_form_data():
     ]
 
 
+def test_parse_curl_json_option_sets_json_body_and_headers():
+    result = parse_curl_to_request(
+        "curl https://api.example.test/widgets --json '{\"name\":\"Ada\"}'"
+    )
+
+    assert result["method"] == "POST"
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["headers"] == [
+        {"key": "Content-Type", "value": "application/json"},
+        {"key": "Accept", "value": "application/json"},
+    ]
+    assert result["body_type"] == "json"
+    assert result["body_content"] == '{"name":"Ada"}'
+
+
+def test_parse_curl_json_option_with_equals_sets_json_body_and_headers():
+    result = parse_curl_to_request(
+        "curl --json='{\"name\":\"Ada\"}' https://api.example.test/widgets"
+    )
+
+    assert result["method"] == "POST"
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["headers"] == [
+        {"key": "Content-Type", "value": "application/json"},
+        {"key": "Accept", "value": "application/json"},
+    ]
+    assert result["body_type"] == "json"
+    assert result["body_content"] == '{"name":"Ada"}'
+
+
+def test_parse_curl_json_option_preserves_explicit_request_method():
+    result = parse_curl_to_request(
+        "curl --json '{\"name\":\"Ada\"}' --request PUT "
+        "https://api.example.test/widgets"
+    )
+
+    assert result["method"] == "PUT"
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["headers"] == [
+        {"key": "Content-Type", "value": "application/json"},
+        {"key": "Accept", "value": "application/json"},
+    ]
+    assert result["body_type"] == "json"
+    assert result["body_content"] == '{"name":"Ada"}'
+
+
 def test_parse_curl_infers_xml_body_type():
     result = parse_curl_to_request(
         "curl https://api.example.test/widgets -H 'Content-Type: application/xml' "

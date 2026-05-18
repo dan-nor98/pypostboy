@@ -16,6 +16,7 @@ _LONG_CONSUME_VALUE_OPTIONS = {
 }
 _SHORT_CONSUME_VALUE_OPTIONS = {'-o', '-A', '-e'}
 _DATA_OPTIONS = ('--data', '--data-raw', '--data-binary')
+_JSON_OPTIONS = ('--json',)
 
 
 class CurlParseError(ValueError):
@@ -38,6 +39,7 @@ def parse_curl_to_request(cmd):
     has_urlencoded_data = False
     form_data = []
     has_form_data = False
+    has_json_data = False
     method_forced_by_option = False
     errors = []
     warnings = []
@@ -100,6 +102,14 @@ def parse_curl_to_request(cmd):
             )
             if value:
                 body_parts.append(value)
+        elif long_name in _JSON_OPTIONS:
+            value, i = _option_value(
+                tokens, i, long_value, has_long_value, long_name, errors,
+                error_code='missing_body_value'
+            )
+            if value:
+                body_parts.append(value)
+                has_json_data = True
         elif long_name in _FORM_OPTIONS or short_name == '-F':
             option = long_name or short_name
             value, i = _option_value(
@@ -168,7 +178,14 @@ def parse_curl_to_request(cmd):
         method = 'POST'
 
     body_content = _build_body_content(body_parts, has_form_data)
-    body_type = _infer_body_type(body_content, headers, has_urlencoded_data, has_form_data)
+    if has_json_data:
+        _ensure_header(headers, 'Content-Type', 'application/json')
+        _ensure_header(headers, 'Accept', 'application/json')
+    body_type = (
+        'json'
+        if has_json_data and body_content
+        else _infer_body_type(body_content, headers, has_urlencoded_data, has_form_data)
+    )
 
     result = {
         'method': method,
@@ -459,6 +476,12 @@ def _add_header(headers, value):
             'key': value[:colon_index].strip(),
             'value': value[colon_index + 1:].strip()
         })
+
+
+def _ensure_header(headers, key, value):
+    """Append a header unless one with the same name already exists."""
+    if not any(header['key'].lower() == key.lower() for header in headers):
+        headers.append({'key': key, 'value': value})
 
 
 def _add_cookie_header(headers, value):
