@@ -378,6 +378,54 @@ def test_parse_curl_raises_structured_error_for_malformed_command():
     assert "unable to parse quoted arguments" in err.errors[0]["message"]
 
 
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--data-ascii", "name=Ada"),
+        ("--request-target", "/widgets?debug=true"),
+        ("--url-query", "q=postboy"),
+        ("--form-string", "name=Ada"),
+    ],
+)
+def test_parse_curl_consumes_unsupported_option_values_before_url(option, value):
+    result = parse_curl_to_request(
+        f"curl {option} '{value}' https://api.example.test/widgets"
+    )
+
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["body_type"] == "none"
+    assert result["warnings"] == [
+        {
+            "code": "unsupported_option_value_skipped",
+            "message": (
+                f"Unsupported cURL option {option} was ignored and its value was skipped. "
+                "Import accuracy may be limited."
+            ),
+            "option": option,
+            "value_skipped": True,
+        }
+    ]
+
+
+def test_parse_curl_consumes_unsupported_inline_option_value_before_url():
+    result = parse_curl_to_request(
+        "curl --url-query=q=postboy https://api.example.test/widgets"
+    )
+
+    assert result["url"] == "https://api.example.test/widgets"
+    assert result["warnings"] == [
+        {
+            "code": "unsupported_option_value_skipped",
+            "message": (
+                "Unsupported cURL option --url-query was ignored and its value was skipped. "
+                "Import accuracy may be limited."
+            ),
+            "option": "--url-query",
+            "value_skipped": True,
+        }
+    ]
+
+
 def test_parse_curl_returns_structured_warning_for_unsupported_option():
     result = parse_curl_to_request("curl --http2 https://api.example.test")
 
