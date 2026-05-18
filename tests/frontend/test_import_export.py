@@ -70,6 +70,76 @@ def test_parse_curl_fallback_handles_json_flag_with_equals_and_existing_headers(
     )
 
 
+def test_apply_parsed_import_payload_preserves_json_body_in_editor_state():
+    run_node(
+        r"""
+        import assert from 'node:assert/strict';
+        import { applyParsedImportPayload } from './public/js/features/import-export.js';
+
+        const payload = {
+            method: 'POST',
+            url: 'https://api.example.test/widgets',
+            headers: [{ key: 'Content-Type', value: 'application/json' }],
+            body_type: 'json',
+            body_content: '{"name":"Ada"}',
+            form_data: [],
+        };
+        const calls = [];
+        const editorState = {
+            method: 'GET',
+            url: '',
+            bodyType: 'none',
+            bodyContent: '',
+            formData: [{ key: 'stale', value: 'field' }],
+        };
+        const editor = {
+            setMethod(method) {
+                calls.push(['setMethod', method]);
+                editorState.method = method;
+            },
+            setUrl(url) {
+                calls.push(['setUrl', url]);
+                editorState.url = url;
+            },
+            syncParamsFromUrl() {},
+            clearHeaders() {},
+            addHeaderRow() {},
+            ensureHeaderRow() {},
+            setBodyType(bodyType) {
+                calls.push(['setBodyType', bodyType]);
+                editorState.bodyType = bodyType;
+                editorState.bodyContent = '';
+            },
+            setBodyContent(content) {
+                calls.push(['setBodyContent', content]);
+                editorState.bodyContent = content;
+            },
+            clearFormData() {
+                calls.push(['clearFormData']);
+                editorState.formData = [];
+            },
+            addFormDataRow(key, value) {
+                calls.push(['addFormDataRow', key, value]);
+                editorState.formData.push({ key, value });
+            },
+        };
+
+        const parsed = applyParsedImportPayload(payload, editor);
+
+        assert.deepEqual(parsed, payload);
+        assert.ok(calls.some((call) => call[0] === 'setBodyType' && call[1] === 'json'));
+        assert.ok(calls.some((call) => call[0] === 'setBodyContent' && call[1] === '{"name":"Ada"}'));
+        assert.deepEqual(editorState, {
+            method: 'POST',
+            url: 'https://api.example.test/widgets',
+            bodyType: 'json',
+            bodyContent: '{"name":"Ada"}',
+            formData: [],
+        });
+        """
+    )
+
+
 def test_form_urlencoded_body_content_normalizes_to_form_rows_for_preview_and_apply():
     run_node(
         r"""
