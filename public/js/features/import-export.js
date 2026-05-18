@@ -4,7 +4,29 @@ export function tokenize(cmd) {
     while (i < cmd.length) {
         while (i < cmd.length && /\s/.test(cmd[i])) i++;
         if (i >= cmd.length) break;
-        if (cmd[i] === "'" || cmd[i] === '"') {
+        if (cmd[i] === '$' && cmd[i + 1] === "'") {
+            var ansiTok = '';
+            i += 2;
+            while (i < cmd.length) {
+                if (cmd[i] === "'") {
+                    if (i + 1 < cmd.length && cmd[i + 1] === "'") {
+                        ansiTok += "'";
+                        i += 2;
+                        continue;
+                    }
+                    i++;
+                    break;
+                }
+                if (cmd[i] === '\\' && i + 1 < cmd.length) {
+                    ansiTok += decodeAnsiCQuoteEscape(cmd[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                ansiTok += cmd[i];
+                i++;
+            }
+            tokens.push(ansiTok);
+        } else if (cmd[i] === "'" || cmd[i] === '"') {
             var q = cmd[i++];
             var tok = '';
             while (i < cmd.length && cmd[i] !== q) {
@@ -30,6 +52,21 @@ export function tokenize(cmd) {
         }
     }
     return tokens;
+}
+
+function decodeAnsiCQuoteEscape(char) {
+    var escapes = {
+        "'": "'",
+        '\\': '\\',
+        'a': '\u0007',
+        'b': '\b',
+        'f': '\f',
+        'n': '\n',
+        'r': '\r',
+        't': '\t',
+        'v': '\v'
+    };
+    return Object.prototype.hasOwnProperty.call(escapes, char) ? escapes[char] : '\\' + char;
 }
 
 export function normalizeParsedImportPayload(payload) {
