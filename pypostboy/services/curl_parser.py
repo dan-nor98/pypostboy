@@ -17,6 +17,9 @@ _LONG_CONSUME_VALUE_OPTIONS = {
 _SHORT_CONSUME_VALUE_OPTIONS = {'-o', '-A', '-e'}
 _DATA_OPTIONS = ('--data', '--data-raw', '--data-binary')
 _JSON_OPTIONS = ('--json',)
+_UNSUPPORTED_CONSUME_VALUE_OPTIONS = {
+    '--data-ascii', '--request-target', '--url-query', '--form-string',
+}
 
 
 class CurlParseError(ValueError):
@@ -152,6 +155,15 @@ def parse_curl_to_request(cmd):
             _, i = _option_value(tokens, i, long_value, has_long_value, long_name, errors)
         elif short_name in _SHORT_CONSUME_VALUE_OPTIONS:
             _, i = _option_value(tokens, i, short_value, has_short_value, short_name, errors)
+        elif long_name in _UNSUPPORTED_CONSUME_VALUE_OPTIONS:
+            _, i = _option_value(tokens, i, long_value, has_long_value, long_name, errors)
+            warnings.append(_issue(
+                'unsupported_option_value_skipped',
+                f'Unsupported cURL option {long_name} was ignored and its value was skipped. '
+                'Import accuracy may be limited.',
+                option=long_name,
+                value_skipped=True
+            ))
         elif t in _FLAG_OPTIONS:
             pass
         elif t[0] != '-' and not url:
@@ -200,11 +212,12 @@ def parse_curl_to_request(cmd):
     return result
 
 
-def _issue(code, message, option=None):
+def _issue(code, message, option=None, **details):
     """Return a structured parser issue."""
     issue = {'code': code, 'message': message}
     if option:
         issue['option'] = option
+    issue.update(details)
     return issue
 
 
