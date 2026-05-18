@@ -68,3 +68,99 @@ def test_parse_curl_fallback_handles_json_flag_with_equals_and_existing_headers(
         ]);
         """
     )
+
+
+def test_form_urlencoded_body_content_normalizes_to_form_rows_for_preview_and_apply():
+    run_node(
+        r"""
+        import assert from 'node:assert/strict';
+        import { applyParsedImportPayload, normalizeParsedImportPayload } from './public/js/features/import-export.js';
+
+        const payload = {
+            method: 'POST',
+            url: 'https://api.example.test/search',
+            body_type: 'form-urlencoded',
+            body_content: 'q=postboy&page=2',
+            form_data: [],
+        };
+
+        const parsed = normalizeParsedImportPayload(payload);
+        assert.deepEqual(parsed.form_data, [
+            { key: 'q', value: 'postboy' },
+            { key: 'page', value: '2' },
+        ]);
+        assert.equal(parsed.body_content, 'q=postboy&page=2');
+
+        const calls = [];
+        const editor = {
+            setMethod(method) { calls.push(['setMethod', method]); },
+            setUrl(url) { calls.push(['setUrl', url]); },
+            syncParamsFromUrl() { calls.push(['syncParamsFromUrl']); },
+            clearHeaders() { calls.push(['clearHeaders']); },
+            addHeaderRow(key, value) { calls.push(['addHeaderRow', key, value]); },
+            ensureHeaderRow() { calls.push(['ensureHeaderRow']); },
+            setBodyType(bodyType) { calls.push(['setBodyType', bodyType]); },
+            setBodyContent(content) { calls.push(['setBodyContent', content]); },
+            clearFormData() { calls.push(['clearFormData']); },
+            addFormDataRow(key, value) { calls.push(['addFormDataRow', key, value]); },
+        };
+
+        applyParsedImportPayload(payload, editor);
+
+        assert.deepEqual(
+            calls.filter((call) => call[0] === 'addFormDataRow'),
+            [
+                ['addFormDataRow', 'q', 'postboy'],
+                ['addFormDataRow', 'page', '2'],
+            ],
+        );
+        """
+    )
+
+
+def test_parse_curl_fallback_data_flags_populate_form_urlencoded_rows():
+    run_node(
+        r"""
+        import assert from 'node:assert/strict';
+        import { parseCurlFallback } from './public/js/features/import-export.js';
+
+        const dataParsed = parseCurlFallback(`curl https://api.example.test/search -d 'q=postboy&page=2'`);
+        assert.equal(dataParsed.method, 'POST');
+        assert.equal(dataParsed.url, 'https://api.example.test/search');
+        assert.equal(dataParsed.body_type, 'form-urlencoded');
+        assert.equal(dataParsed.body_content, 'q=postboy&page=2');
+        assert.deepEqual(dataParsed.form_data, [
+            { key: 'q', value: 'postboy' },
+            { key: 'page', value: '2' },
+        ]);
+
+        const encodedParsed = parseCurlFallback(`curl https://api.example.test/search --data-urlencode 'q=Ada Lovelace'`);
+        assert.equal(encodedParsed.method, 'POST');
+        assert.equal(encodedParsed.url, 'https://api.example.test/search');
+        assert.equal(encodedParsed.body_type, 'form-urlencoded');
+        assert.equal(encodedParsed.body_content, 'q=Ada Lovelace');
+        assert.deepEqual(encodedParsed.form_data, [
+            { key: 'q', value: 'Ada Lovelace' },
+        ]);
+        """
+    )
+
+
+def test_form_urlencoded_body_content_decodes_percent_encoding_and_plus_spaces():
+    run_node(
+        r"""
+        import assert from 'node:assert/strict';
+        import { normalizeParsedImportPayload } from './public/js/features/import-export.js';
+
+        const parsed = normalizeParsedImportPayload({
+            body_type: 'form-urlencoded',
+            body_content: 'q=Ada+Lovelace&redirect=https%3A%2F%2Fexample.test%2Fdone%3Fx%3D1',
+            form_data: [],
+        });
+
+        assert.deepEqual(parsed.form_data, [
+            { key: 'q', value: 'Ada Lovelace' },
+            { key: 'redirect', value: 'https://example.test/done?x=1' },
+        ]);
+        """
+    )
