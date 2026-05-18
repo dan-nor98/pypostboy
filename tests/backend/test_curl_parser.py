@@ -215,6 +215,16 @@ def test_parse_curl_accumulates_repeated_data_flags_with_ampersands():
     assert result["form_data"] == []
 
 
+def test_parse_curl_data_ascii_sets_json_body_and_defaults_post():
+    result = parse_curl_to_request(
+        "curl https://api.example.test/widgets --data-ascii '{\"name\":\"Ada\"}'"
+    )
+
+    assert result["method"] == "POST"
+    assert result["body_type"] == "json"
+    assert result["body_content"] == '{"name":"Ada"}'
+
+
 def test_parse_curl_accumulates_data_urlencode_as_structured_form_data():
     result = parse_curl_to_request(
         "curl https://api.example.test/search "
@@ -381,7 +391,6 @@ def test_parse_curl_raises_structured_error_for_malformed_command():
 @pytest.mark.parametrize(
     ("option", "value"),
     [
-        ("--data-ascii", "name=Ada"),
         ("--request-target", "/widgets?debug=true"),
         ("--url-query", "q=postboy"),
         ("--form-string", "name=Ada"),
