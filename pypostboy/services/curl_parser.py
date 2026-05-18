@@ -15,10 +15,10 @@ _LONG_CONSUME_VALUE_OPTIONS = {
     '--connect-timeout', '--max-time', '--output', '--user-agent', '--referer',
 }
 _SHORT_CONSUME_VALUE_OPTIONS = {'-o', '-A', '-e'}
-_DATA_OPTIONS = ('--data', '--data-raw', '--data-binary')
+_DATA_OPTIONS = ('--data', '--data-raw', '--data-binary', '--data-ascii')
 _JSON_OPTIONS = ('--json',)
 _UNSUPPORTED_CONSUME_VALUE_OPTIONS = {
-    '--data-ascii', '--request-target', '--url-query', '--form-string',
+    '--request-target', '--url-query', '--form-string',
 }
 
 
