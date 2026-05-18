@@ -201,10 +201,66 @@ def _has_issue(errors, code):
     return any(error.get('code') == code for error in errors)
 
 
+def _normalize_ansi_c_quoted_strings(cmd):
+    """Convert Bash ANSI-C quoted strings into shlex-compatible quoted strings."""
+    if not cmd or "$'" not in cmd:
+        return cmd
+
+    normalized = []
+    index = 0
+    length = len(cmd)
+    while index < length:
+        if cmd[index:index + 2] != "$'":
+            normalized.append(cmd[index])
+            index += 1
+            continue
+
+        start = index
+        index += 2
+        value = []
+        while index < length:
+            char = cmd[index]
+            if char == "'":
+                if index + 1 < length and cmd[index + 1] == "'":
+                    value.append("'")
+                    index += 2
+                    continue
+                normalized.append(shlex.quote(''.join(value)))
+                index += 1
+                break
+            if char == '\\' and index + 1 < length:
+                value.append(_decode_ansi_c_escape(cmd[index + 1]))
+                index += 2
+                continue
+            value.append(char)
+            index += 1
+        else:
+            normalized.append(cmd[start:])
+            break
+
+    return ''.join(normalized)
+
+
+def _decode_ansi_c_escape(char):
+    """Decode the ANSI-C escapes most commonly seen in copied cURL commands."""
+    escapes = {
+        "'": "'",
+        '\\': '\\',
+        'a': '\a',
+        'b': '\b',
+        'f': '\f',
+        'n': '\n',
+        'r': '\r',
+        't': '\t',
+        'v': '\v',
+    }
+    return escapes.get(char, f'\\{char}')
+
+
 def _tokenize(cmd):
     """Tokenize a cURL command string using shell-compatible parsing."""
     try:
-        return shlex.split(cmd)
+        return shlex.split(_normalize_ansi_c_quoted_strings(cmd))
     except ValueError as err:
         message = f'Invalid cURL command: unable to parse quoted arguments ({err}).'
         raise CurlParseError(message, errors=[_issue('invalid_quoting', message)]) from err

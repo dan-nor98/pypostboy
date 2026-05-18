@@ -69,6 +69,18 @@ def test_parse_curl_handles_escaped_quotes_in_double_quoted_json_body():
     assert result["body_content"] == '{"message":"She said \\"hello\\""}'
 
 
+def test_parse_curl_handles_ansi_c_quoted_header_values():
+    result = parse_curl_to_request(
+        "curl 'https://apib-prod.daricgold.com/api/plan/' \\\n"
+        "  -H $'access: H~C`''Xj{qccjLHEmA@4(' \\\n"
+        "  -H 'apikey: test-key'"
+    )
+
+    assert result["url"] == "https://apib-prod.daricgold.com/api/plan/"
+    assert {"key": "access", "value": "H~C`'Xj{qccjLHEmA@4("} in result["headers"]
+    assert {"key": "apikey", "value": "test-key"} in result["headers"]
+
+
 def test_parse_curl_handles_tabs_between_arguments():
     result = parse_curl_to_request(
         "curl\t-X\tPUT\t-H\t'Accept: application/json'\t"
