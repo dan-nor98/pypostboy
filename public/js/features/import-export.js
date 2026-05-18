@@ -161,6 +161,16 @@ export function parseCurlFallback(cmd) {
             continue;
         }
 
+        if (token === '--json') {
+            next = tokens[++i] || '';
+            applyFallbackJsonPayload(payload, next);
+            continue;
+        }
+        if (token.indexOf('--json=') === 0) {
+            applyFallbackJsonPayload(payload, token.substring('--json='.length));
+            continue;
+        }
+
         if (['-d', '--data', '--data-raw', '--data-binary', '--data-urlencode'].indexOf(token) !== -1) {
             next = tokens[++i] || '';
             payload.body_content = payload.body_content ? payload.body_content + '&' + next : next;
@@ -227,6 +237,23 @@ function addFallbackHeader(headers, value) {
         key: value.substring(0, colonIndex).trim(),
         value: value.substring(colonIndex + 1).trim()
     });
+}
+
+function applyFallbackJsonPayload(payload, value) {
+    payload.body_content = payload.body_content ? payload.body_content + '&' + value : value;
+    payload.body_type = 'json';
+    ensureFallbackHeader(payload.headers, 'Content-Type', 'application/json');
+    ensureFallbackHeader(payload.headers, 'Accept', 'application/json');
+}
+
+function ensureFallbackHeader(headers, key, value) {
+    var normalizedKey = key.toLowerCase();
+    var exists = headers.some(function(header) {
+        return (header.key || '').toLowerCase() === normalizedKey;
+    });
+    if (!exists) {
+        headers.push({ key: key, value: value });
+    }
 }
 
 function addFallbackFormField(formData, value) {

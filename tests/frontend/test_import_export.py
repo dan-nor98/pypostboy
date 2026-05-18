@@ -29,3 +29,42 @@ def test_parse_curl_fallback_handles_ansi_c_quoted_header_value():
         ]);
         """
     )
+
+
+def test_parse_curl_fallback_handles_json_flag_with_space_separated_value():
+    run_node(
+        r"""
+        import assert from 'node:assert/strict';
+        import { parseCurlFallback } from './public/js/features/import-export.js';
+
+        const parsed = parseCurlFallback(`curl https://api.example.test/widgets --json '{"name":"Ada"}'`);
+
+        assert.equal(parsed.method, 'POST');
+        assert.equal(parsed.url, 'https://api.example.test/widgets');
+        assert.equal(parsed.body_type, 'json');
+        assert.equal(parsed.body_content, '{"name":"Ada"}');
+        assert.deepEqual(parsed.headers, [
+            { key: 'Content-Type', value: 'application/json' },
+            { key: 'Accept', value: 'application/json' },
+        ]);
+        """
+    )
+
+
+def test_parse_curl_fallback_handles_json_flag_with_equals_and_existing_headers():
+    run_node(
+        r"""
+        import assert from 'node:assert/strict';
+        import { parseCurlFallback } from './public/js/features/import-export.js';
+
+        const parsed = parseCurlFallback(`curl --request PATCH https://api.example.test/widgets/1 -H 'accept: application/vnd.api+json' -H 'content-type: application/merge-patch+json' --json={"name":"Ada"}`);
+
+        assert.equal(parsed.method, 'PATCH');
+        assert.equal(parsed.body_type, 'json');
+        assert.equal(parsed.body_content, '{"name":"Ada"}');
+        assert.deepEqual(parsed.headers, [
+            { key: 'accept', value: 'application/vnd.api+json' },
+            { key: 'content-type', value: 'application/merge-patch+json' },
+        ]);
+        """
+    )
