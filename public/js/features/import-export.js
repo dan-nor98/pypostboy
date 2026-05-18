@@ -71,7 +71,7 @@ function decodeAnsiCQuoteEscape(char) {
 
 export function normalizeParsedImportPayload(payload) {
     payload = payload || {};
-    return {
+    var normalized = {
         method: String(payload.method || 'GET').toUpperCase(),
         url: payload.url || '',
         headers: Array.isArray(payload.headers) ? payload.headers : [],
@@ -79,6 +79,36 @@ export function normalizeParsedImportPayload(payload) {
         body_content: payload.body_content || '',
         form_data: Array.isArray(payload.form_data) ? payload.form_data : []
     };
+
+    if (normalized.body_type === 'form-urlencoded' &&
+            normalized.form_data.length === 0 &&
+            normalized.body_content) {
+        normalized.form_data = parseUrlEncodedFormRows(normalized.body_content);
+    }
+
+    return normalized;
+}
+
+function parseUrlEncodedFormRows(bodyContent) {
+    return String(bodyContent).split('&').reduce(function(rows, pair) {
+        if (!pair) return rows;
+        var equalIndex = pair.indexOf('=');
+        if (equalIndex === -1) return rows;
+        rows.push({
+            key: decodeUrlEncodedFormComponent(pair.substring(0, equalIndex)),
+            value: decodeUrlEncodedFormComponent(pair.substring(equalIndex + 1))
+        });
+        return rows;
+    }, []);
+}
+
+function decodeUrlEncodedFormComponent(value) {
+    var plusAsSpace = String(value).replace(/\+/g, ' ');
+    try {
+        return decodeURIComponent(plusAsSpace);
+    } catch (e) {
+        return plusAsSpace;
+    }
 }
 
 export function applyParsedImportPayload(payload, editor) {
