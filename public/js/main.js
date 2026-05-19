@@ -22,8 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
         methodSelect, urlInput, executionModeSelect, requestAdvancedToggle, requestBarSecondary, clientCredentialsSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
         bodyContent, prettifyJsonBtn, responseBodyViewer, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
-        importConfirmBtn, collectionList, collectionSearchInput, exportCurlBtn, exportModal, exportModalClose, exportOutput,
-        copyExportBtn, snapshotNameModal, snapshotNameModalClose, snapshotNameModalTitle, snapshotNameInput, snapshotNameCancelBtn, snapshotNameSaveBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
+        importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput, collectionSearchInput,
+        copyExportBtn, snapshotNameModal, snapshotNameModalClose, snapshotNameModalTitle, snapshotNameInput, snapshotNameCancelBtn, snapshotNameSaveBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, responseSnapshotFeedback, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
         responseResizeHandle, loginScreen, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
@@ -583,6 +583,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (panelId === 'curl-panel') updateSidebarCurlOutput();
+    }
+
+    function openSnapshotsPanel() {
+        setRightSidebarOpen(true);
+        activateRightSidebarPanel('snapshots-panel');
+    }
+
+    function showSnapshotSavedFeedback(snapshotId) {
+        if (!responseSnapshotFeedback) return;
+        var id = snapshotId ? String(snapshotId) : '';
+        var url = id ? '#snapshot-' + encodeURIComponent(id) : '#';
+        responseSnapshotFeedback.innerHTML = '✅ Snapshot saved. <a href="' + url + '" data-action="open-snapshots-panel">View in Snapshots panel</a>.';
+    }
+
+    if (responseSnapshotFeedback) {
+        responseSnapshotFeedback.addEventListener('click', function(event) {
+            var trigger = event.target.closest('[data-action="open-snapshots-panel"]');
+            if (!trigger) return;
+            event.preventDefault();
+            openSnapshotsPanel();
+            var hash = trigger.getAttribute('href') || '';
+            var snapshotId = hash.indexOf('#snapshot-') === 0 ? decodeURIComponent(hash.replace('#snapshot-', '')) : '';
+            if (snapshotId) highlightSnapshotRow(snapshotId);
+        });
     }
 
     document.querySelectorAll('.right-sidebar-tab').forEach(function(tab) {
@@ -2796,6 +2820,7 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedSnapshotId = String(instance.id);
             await refreshInstancesForActiveTab();
             highlightSnapshotRow(selectedSnapshotId);
+            showSnapshotSavedFeedback(selectedSnapshotId);
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         }

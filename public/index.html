@@ -390,10 +390,11 @@
                             </div>
                         </div>
                         <div class="response-actions" role="group" aria-label="Response actions">
-                            <button class="btn-copy-response" id="saveResponseSnapshotBtn" type="button" aria-label="Save response snapshot">💾 Save</button>
+                            <button class="btn-copy-response" id="saveResponseSnapshotBtn" type="button" aria-label="Save response as snapshot">💾 Save Snapshot</button>
                             <button class="btn-copy-response" id="copyResponseBtn" type="button" aria-label="Copy response body">📋 Copy</button>
                             <button class="btn-copy-response" id="responseFullscreenBtn" type="button" aria-label="Toggle response fullscreen" aria-pressed="false" title="Expand response viewer">⛶ Fullscreen</button>
                         </div>
+                        <p class="response-snapshot-feedback" id="responseSnapshotFeedback" role="status" aria-live="polite"></p>
                         <button class="response-sheet-toggle" id="responseSheetToggle" type="button" aria-label="Collapse response panel" aria-expanded="false">×</button>
                     </div>
                 </div>
@@ -428,7 +429,10 @@
             <div class="right-sidebar-panel active" id="snapshots-panel">
                 <div class="right-sidebar-section">
                     <h3>Snapshot Management</h3>
-                    <p class="right-sidebar-hint">Snapshots saved from the response header appear here. Click a snapshot to load it immediately.</p>
+                    <p class="right-sidebar-hint">Use snapshots to compare responses, keep debugging history, and quickly reuse known-good states. Save a response snapshot from the header, then load any snapshot here.</p>
+                    <div class="right-sidebar-actions">
+                        <button class="btn-add-row" id="saveInstanceBtn" type="button">Save Snapshot from Response</button>
+                    </div>
                     <div class="instances-bar hidden" id="instancesBar">
                         <div id="snapshotList" class="snapshot-list" aria-label="Snapshots"></div>
                     </div>

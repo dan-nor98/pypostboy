@@ -78,6 +78,17 @@
   flex-wrap: wrap;
 }
 
+.response-snapshot-feedback {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.response-snapshot-feedback a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
 .status-badge {
   padding: 3px 10px;
   border-radius: var(--radius-sm);

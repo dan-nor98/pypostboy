@@ -46,6 +46,7 @@ export function getDomElements() {
         copyResponseBtn: document.getElementById('copyResponseBtn'),
         responseFullscreenBtn: document.getElementById('responseFullscreenBtn'),
         saveResponseSnapshotBtn: document.getElementById('saveResponseSnapshotBtn'),
+        responseSnapshotFeedback: document.getElementById('responseSnapshotFeedback'),
         authFields: document.getElementById('authFields'),
         formDataRows: document.getElementById('formDataRows'),
         addFormDataBtn: document.getElementById('addFormDataBtn'),
