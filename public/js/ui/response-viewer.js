@@ -245,6 +245,7 @@ export function renderResponseIssue(element, issue) {
     var likelyCause = issue.likelyCause || 'No likely cause was provided.';
     var suggestedFix = issue.suggestedFix || 'Retry the request and verify your settings.';
     var detailsText = issue.detailsText || '';
+    var cta = issue.cta || null;
 
     setRawResponseText(element, codeElement, detailsText);
     setCodeMode(codeElement, false);
@@ -255,6 +256,7 @@ export function renderResponseIssue(element, issue) {
         + '<p class="response-issue-message">' + escapeHtml(message) + '</p>'
         + renderIssueMetaRow('Likely cause', likelyCause)
         + renderIssueMetaRow('Suggested fix', suggestedFix)
+        + (cta && cta.label ? '<button class="response-issue-cta btn-secondary" type="button" data-action="' + escapeHtml(cta.action || '') + '">' + escapeHtml(cta.label) + '</button>' : '')
         + '<details class="response-issue-details"><summary>Details</summary><pre>' + escapeHtml(detailsText) + '</pre></details>'
         + '</section>';
     updateResponseLineNumbers(element);
