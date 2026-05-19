@@ -108,6 +108,7 @@
   .request-tabs-bar,
   .request-section,
   .response-section,
+  .request-bar,
   .url-bar,
   .response-header,
   .response-meta {
@@ -260,7 +261,12 @@
     padding: 12px 16px;
   }
 
-  .url-bar {
+  .request-bar {
+    gap: 10px;
+  }
+
+  .url-bar,
+  .request-bar-secondary {
     flex-wrap: wrap;
   }
 
@@ -276,7 +282,11 @@
   }
 
   .url-bar .btn-send,
-  .url-bar .btn-loop {
+  .request-bar-secondary .btn-loop {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .request-bar-secondary .execution-mode-control {
     flex: 1 1 calc(50% - 4px);
   }
 
@@ -327,7 +337,8 @@
     max-width: 70vw;
   }
 
-  .url-bar {
+  .url-bar,
+  .request-bar-secondary {
     gap: 10px;
   }
 
@@ -337,9 +348,13 @@
   }
 
   .url-bar .btn-send,
-  .url-bar .btn-loop {
+  .request-bar-secondary .btn-loop {
     flex: 1 1 calc(50% - 5px);
     width: auto;
+  }
+
+  .request-bar-secondary .execution-mode-control {
+    flex: 1 1 100%;
   }
 
   .loop-controls {

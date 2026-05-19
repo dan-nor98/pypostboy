@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ─── Element References ────────────────────────────────
     const {
-        methodSelect, urlInput, executionModeSelect, clientCredentialsSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
+        methodSelect, urlInput, executionModeSelect, requestAdvancedToggle, requestBarSecondary, clientCredentialsSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
         bodyContent, prettifyJsonBtn, responseBodyViewer, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
         importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
     const EXECUTION_MODE_STORAGE_KEY = 'postboy.executionMode';
     const CLIENT_CREDENTIALS_MODE_STORAGE_KEY = 'postboy.clientCredentialsMode';
+    const REQUEST_ADVANCED_EXPANDED_STORAGE_KEY = 'postboy.requestAdvancedExpanded';
     const DEFAULT_EXECUTION_MODE = 'server';
     const DEFAULT_CLIENT_CREDENTIALS_MODE = 'same-origin';
     const CLIENT_CREDENTIALS_MODES = new Set(['omit', 'same-origin', 'include']);
@@ -80,6 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const FORBIDDEN_CLIENT_HEADER_PREFIXES = ['proxy-', 'sec-'];
 
     initExecutionModeControl();
+    initRequestBarAdvancedControls();
     initBodyContentEditor(bodyContent);
 
     function initBodyContentEditor(textarea) {
@@ -3305,6 +3307,45 @@ document.addEventListener('DOMContentLoaded', () => {
             '<button class="btn-remove">&times;</button>';
         row.querySelector('.btn-remove').addEventListener('click', function() { row.remove(); markActiveTabUnsaved(); });
         headersContainer.appendChild(row);
+    }
+
+
+    function getStoredRequestAdvancedExpanded() {
+        var stored = null;
+        try {
+            stored = localStorage.getItem(REQUEST_ADVANCED_EXPANDED_STORAGE_KEY);
+        } catch (err) {
+            stored = null;
+        }
+        return stored === '1';
+    }
+
+    function setRequestAdvancedExpanded(expanded) {
+        if (!requestBarSecondary || !requestAdvancedToggle) return;
+        requestBarSecondary.hidden = !expanded;
+        requestAdvancedToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        requestAdvancedToggle.textContent = expanded ? 'Hide advanced options' : 'Advanced options';
+        try {
+            localStorage.setItem(REQUEST_ADVANCED_EXPANDED_STORAGE_KEY, expanded ? '1' : '0');
+        } catch (err) {
+            showToast('Could not persist advanced options state', 'warning');
+        }
+    }
+
+    function initRequestBarAdvancedControls() {
+        if (!requestAdvancedToggle || !requestBarSecondary) return;
+        setRequestAdvancedExpanded(getStoredRequestAdvancedExpanded());
+        requestAdvancedToggle.addEventListener('click', function() {
+            setRequestAdvancedExpanded(requestBarSecondary.hidden);
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === '.') {
+                e.preventDefault();
+                setRequestAdvancedExpanded(requestBarSecondary.hidden);
+                requestAdvancedToggle.focus();
+            }
+        });
     }
 
     function getStoredExecutionMode() {

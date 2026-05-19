@@ -221,34 +221,39 @@
             </div>
 
             <!-- URL Bar -->
-            <div class="url-bar">
-                <select id="methodSelect">
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="PATCH">PATCH</option>
-                    <option value="DELETE">DELETE</option>
-                    <option value="HEAD">HEAD</option>
-                    <option value="OPTIONS">OPTIONS</option>
-                </select>
-                <input type="text" id="urlInput" placeholder="Enter request URL or paste cURL command...">
-                <button class="btn-send btn btn-primary" id="sendBtn">Send</button>
-                <label class="execution-mode-control" for="executionModeSelect">
-                    <span>Run via</span>
-                    <select id="executionModeSelect" title="Choose how this request is executed">
-                        <option value="client">Client side</option>
-                        <option value="server" selected>Server proxy</option>
+            <div class="request-bar" id="requestBar">
+                <div class="url-bar request-bar-primary">
+                    <select id="methodSelect">
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="PATCH">PATCH</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="HEAD">HEAD</option>
+                        <option value="OPTIONS">OPTIONS</option>
                     </select>
-                </label>
-                <label class="execution-mode-control client-credentials-control" for="clientCredentialsSelect">
-                    <span>Credentials</span>
-                    <select id="clientCredentialsSelect" title="Credentials mode for direct browser requests">
-                        <option value="omit">omit</option>
-                        <option value="same-origin">same-origin</option>
-                        <option value="include">include</option>
-                    </select>
-                </label>
-                <button class="btn-loop btn btn-tertiary" id="loopBtn" title="Loop Request" aria-label="Loop request">🔁</button>
+                    <input type="text" id="urlInput" placeholder="Enter request URL or paste cURL command...">
+                    <button class="btn-send btn btn-primary" id="sendBtn">Send</button>
+                </div>
+                <div class="request-bar-secondary" id="requestBarSecondary" hidden>
+                    <label class="execution-mode-control" for="executionModeSelect">
+                        <span>Run via</span>
+                        <select id="executionModeSelect" title="Choose how this request is executed">
+                            <option value="client">Client side</option>
+                            <option value="server" selected>Server proxy</option>
+                        </select>
+                    </label>
+                    <label class="execution-mode-control client-credentials-control" for="clientCredentialsSelect">
+                        <span>Credentials</span>
+                        <select id="clientCredentialsSelect" title="Credentials mode for direct browser requests">
+                            <option value="omit">omit</option>
+                            <option value="same-origin">same-origin</option>
+                            <option value="include">include</option>
+                        </select>
+                    </label>
+                    <button class="btn-loop btn btn-tertiary" id="loopBtn" title="Loop Request" aria-label="Loop request">🔁</button>
+                </div>
+                <button class="request-bar-advanced-toggle btn btn-tertiary" id="requestAdvancedToggle" type="button" aria-controls="requestBarSecondary" aria-expanded="false" title="Advanced request controls (Alt+.)">Advanced options</button>
             </div>
 
             <!-- Loop Controls -->
