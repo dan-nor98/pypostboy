@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bodyContent, prettifyJsonBtn, responseBodyViewer, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
         importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
-        copyExportBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
+        copyExportBtn, snapshotNameModal, snapshotNameModalClose, snapshotNameModalTitle, snapshotNameInput, snapshotNameCancelBtn, snapshotNameSaveBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
         responseResizeHandle, loginScreen, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let snapshotContextTargetId = '';
     let snapshotContextTrigger  = null;
     let pendingSaveToCollectionResolver = null;
+    let pendingSnapshotNameResolver = null;
     let workspaceInitialized = false;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
@@ -2739,9 +2740,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         var defaultName = buildSnapshotDefaultName();
-        var name = prompt('Snapshot name', defaultName);
+        var name = await promptSnapshotName(defaultName, 'Save snapshot');
         if (name === null) return;
-        name = name.trim();
         if (!name) {
             showToast('Snapshot name is required', 'error');
             return;
@@ -2796,9 +2796,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!id) return;
 
         var selected = activeRequestInstances.find(function(instance) { return String(instance.id) === String(id); });
-        var name = prompt('Rename snapshot', selected ? selected.name : '');
+        var name = await promptSnapshotName(selected ? selected.name : '', 'Rename snapshot');
         if (name === null) return;
-        name = name.trim();
         if (!name) {
             showToast('Snapshot name is required', 'error');
             return;
@@ -4314,12 +4313,14 @@ document.addEventListener('DOMContentLoaded', () => {
         sidebarCurlOutput.value = buildCurlCommand();
     }
 
-    exportCurlBtn.addEventListener('click', function() {
-        var curlCommand = buildCurlCommand();
-        exportOutput.value = curlCommand;
-        if (sidebarCurlOutput) sidebarCurlOutput.value = curlCommand;
-        exportModal.classList.add('active');
-    });
+    if (exportCurlBtn) {
+        exportCurlBtn.addEventListener('click', function() {
+            var curlCommand = buildCurlCommand();
+            exportOutput.value = curlCommand;
+            if (sidebarCurlOutput) sidebarCurlOutput.value = curlCommand;
+            exportModal.classList.add('active');
+        });
+    }
 
     if (generateSidebarCurlBtn) {
         generateSidebarCurlBtn.addEventListener('click', function() {
@@ -4337,12 +4338,64 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    exportModalClose.addEventListener('click', function() { exportModal.classList.remove('active'); });
-    copyExportBtn.addEventListener('click', function() {
-        exportOutput.select();
-        document.execCommand('copy');
-        showToast('Copied to clipboard', 'success');
-    });
+    if (exportModalClose) exportModalClose.addEventListener('click', function() { exportModal.classList.remove('active'); });
+    if (copyExportBtn) {
+        copyExportBtn.addEventListener('click', function() {
+            exportOutput.select();
+            document.execCommand('copy');
+            showToast('Copied to clipboard', 'success');
+        });
+    }
+
+    function closeSnapshotNameModal(result) {
+        if (!snapshotNameModal || !pendingSnapshotNameResolver) return;
+        var resolver = pendingSnapshotNameResolver;
+        pendingSnapshotNameResolver = null;
+        snapshotNameModal.classList.remove('active');
+        resolver(result);
+    }
+
+    function promptSnapshotName(defaultName, modalTitle) {
+        if (!snapshotNameModal || !snapshotNameInput || !snapshotNameModalTitle) {
+            var promptedName = window.prompt('Snapshot name', defaultName);
+            if (promptedName === null) return Promise.resolve(null);
+            return Promise.resolve(promptedName.trim());
+        }
+        snapshotNameModalTitle.textContent = modalTitle || 'Snapshot name';
+        snapshotNameInput.value = defaultName || '';
+        snapshotNameModal.classList.add('active');
+        setTimeout(function() {
+            snapshotNameInput.focus();
+            snapshotNameInput.select();
+        }, 0);
+        return new Promise(function(resolve) {
+            pendingSnapshotNameResolver = resolve;
+        });
+    }
+
+    if (snapshotNameSaveBtn) {
+        snapshotNameSaveBtn.addEventListener('click', function() {
+            closeSnapshotNameModal((snapshotNameInput.value || '').trim());
+        });
+    }
+    if (snapshotNameCancelBtn) snapshotNameCancelBtn.addEventListener('click', function() { closeSnapshotNameModal(null); });
+    if (snapshotNameModalClose) snapshotNameModalClose.addEventListener('click', function() { closeSnapshotNameModal(null); });
+    if (snapshotNameModal) {
+        snapshotNameModal.addEventListener('click', function(e) {
+            if (e.target === snapshotNameModal) closeSnapshotNameModal(null);
+        });
+    }
+    if (snapshotNameInput) {
+        snapshotNameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                closeSnapshotNameModal((snapshotNameInput.value || '').trim());
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeSnapshotNameModal(null);
+            }
+        });
+    }
 
     // ═══════════════════════════════════════════════════════
     //  RESPONSE DISPLAY
