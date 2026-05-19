@@ -92,6 +92,10 @@ def proxy_http_request(body):
     headers = body.get('headers', {})
     req_body = body.get('body', None)
     content_type = body.get('contentType', None)
+    verify_ssl = body.get('verifySsl', True)
+
+    if not isinstance(verify_ssl, bool):
+        raise ValueError('verifySsl must be a boolean when provided')
 
     if not url:
         raise ValueError('URL is required')
@@ -141,6 +145,14 @@ def proxy_http_request(body):
     )
 
     try:
+        if not verify_ssl:
+            logger.warning(
+                'Proxy outbound TLS verification disabled: method=%s host=%s path=%s',
+                method,
+                url_hostname,
+                url_path,
+            )
+
         response = http_requests.request(
             method=method,
             url=url,
@@ -148,7 +160,8 @@ def proxy_http_request(body):
             data=request_data,
             files=files,
             allow_redirects=True,
-            timeout=proxy_timeout
+            timeout=proxy_timeout,
+            verify=verify_ssl
         )
     except http_requests.exceptions.Timeout as err:
         elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
