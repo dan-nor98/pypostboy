@@ -51,6 +51,7 @@ function isJsonTreeLineHidden(line, root) {
 }
 
 function getVisibleJsonTreeLineCount(codeElement) {
+    if (!codeElement.querySelectorAll) return 0;
     var lines = codeElement.querySelectorAll('.json-tree-line');
     if (!lines.length) return 0;
 
@@ -66,14 +67,18 @@ function updateResponseLineNumbers(element) {
     var lineNumbersElement = getLineNumbersElement(element);
     if (!codeElement || !lineNumbersElement) return;
 
-    var lineCount = codeElement.classList.contains('json-tree')
-        ? getVisibleJsonTreeLineCount(codeElement)
+    var isJsonTree = !!(
+        (codeElement.classList && codeElement.classList.contains && codeElement.classList.contains('json-tree'))
+        || (typeof codeElement.innerHTML === 'string' && codeElement.innerHTML.indexOf('json-tree-line') > -1)
+    );
+    var lineCount = isJsonTree
+        ? (getVisibleJsonTreeLineCount(codeElement) || getLineCount((codeElement.dataset && codeElement.dataset.rawBody) || codeElement.textContent || ''))
         : getLineCount(codeElement.textContent || '');
     var lines = [];
     for (var i = 1; i <= lineCount; i++) {
         lines.push('<span>' + i + '</span>');
     }
-    lineNumbersElement.innerHTML = lines.join('');
+    lineNumbersElement.innerHTML = lines.join('\n');
 }
 
 function normalizeBody(body) {
@@ -157,12 +162,18 @@ function renderJsonTree(value) {
 
 function setRawResponseText(element, codeElement, text) {
     var rawText = String(text || '');
-    if (element) element.dataset.rawBody = rawText;
-    if (codeElement && codeElement !== element) codeElement.dataset.rawBody = rawText;
+    if (element) {
+        element.dataset = element.dataset || {};
+        element.dataset.rawBody = rawText;
+    }
+    if (codeElement && codeElement !== element) {
+        codeElement.dataset = codeElement.dataset || {};
+        codeElement.dataset.rawBody = rawText;
+    }
 }
 
 function setCodeMode(codeElement, isJsonTree) {
-    codeElement.classList.toggle('json-tree', isJsonTree);
+    if (codeElement.classList && codeElement.classList.toggle) codeElement.classList.toggle('json-tree', isJsonTree);
 }
 
 function renderParsedJson(element, codeElement, value) {
@@ -192,6 +203,7 @@ export function renderResponseBody(element, body, headers) {
 
     var codeElement = getResponseCodeElement(element);
     if (!codeElement) return;
+    if (codeElement.classList && codeElement.classList.remove) codeElement.classList.remove('response-issue');
 
     var normalized = normalizeBody(body);
     if (normalized.format === 'json') {
@@ -213,5 +225,37 @@ export function renderResponseBody(element, body, headers) {
     setRawResponseText(element, codeElement, normalized.text);
     setCodeMode(codeElement, false);
     codeElement.innerHTML = highlightByFormat(normalized.text, format);
+    updateResponseLineNumbers(element);
+}
+
+function renderIssueMetaRow(label, value) {
+    return '<div class="response-issue-row"><span class="response-issue-row-label">' + escapeHtml(label) + '</span><span class="response-issue-row-value">' + escapeHtml(value || 'Not available') + '</span></div>';
+}
+
+export function renderResponseIssue(element, issue) {
+    if (!element || !issue) return;
+
+    var codeElement = getResponseCodeElement(element);
+    if (!codeElement) return;
+
+    var variant = issue.variant || 'error';
+    var icon = issue.icon || '⛔';
+    var title = issue.title || 'Request failed';
+    var message = issue.message || 'The request could not be completed.';
+    var likelyCause = issue.likelyCause || 'No likely cause was provided.';
+    var suggestedFix = issue.suggestedFix || 'Retry the request and verify your settings.';
+    var detailsText = issue.detailsText || '';
+
+    setRawResponseText(element, codeElement, detailsText);
+    setCodeMode(codeElement, false);
+    if (codeElement.classList && codeElement.classList.add) codeElement.classList.add('response-issue');
+    codeElement.innerHTML = ''
+        + '<section class="response-issue-card response-issue-' + escapeHtml(variant) + '" role="alert" aria-live="polite">'
+        + '<header class="response-issue-header"><span class="response-issue-icon" aria-hidden="true">' + escapeHtml(icon) + '</span><h4 class="response-issue-title">' + escapeHtml(title) + '</h4></header>'
+        + '<p class="response-issue-message">' + escapeHtml(message) + '</p>'
+        + renderIssueMetaRow('Likely cause', likelyCause)
+        + renderIssueMetaRow('Suggested fix', suggestedFix)
+        + '<details class="response-issue-details"><summary>Details</summary><pre>' + escapeHtml(detailsText) + '</pre></details>'
+        + '</section>';
     updateResponseLineNumbers(element);
 }
