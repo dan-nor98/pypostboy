@@ -72,7 +72,7 @@ function updateResponseLineNumbers(element) {
         || (typeof codeElement.innerHTML === 'string' && codeElement.innerHTML.indexOf('json-tree-line') > -1)
     );
     var lineCount = isJsonTree
-        ? (getVisibleJsonTreeLineCount(codeElement) || getLineCount((codeElement.dataset && codeElement.dataset.rawBody) || codeElement.textContent || ''))
+        ? (getVisibleJsonTreeLineCount(codeElement) || getLineCount(getRawBody(codeElement) || codeElement.textContent || ''))
         : getLineCount(codeElement.textContent || '');
     var lines = [];
     for (var i = 1; i <= lineCount; i++) {
@@ -160,16 +160,23 @@ function renderJsonTree(value) {
     return renderJsonNode(value, null, 0, false);
 }
 
+function storeRawBody(target, rawText) {
+    if (!target) return;
+    if (target.dataset) target.dataset.rawBody = rawText;
+    else target.__rawBody = rawText;
+}
+
+function getRawBody(target) {
+    if (!target) return '';
+    if (target.dataset && typeof target.dataset.rawBody === 'string') return target.dataset.rawBody;
+    if (typeof target.__rawBody === 'string') return target.__rawBody;
+    return '';
+}
+
 function setRawResponseText(element, codeElement, text) {
     var rawText = String(text || '');
-    if (element) {
-        element.dataset = element.dataset || {};
-        element.dataset.rawBody = rawText;
-    }
-    if (codeElement && codeElement !== element) {
-        codeElement.dataset = codeElement.dataset || {};
-        codeElement.dataset.rawBody = rawText;
-    }
+    storeRawBody(element, rawText);
+    if (codeElement && codeElement !== element) storeRawBody(codeElement, rawText);
 }
 
 function setCodeMode(codeElement, isJsonTree) {
