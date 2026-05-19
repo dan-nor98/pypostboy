@@ -77,56 +77,44 @@
   gap: 6px;
   padding: 0 2px;
   color: var(--color-text-muted);
-  font-size: 0.85em;
+  font-size: 0.82em;
   white-space: nowrap;
 }
 
 .execution-mode-control select {
   padding: 10px 12px;
-  background: var(--color-border);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
 
 .execution-mode-control select:focus {
   outline: none;
-  border-color: var(--color-text);
+  border-color: var(--color-focus-ring);
+  box-shadow: 0 0 0 2px var(--color-accent-softer);
 }
 
 .btn-send {
   padding: 10px 24px;
-  background: var(--color-border);
-  color: var(--color-text);
-  border: none;
-  border-radius: var(--radius-md);
-  font-weight: bold;
-  cursor: pointer;
-  transition: background 0.2s;
+  min-width: 92px;
 }
 
-.btn-send:hover {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+.btn-send:focus-visible {
+  box-shadow: 0 0 0 3px var(--color-bg), 0 0 0 6px var(--color-focus-ring);
 }
 
 .btn-loop {
   padding: 10px 14px;
-  background: var(--color-border);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
   font-size: 1.1em;
-  transition: all 0.2s;
 }
 
 .btn-loop.active {
-  background: var(--color-accent);
+  background: var(--color-accent-soft);
   color: var(--color-accent-contrast);
-  border-color: var(--color-text);
+  border-color: var(--color-accent);
 }
 /* ===== LOOP CONTROLS ===== */
 .loop-controls {
