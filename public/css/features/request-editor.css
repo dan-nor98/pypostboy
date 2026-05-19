@@ -58,7 +58,7 @@
   flex: 1;
   min-width: 0;
   padding: 10px 14px;
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -122,7 +122,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: 0.85em;
@@ -135,7 +135,7 @@
 .loop-controls input {
   width: 80px;
   padding: 6px 8px;
-  background: var(--color-bg);
+  background: var(--color-surface-inset);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -152,7 +152,7 @@
   flex: 1;
   min-width: 0;
   overflow-x: hidden;
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -166,7 +166,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 8px 10px;
@@ -192,7 +192,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--color-bg);
+  background: var(--color-surface-inset);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -203,7 +203,7 @@
 
 .snapshot-list-item:hover:not(.is-disabled),
 .snapshot-list-item:focus-within:not(.is-disabled) {
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border-color: var(--color-text);
   outline: none;
 }
@@ -276,7 +276,7 @@
   display: block;
   cursor: default;
   color: var(--color-text-muted);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border-style: dashed;
   padding: 8px 10px;
   white-space: normal;
