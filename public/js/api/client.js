@@ -1,3 +1,15 @@
+import { guestStorageApi } from './guest-storage.js';
+
+const EXPLICIT_GUEST_STORAGE_KEY = 'postboy_explicit_guest';
+
+function useGuestStorage() {
+    try {
+        return sessionStorage.getItem(EXPLICIT_GUEST_STORAGE_KEY) === 'true';
+    } catch (_err) {
+        return false;
+    }
+}
+
 function buildJsonOptions(method, payload) {
     return {
         method: method,
@@ -59,27 +71,27 @@ export const apiClient = {
     logout() { return request('/api/auth/logout', { method: 'POST' }); },
     register(payload) { return request('/api/auth/register', buildJsonOptions('POST', payload)); },
     getCurrentUser() { return request('/api/auth/me'); },
-    getCollections() { return request('/api/collections'); },
-    getCollection(id) { return request('/api/collections/' + id); },
+    getCollections() { return useGuestStorage() ? Promise.resolve(guestStorageApi.getCollections()) : request('/api/collections'); },
+    getCollection(id) { return useGuestStorage() ? Promise.resolve(guestStorageApi.getCollection(id)) : request('/api/collections/' + id); },
     reorderCollections(parentId, orderedIds) {
-        return request('/api/collections/reorder', buildJsonOptions('PUT', { parent_id: parentId, ordered_ids: orderedIds }));
+        return useGuestStorage() ? Promise.resolve(guestStorageApi.reorderCollections(parentId, orderedIds)) : request('/api/collections/reorder', buildJsonOptions('PUT', { parent_id: parentId, ordered_ids: orderedIds }));
     },
-    updateCollection(id, payload) { return request('/api/collections/' + id, buildJsonOptions('PUT', payload)); },
-    createCollection(payload) { return request('/api/collections', buildJsonOptions('POST', payload)); },
-    duplicateCollection(id) { return request('/api/collections/' + id + '/duplicate', { method: 'POST' }); },
-    deleteCollection(id) { return request('/api/collections/' + id, { method: 'DELETE' }); },
-    getCollectionRequests(id) { return request('/api/collections/' + id + '/requests'); },
+    updateCollection(id, payload) { return useGuestStorage() ? Promise.resolve(guestStorageApi.updateCollection(id, payload)) : request('/api/collections/' + id, buildJsonOptions('PUT', payload)); },
+    createCollection(payload) { return useGuestStorage() ? Promise.resolve(guestStorageApi.createCollection(payload)) : request('/api/collections', buildJsonOptions('POST', payload)); },
+    duplicateCollection(id) { return useGuestStorage() ? Promise.resolve(guestStorageApi.duplicateCollection(id)) : request('/api/collections/' + id + '/duplicate', { method: 'POST' }); },
+    deleteCollection(id) { return useGuestStorage() ? Promise.resolve(guestStorageApi.deleteCollection(id)) : request('/api/collections/' + id, { method: 'DELETE' }); },
+    getCollectionRequests(id) { return useGuestStorage() ? Promise.resolve(guestStorageApi.getCollectionRequests(id)) : request('/api/collections/' + id + '/requests'); },
     reorderRequests(collectionId, orderedIds) {
-        return request('/api/requests/reorder', buildJsonOptions('PUT', { collection_id: collectionId, ordered_ids: orderedIds }));
+        return useGuestStorage() ? Promise.resolve(guestStorageApi.reorderRequests(collectionId, orderedIds)) : request('/api/requests/reorder', buildJsonOptions('PUT', { collection_id: collectionId, ordered_ids: orderedIds }));
     },
     moveRequest(id, collectionId) {
-        return request('/api/requests/' + id + '/move', buildJsonOptions('PUT', { collection_id: collectionId }));
+        return useGuestStorage() ? Promise.resolve(guestStorageApi.moveRequest(id, collectionId)) : request('/api/requests/' + id + '/move', buildJsonOptions('PUT', { collection_id: collectionId }));
     },
-    getRequest(id) { return request('/api/requests/' + id); },
-    updateRequest(id, payload) { return request('/api/requests/' + id, buildJsonOptions('PUT', payload)); },
-    createRequest(payload) { return request('/api/requests', buildJsonOptions('POST', payload)); },
-    duplicateRequest(id) { return request('/api/requests/' + id + '/duplicate', { method: 'POST' }); },
-    deleteRequest(id) { return request('/api/requests/' + id, { method: 'DELETE' }); },
+    getRequest(id) { return useGuestStorage() ? Promise.resolve(guestStorageApi.getRequest(id)) : request('/api/requests/' + id); },
+    updateRequest(id, payload) { return useGuestStorage() ? Promise.resolve(guestStorageApi.updateRequest(id, payload)) : request('/api/requests/' + id, buildJsonOptions('PUT', payload)); },
+    createRequest(payload) { return useGuestStorage() ? Promise.resolve(guestStorageApi.createRequest(payload)) : request('/api/requests', buildJsonOptions('POST', payload)); },
+    duplicateRequest(id) { return useGuestStorage() ? Promise.resolve(guestStorageApi.duplicateRequest(id)) : request('/api/requests/' + id + '/duplicate', { method: 'POST' }); },
+    deleteRequest(id) { return useGuestStorage() ? Promise.resolve(guestStorageApi.deleteRequest(id)) : request('/api/requests/' + id, { method: 'DELETE' }); },
     getRequestInstances(requestId) { return request('/api/requests/' + requestId + '/instances'); },
     createRequestInstance(requestId, payload) {
         return request('/api/requests/' + requestId + '/instances', buildJsonOptions('POST', payload));
