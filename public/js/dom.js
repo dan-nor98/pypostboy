@@ -29,6 +29,7 @@ export function getDomElements() {
         importInput: document.getElementById('importInput'),
         importConfirmBtn: document.getElementById('importConfirmBtn'),
         collectionList: document.getElementById('collectionList'),
+        collectionSearchInput: document.getElementById('collectionSearchInput'),
         exportCurlBtn: document.getElementById('exportCurlBtn'),
         exportModal: document.getElementById('exportModal'),
         exportModalClose: document.getElementById('exportModalClose'),

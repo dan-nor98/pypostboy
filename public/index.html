@@ -63,8 +63,18 @@
             </div>
             <div class="sidebar-panel active" id="collections-panel">
                 <div class="sidebar-section sidebar-actions">
-                    <button class="btn-import" id="newCollectionBtn" title="New Collection" aria-label="New Collection">➕</button>
-                    <button class="btn-import" id="importBtn" title="Import (Postman/cURL)" aria-label="Import (Postman/cURL)">📥</button>
+                    <div class="sidebar-action-row">
+                        <button class="btn-import" id="newCollectionBtn" title="Create collection" aria-label="Create collection">
+                            <span aria-hidden="true">➕</span><span>New Collection</span>
+                        </button>
+                        <button class="btn-import" id="importBtn" title="Import Postman or cURL" aria-label="Import Postman or cURL">
+                            <span aria-hidden="true">📥</span><span>Import</span>
+                        </button>
+                    </div>
+                    <label class="sidebar-search-wrap" for="collectionSearchInput">
+                        <span class="visually-hidden">Search collections and requests</span>
+                        <input type="search" id="collectionSearchInput" class="sidebar-search-input" placeholder="Search collections, folders, requests…" autocomplete="off">
+                    </label>
                 </div>
 
                 <!-- New Collection Modal -->

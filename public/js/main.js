@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
         methodSelect, urlInput, executionModeSelect, clientCredentialsSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
         bodyContent, prettifyJsonBtn, responseBodyViewer, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
-        importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
+        importConfirmBtn, collectionList, collectionSearchInput, exportCurlBtn, exportModal, exportModalClose, exportOutput,
         copyExportBtn, snapshotNameModal, snapshotNameModalClose, snapshotNameModalTitle, snapshotNameInput, snapshotNameCancelBtn, snapshotNameSaveBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeRequestInstances = [];
     const CREATE_NEW_COLLECTION_VALUE = '__new_collection__';
     let selectedSnapshotId     = '';
+    let collectionSearchTerm   = '';
     let loadingSnapshotId      = '';
     let snapshotContextTargetId = '';
     let snapshotContextTrigger  = null;
@@ -847,8 +848,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Restore expanded state after rendering
         restoreExpandedState();
+        applyCollectionFilter();
     }
 
+
+    function applyCollectionFilter() {
+        var term = (collectionSearchTerm || '').trim().toLowerCase();
+        var folders = Array.from(collectionList.querySelectorAll('.collection-folder'));
+        folders.forEach(function(folder) {
+            var folderName = ((folder.querySelector(':scope > .folder-header .folder-name') || {}).textContent || '').toLowerCase();
+            var requestRows = Array.from(folder.querySelectorAll(':scope > .folder-items .request-item'));
+            var requestMatch = requestRows.some(function(row) {
+                return ((row.querySelector('.request-item-name') || {}).textContent || '').toLowerCase().indexOf(term) !== -1;
+            });
+            var folderMatch = folderName.indexOf(term) !== -1;
+            var visible = !term || folderMatch || requestMatch;
+            folder.style.display = visible ? '' : 'none';
+
+            if (term && visible) {
+                var items = folder.querySelector(':scope > .folder-items');
+                var arrow = folder.querySelector(':scope > .folder-header .folder-arrow');
+                if (items) items.classList.add('open');
+                if (arrow) arrow.classList.add('open');
+            }
+        });
+
+        Array.from(collectionList.querySelectorAll('.request-item')).forEach(function(row) {
+            var match = !term || ((row.querySelector('.request-item-name') || {}).textContent || '').toLowerCase().indexOf(term) !== -1;
+            row.style.display = match ? '' : 'none';
+        });
+    }
     function saveExpandedState() {
         expandedCollections.clear();
         document.querySelectorAll('.collection-folder').forEach(function(folder) {
@@ -873,6 +902,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (arrow) arrow.classList.add('open');
                 }
             }
+        });
+    }
+
+    if (collectionSearchInput) {
+        collectionSearchInput.addEventListener('input', function(e) {
+            collectionSearchTerm = e.target.value || "";
+            applyCollectionFilter();
         });
     }
 
@@ -1021,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', () => {
         header.dataset.parentId = parentId == null ? '' : String(parentId);
         header.innerHTML =
         '<span class="folder-arrow">▶</span>' +
-        '<span class="folder-name">' + escHtml(col.name) + '</span>' +
+        '<span class="folder-name" title="' + escHtml(col.name) + '">' + escHtml(col.name) + '</span>' +
         '<span class="folder-count">' + totalRequests + '</span>';
 
         attachCollectionDragHandlers(header);
@@ -1070,7 +1106,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 reqEl.innerHTML =
                 '<span class="method-badge method-' + req.method + '">' + req.method + '</span>' +
-                '<span class="request-item-name">' + escHtml(req.name) + '</span>';
+                '<span class="request-item-name" title="' + escHtml(req.name) + '">' + escHtml(req.name) + '</span>';
 
                 attachRequestDragHandlers(reqEl);
 
