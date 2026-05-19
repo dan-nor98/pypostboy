@@ -195,6 +195,77 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+
+    function isRecoverableClientModeFailure(executionMode, diagnostics) {
+        if (executionMode !== 'client') return false;
+        var category = diagnostics && diagnostics.failureCategory;
+        return category === 'browser-cors'
+            || category === 'network-failure'
+            || category === 'mixed-content'
+            || category === 'likely-browser-restriction';
+    }
+
+    function trackModeRecoveryInteraction(eventName, payload) {
+        var data = Object.assign({
+            source: 'response-error-card',
+            timestamp: new Date().toISOString()
+        }, payload || {});
+
+        if (window && window.postboyTelemetry && typeof window.postboyTelemetry.track === 'function') {
+            window.postboyTelemetry.track(eventName, data);
+            return;
+        }
+
+        if (window && window.analytics && typeof window.analytics.track === 'function') {
+            window.analytics.track(eventName, data);
+            return;
+        }
+
+        if (window && typeof window.gtag === 'function') {
+            window.gtag('event', eventName, data);
+        }
+    }
+
+    async function handleSwitchToServerProxyRetry(event) {
+        if (event && event.preventDefault) event.preventDefault();
+
+        if (executionModeSelect) {
+            executionModeSelect.value = 'server';
+            executionModeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        trackModeRecoveryInteraction('request_mode_auto_switched', { to_mode: 'server' });
+        showToast('Switched to Server proxy. Retrying request…', 'info');
+
+        try {
+            var retrySucceeded = await sendRequest();
+            if (retrySucceeded) {
+                showToast('Retry completed using Server proxy.', 'success');
+                trackModeRecoveryInteraction('request_mode_retry_result', { to_mode: 'server', result: 'success' });
+            } else {
+                showToast('Retry failed after switching to Server proxy.', 'error');
+                trackModeRecoveryInteraction('request_mode_retry_result', { to_mode: 'server', result: 'failure' });
+            }
+        } catch (err) {
+            showToast('Retry failed after switching to Server proxy.', 'error');
+            trackModeRecoveryInteraction('request_mode_retry_result', {
+                to_mode: 'server',
+                result: 'failure',
+                message: err && err.message ? err.message : 'retry failed'
+            });
+        }
+    }
+
+    function initResponseIssueRecoveryControls() {
+        if (!responseBodyViewer) return;
+        responseBodyViewer.addEventListener('click', function(event) {
+            if (!event.target.closest) return;
+            var trigger = event.target.closest('[data-action="switch-to-server-proxy-retry"]');
+            if (!trigger || !responseBodyViewer.contains(trigger)) return;
+            handleSwitchToServerProxyRetry(event);
+        });
+    }
+
     // ─── Response Viewer Fullscreen ───────────────────────
     function setResponseFullscreen(isFullscreen) {
         if (!responseSection || !responseFullscreenBtn) return;
@@ -474,6 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initResponseSheetControls();
     initResponseFullscreenControl();
     initResponseJsonTreeControls();
+    initResponseIssueRecoveryControls();
     initPanelResizing();
     renderHistory();
     renderEnvVars();
@@ -3531,7 +3603,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function inferFailureCategory(executionMode, url, err) {
-        if (getUrlOrigin(url) === 'Invalid URL') return 'Invalid request URL';
+        if (getUrlOrigin(url) === 'Invalid URL') return 'client-config-error';
 
         if (executionMode === 'client') {
             var targetUrl;
@@ -3542,12 +3614,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (targetUrl && window.location.protocol === 'https:' && targetUrl.protocol === 'http:') {
-                return 'Mixed content blocked by the browser';
+                return 'mixed-content';
             }
             if (targetUrl && targetUrl.origin !== window.location.origin) {
-                return 'Likely CORS/browser network restriction';
+                return 'browser-cors';
             }
-            return 'Likely browser fetch/network restriction';
+            return 'likely-browser-restriction';
         }
 
         if (err && err.name === 'AbortError') return 'Backend proxy timeout or cancellation';
@@ -3743,6 +3815,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoading(true);
         var start = performance.now();
 
+        var requestSucceeded = false;
         try {
             var data = await executeRequest(payload, executionMode);
 
@@ -3774,6 +3847,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             addHistory(method, urlInput.value.trim(), sc);
             openResponseSheetForMobile();
+            requestSucceeded = true;
         } catch (err) {
             var errorElapsed = Math.round(performance.now() - start);
             var errorDiagnostics = Object.assign({
@@ -3807,7 +3881,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 message: err.message,
                 likelyCause: getLikelyCauseText(errorDiagnostics),
                 suggestedFix: getSuggestedFixText(errorDiagnostics, executionMode),
-                detailsText: errorBody
+                detailsText: errorBody,
+                cta: isRecoverableClientModeFailure(executionMode, errorDiagnostics)
+                    ? { action: 'switch-to-server-proxy-retry', label: 'Switch to Server proxy and retry' }
+                    : null
             });
             storeResponseOnActiveTab({
                 response_status: null,
@@ -3820,6 +3897,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         showLoading(false);
+        return requestSucceeded;
     }
 
     // ═══════════════════════════════════════════════════════
@@ -4580,6 +4658,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (category === 'server-unreachable') return 'The backend is unavailable or cannot reach the target host.';
         if (category === 'browser-cors') return 'The browser blocked this request because of CORS restrictions.';
         if (category === 'network-failure') return 'A network interruption prevented the request from completing.';
+        if (category === 'mixed-content') return 'The browser blocked an insecure (HTTP) request from a secure (HTTPS) context.';
+        if (category === 'likely-browser-restriction') return 'The browser blocked the request due to client-side network/security restrictions.';
         if (category === 'upstream-http-error') return 'The destination API responded with an HTTP error status.';
         if (category === 'client-config-error') return 'The URL, headers, auth, or request body appears misconfigured.';
         return 'An execution or connectivity issue interrupted the request.';
