@@ -2882,7 +2882,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (qIdx === -1 || url.substring(qIdx + 1).trim() === '') {
             paramsBody.innerHTML = '';
-            addParamRow('', '', '', true);
             updatingParamsFromUrl = false;
             return;
         }
@@ -2915,7 +2914,6 @@ document.addEventListener('DOMContentLoaded', () => {
         pairs.forEach(function(p) {
             addParamRow(p.key, p.value, existingDescs[p.key] || '', true);
         });
-        addParamRow('', '', '', true);
 
         updatingParamsFromUrl = false;
     }
@@ -2955,28 +2953,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof enabled === 'undefined') enabled = true;
 
         var tr = document.createElement('tr');
-        if (!enabled) tr.classList.add('param-row-disabled');
+        tr.classList.add('param-row');
+        tr.classList.add(enabled ? 'param-row-enabled' : 'param-row-disabled');
 
         tr.innerHTML =
-            '<td class="col-check"><input type="checkbox" class="param-enabled" ' + (enabled ? 'checked' : '') + '></td>' +
+            '<td class="col-check"><label class="param-enabled-label"><input type="checkbox" class="param-enabled" aria-label="Include parameter in request" ' + (enabled ? 'checked' : '') + '><span class="param-enabled-text">' + (enabled ? 'On' : 'Off') + '</span></label></td>' +
             '<td><input type="text" class="param-key" placeholder="Key" value="' + escAttr(key) + '"></td>' +
             '<td><input type="text" class="param-value" placeholder="Value" value="' + escAttr(value) + '"></td>' +
-            '<td><input type="text" class="param-desc" placeholder="Description" value="' + escAttr(desc) + '"></td>' +
-            '<td class="col-action"><button class="btn-remove param-remove">&times;</button></td>';
+            '<td><input type="text" class="param-desc" placeholder="Notes (optional)" value="' + escAttr(desc) + '"></td>' +
+            '<td class="col-action"><button class="btn-remove param-remove" type="button" aria-label="Remove parameter">×</button></td>';
 
         var chk   = tr.querySelector('.param-enabled');
+        var chkText = tr.querySelector('.param-enabled-text');
         var kIn   = tr.querySelector('.param-key');
         var vIn   = tr.querySelector('.param-value');
         var rmBtn = tr.querySelector('.param-remove');
 
         chk.addEventListener('change', function() {
             tr.classList.toggle('param-row-disabled', !chk.checked);
+            tr.classList.toggle('param-row-enabled', chk.checked);
+            if (chkText) chkText.textContent = chk.checked ? 'On' : 'Off';
             syncUrlFromParams();
         });
 
         kIn.addEventListener('input', function() {
             syncUrlFromParams();
-            ensureEmptyLastParamRow();
         });
 
         vIn.addEventListener('input', function() {
@@ -2986,25 +2987,10 @@ document.addEventListener('DOMContentLoaded', () => {
         rmBtn.addEventListener('click', function() {
             tr.remove();
             syncUrlFromParams();
-            ensureEmptyLastParamRow();
             markActiveTabUnsaved();
         });
 
         paramsBody.appendChild(tr);
-    }
-
-    function ensureEmptyLastParamRow() {
-        var rows = paramsBody.querySelectorAll('tr');
-        if (rows.length === 0) {
-            addParamRow();
-            return;
-        }
-        var last = rows[rows.length - 1];
-        var k = last.querySelector('.param-key');
-        var v = last.querySelector('.param-value');
-        if ((k && k.value) || (v && v.value)) {
-            addParamRow();
-        }
     }
 
     addParamBtn.addEventListener('click', function() { addParamRow(); markActiveTabUnsaved(); });
