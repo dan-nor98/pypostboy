@@ -7,7 +7,7 @@ import { canUseWorkspace, continueAsGuest, initializeCurrentUser, isExplicitGues
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
 import { loadPanelSizes, savePanelSize } from './state/panels.js';
 import { createToast } from './ui/toast.js';
-import { renderResponseBody, toggleJsonTreeNode } from './ui/response-viewer.js';
+import { renderResponseBody, renderResponseIssue, toggleJsonTreeNode } from './ui/response-viewer.js';
 import { countTotalRequests } from './features/collections.js';
 import { getBlankState } from './features/requests.js';
 import { buildSnapshotDefaultName } from './features/snapshots.js';
@@ -19,10 +19,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ─── Element References ────────────────────────────────
     const {
-        methodSelect, urlInput, executionModeSelect, clientCredentialsSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
+        methodSelect, urlInput, executionModeSelect, requestAdvancedToggle, requestBarSecondary, clientCredentialsSelect, sendBtn, loopBtn, loopControls, loopInterval, loopCount, loopStatus,
         bodyContent, prettifyJsonBtn, responseBodyViewer, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
-        importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput,
+        importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput, collectionSearchInput,
         copyExportBtn, snapshotNameModal, snapshotNameModalClose, snapshotNameModalTitle, snapshotNameInput, snapshotNameCancelBtn, snapshotNameSaveBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, responseSnapshotFeedback, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
@@ -56,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeRequestInstances = [];
     const CREATE_NEW_COLLECTION_VALUE = '__new_collection__';
     let selectedSnapshotId     = '';
+    let collectionSearchTerm   = '';
     let loadingSnapshotId      = '';
     let snapshotContextTargetId = '';
     let snapshotContextTrigger  = null;
@@ -67,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
     const EXECUTION_MODE_STORAGE_KEY = 'postboy.executionMode';
     const CLIENT_CREDENTIALS_MODE_STORAGE_KEY = 'postboy.clientCredentialsMode';
+    const REQUEST_ADVANCED_EXPANDED_STORAGE_KEY = 'postboy.requestAdvancedExpanded';
     const DEFAULT_EXECUTION_MODE = 'server';
     const DEFAULT_CLIENT_CREDENTIALS_MODE = 'same-origin';
     const CLIENT_CREDENTIALS_MODES = new Set(['omit', 'same-origin', 'include']);
@@ -80,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const FORBIDDEN_CLIENT_HEADER_PREFIXES = ['proxy-', 'sec-'];
 
     initExecutionModeControl();
+    initRequestBarAdvancedControls();
     initBodyContentEditor(bodyContent);
 
     function initBodyContentEditor(textarea) {
@@ -871,8 +874,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Restore expanded state after rendering
         restoreExpandedState();
+        applyCollectionFilter();
     }
 
+
+    function applyCollectionFilter() {
+        var term = (collectionSearchTerm || '').trim().toLowerCase();
+        var folders = Array.from(collectionList.querySelectorAll('.collection-folder'));
+        folders.forEach(function(folder) {
+            var folderName = ((folder.querySelector(':scope > .folder-header .folder-name') || {}).textContent || '').toLowerCase();
+            var requestRows = Array.from(folder.querySelectorAll(':scope > .folder-items .request-item'));
+            var requestMatch = requestRows.some(function(row) {
+                return ((row.querySelector('.request-item-name') || {}).textContent || '').toLowerCase().indexOf(term) !== -1;
+            });
+            var folderMatch = folderName.indexOf(term) !== -1;
+            var visible = !term || folderMatch || requestMatch;
+            folder.style.display = visible ? '' : 'none';
+
+            if (term && visible) {
+                var items = folder.querySelector(':scope > .folder-items');
+                var arrow = folder.querySelector(':scope > .folder-header .folder-arrow');
+                if (items) items.classList.add('open');
+                if (arrow) arrow.classList.add('open');
+            }
+        });
+
+        Array.from(collectionList.querySelectorAll('.request-item')).forEach(function(row) {
+            var match = !term || ((row.querySelector('.request-item-name') || {}).textContent || '').toLowerCase().indexOf(term) !== -1;
+            row.style.display = match ? '' : 'none';
+        });
+    }
     function saveExpandedState() {
         expandedCollections.clear();
         document.querySelectorAll('.collection-folder').forEach(function(folder) {
@@ -897,6 +928,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (arrow) arrow.classList.add('open');
                 }
             }
+        });
+    }
+
+    if (collectionSearchInput) {
+        collectionSearchInput.addEventListener('input', function(e) {
+            collectionSearchTerm = e.target.value || "";
+            applyCollectionFilter();
         });
     }
 
@@ -1045,7 +1083,7 @@ document.addEventListener('DOMContentLoaded', () => {
         header.dataset.parentId = parentId == null ? '' : String(parentId);
         header.innerHTML =
         '<span class="folder-arrow">▶</span>' +
-        '<span class="folder-name">' + escHtml(col.name) + '</span>' +
+        '<span class="folder-name" title="' + escHtml(col.name) + '">' + escHtml(col.name) + '</span>' +
         '<span class="folder-count">' + totalRequests + '</span>';
 
         attachCollectionDragHandlers(header);
@@ -1094,7 +1132,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 reqEl.innerHTML =
                 '<span class="method-badge method-' + req.method + '">' + req.method + '</span>' +
-                '<span class="request-item-name">' + escHtml(req.name) + '</span>';
+                '<span class="request-item-name" title="' + escHtml(req.name) + '">' + escHtml(req.name) + '</span>';
 
                 attachRequestDragHandlers(reqEl);
 
@@ -3332,6 +3370,45 @@ document.addEventListener('DOMContentLoaded', () => {
         headersContainer.appendChild(row);
     }
 
+
+    function getStoredRequestAdvancedExpanded() {
+        var stored = null;
+        try {
+            stored = localStorage.getItem(REQUEST_ADVANCED_EXPANDED_STORAGE_KEY);
+        } catch (err) {
+            stored = null;
+        }
+        return stored === '1';
+    }
+
+    function setRequestAdvancedExpanded(expanded) {
+        if (!requestBarSecondary || !requestAdvancedToggle) return;
+        requestBarSecondary.hidden = !expanded;
+        requestAdvancedToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        requestAdvancedToggle.textContent = expanded ? 'Hide advanced options' : 'Advanced options';
+        try {
+            localStorage.setItem(REQUEST_ADVANCED_EXPANDED_STORAGE_KEY, expanded ? '1' : '0');
+        } catch (err) {
+            showToast('Could not persist advanced options state', 'warning');
+        }
+    }
+
+    function initRequestBarAdvancedControls() {
+        if (!requestAdvancedToggle || !requestBarSecondary) return;
+        setRequestAdvancedExpanded(getStoredRequestAdvancedExpanded());
+        requestAdvancedToggle.addEventListener('click', function() {
+            setRequestAdvancedExpanded(requestBarSecondary.hidden);
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === '.') {
+                e.preventDefault();
+                setRequestAdvancedExpanded(requestBarSecondary.hidden);
+                requestAdvancedToggle.focus();
+            }
+        });
+    }
+
     function getStoredExecutionMode() {
         var stored = null;
         try {
@@ -3713,14 +3790,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (executionMode === 'server') {
                 errorBody += '\n\nMake sure the Django/PostBoy backend is running and reachable, then check the backend logs for proxy or upstream network errors.';
             }
-            errorBody += '\n\n' + buildDiagnosticsText(errorDiagnostics);
+            var diagnosticsText = buildDiagnosticsText(errorDiagnostics);
+            errorBody += '\n\n' + diagnosticsText;
+            var issueVariant = getIssueVariant(errorDiagnostics.failureCategory);
+            var issueDescriptor = getIssueDescriptor(issueVariant);
             applyStatusBadge('ERR', 'Error');
             responseTime.textContent = errorElapsed + ' ms';
             responseTime.setAttribute('aria-label', 'Response time ' + errorElapsed + ' milliseconds');
             responseSize.textContent = formatBytes(new Blob([errorBody]).size);
             responseSize.setAttribute('aria-label', 'Response size ' + responseSize.textContent);
-            responseHeaders.textContent = buildDiagnosticsText(errorDiagnostics);
-            displayResponse(errorBody, responseHeaders.textContent);
+            responseHeaders.textContent = diagnosticsText;
+            renderResponseIssue(responseBody, {
+                variant: issueVariant,
+                icon: issueDescriptor.icon,
+                title: issueDescriptor.title,
+                message: err.message,
+                likelyCause: getLikelyCauseText(errorDiagnostics),
+                suggestedFix: getSuggestedFixText(errorDiagnostics, executionMode),
+                detailsText: errorBody
+            });
             storeResponseOnActiveTab({
                 response_status: null,
                 response_status_text: 'Error',
@@ -4473,6 +4561,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function formatBytes(bytes) {
         return formatByteCount(bytes);
+    }
+
+    function getIssueVariant(failureCategory) {
+        if (failureCategory === 'upstream-http-error') return 'warning';
+        if (failureCategory === 'client-config-error') return 'info';
+        return 'error';
+    }
+
+    function getIssueDescriptor(variant) {
+        if (variant === 'warning') return { icon: '⚠️', title: 'Upstream service returned an HTTP error' };
+        if (variant === 'info') return { icon: 'ℹ️', title: 'Request setup issue detected' };
+        return { icon: '⛔', title: 'Request execution failed' };
+    }
+
+    function getLikelyCauseText(diagnostics) {
+        var category = diagnostics && diagnostics.failureCategory;
+        if (category === 'server-unreachable') return 'The backend is unavailable or cannot reach the target host.';
+        if (category === 'browser-cors') return 'The browser blocked this request because of CORS restrictions.';
+        if (category === 'network-failure') return 'A network interruption prevented the request from completing.';
+        if (category === 'upstream-http-error') return 'The destination API responded with an HTTP error status.';
+        if (category === 'client-config-error') return 'The URL, headers, auth, or request body appears misconfigured.';
+        return 'An execution or connectivity issue interrupted the request.';
+    }
+
+    function getSuggestedFixText(diagnostics, executionMode) {
+        var category = diagnostics && diagnostics.failureCategory;
+        if (category === 'browser-cors') return 'Use server mode or allow this origin on the destination API.';
+        if (category === 'server-unreachable') return 'Start or restart the backend service and verify target connectivity.';
+        if (category === 'client-config-error') return 'Review URL formatting, auth values, headers, and payload fields.';
+        if (category === 'upstream-http-error') return 'Inspect API error details and adjust credentials or request data.';
+        if (executionMode === 'server') return 'Check backend logs for proxy/upstream failures, then retry.';
+        return 'Retry the request after reviewing the diagnostics in Details.';
     }
 
     function escHtml(str) {

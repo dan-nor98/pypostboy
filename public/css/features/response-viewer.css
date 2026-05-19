@@ -205,6 +205,79 @@
 .syntax-keyword      { color: var(--color-warning); }
 .syntax-url          { color: var(--color-purple); }
 
+.response-code-area.response-issue {
+  white-space: normal;
+}
+
+.response-issue-card {
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.response-issue-error {
+  border-left-color: var(--color-danger);
+}
+
+.response-issue-warning {
+  border-left-color: var(--color-warning);
+}
+
+.response-issue-info {
+  border-left-color: var(--color-info);
+}
+
+.response-issue-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.response-issue-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.response-issue-message {
+  margin: 0 0 10px;
+}
+
+.response-issue-row {
+  margin-bottom: 8px;
+}
+
+.response-issue-row-label {
+  display: block;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.response-issue-row-value {
+  display: block;
+}
+
+.response-issue-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: 8px 0;
+}
+
+.response-issue-details pre {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ===== RESPONSE VIEWER FULLSCREEN ===== */
 body.response-viewer-fullscreen-active {
   overflow: hidden;
