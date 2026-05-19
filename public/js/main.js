@@ -2476,11 +2476,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function clearResponsePane() {
-        statusCode.textContent = '---';
-        statusCode.className = 'status-badge';
-        statusCode.dataset.statusText = '';
+        applyStatusBadge(null, '');
         responseTime.textContent = '0 ms';
+        responseTime.setAttribute('aria-label', 'Response time 0 milliseconds');
         responseSize.textContent = '0 B';
+        responseSize.setAttribute('aria-label', 'Response size 0 bytes');
         responseHeaders.textContent = '';
         displayResponse(EMPTY_RESPONSE_MESSAGE, '');
     }
@@ -2492,13 +2492,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         var sc = state.response_status;
-        statusCode.textContent = sc != null && sc !== '' ? sc : '---';
-        statusCode.className = sc != null && sc !== '' ? 'status-badge ' + getStatusClass(sc) : 'status-badge';
-        statusCode.dataset.statusText = state.response_status_text || '';
-        responseTime.textContent = state.response_time_ms != null && state.response_time_ms !== ''
+        applyStatusBadge(sc, state.response_status_text || '');
+        var timeText = state.response_time_ms != null && state.response_time_ms !== ''
             ? state.response_time_ms + ' ms'
             : '0 ms';
+        responseTime.textContent = timeText;
+        responseTime.setAttribute('aria-label', 'Response time ' + timeText.replace(' ms', ' milliseconds'));
         responseSize.textContent = state.response_size || '0 B';
+        responseSize.setAttribute('aria-label', 'Response size ' + responseSize.textContent);
         responseHeaders.textContent = stringifyHeadersForDisplay(state.response_headers);
         displayResponse(state.response_body != null ? state.response_body : '', state.response_headers);
     }
@@ -2517,7 +2518,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function gatherResponseState() {
         var statusText = statusCode.textContent.trim();
-        var parsedStatus = /^\d+$/.test(statusText) ? parseInt(statusText, 10) : null;
+        var statusMatch = statusText.match(/(\d{3})/);
+        var parsedStatus = statusMatch ? parseInt(statusMatch[1], 10) : null;
         return getResponseStateFromSource({
             response_status: parsedStatus,
             response_status_text: statusCode.dataset.statusText || '',
@@ -3659,14 +3661,14 @@ document.addEventListener('DOMContentLoaded', () => {
             var elapsed = Math.round(performance.now() - start);
 
             var sc = data.status;
-            statusCode.textContent = sc;
-            statusCode.className = 'status-badge ' + getStatusClass(sc);
-            statusCode.dataset.statusText = data.statusText || '';
+            applyStatusBadge(sc, data.statusText || '');
             responseTime.textContent = elapsed + ' ms';
+            responseTime.setAttribute('aria-label', 'Response time ' + elapsed + ' milliseconds');
 
             var raw = typeof data.body === 'object' ? JSON.stringify(data.body) : String(data.body || '');
             var sizeText = formatBytes(new Blob([raw]).size);
             responseSize.textContent = sizeText;
+            responseSize.setAttribute('aria-label', 'Response size ' + sizeText);
 
             var responseHeadersValue = data.headers || {};
             responseHeaders.textContent = formatResponseHeadersWithDiagnostics(responseHeadersValue, data.diagnostics);
@@ -3701,11 +3703,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 errorBody += '\n\nMake sure the Django/PostBoy backend is running and reachable, then check the backend logs for proxy or upstream network errors.';
             }
             errorBody += '\n\n' + buildDiagnosticsText(errorDiagnostics);
-            statusCode.textContent = 'ERR';
-            statusCode.className = 'status-badge s5xx';
-            statusCode.dataset.statusText = 'Error';
+            applyStatusBadge('ERR', 'Error');
             responseTime.textContent = errorElapsed + ' ms';
+            responseTime.setAttribute('aria-label', 'Response time ' + errorElapsed + ' milliseconds');
             responseSize.textContent = formatBytes(new Blob([errorBody]).size);
+            responseSize.setAttribute('aria-label', 'Response size ' + responseSize.textContent);
             responseHeaders.textContent = buildDiagnosticsText(errorDiagnostics);
             displayResponse(errorBody, responseHeaders.textContent);
             storeResponseOnActiveTab({
@@ -4437,6 +4439,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return '';
     }
 
+
+    function getStatusDisplay(code, statusText) {
+        if (code === 'ERR') return { icon: '⛔', label: 'Error', css: 's5xx' };
+        var css = getStatusClass(code);
+        if (css === 's2xx') return { icon: '✅', label: 'Success', css: css };
+        if (css === 's3xx') return { icon: '↪', label: 'Redirect', css: css };
+        if (css === 's4xx') return { icon: '⚠️', label: 'Client Error', css: css };
+        if (css === 's5xx') return { icon: '⛔', label: 'Server Error', css: css };
+        if (code != null && code !== '') return { icon: 'ℹ️', label: statusText || 'Unknown', css: '' };
+        return { icon: '❔', label: 'Unknown', css: '' };
+    }
+
+    function applyStatusBadge(code, statusText) {
+        var hasCode = code != null && code !== '';
+        var numericCode = hasCode ? String(code) : '---';
+        var display = getStatusDisplay(code, statusText);
+        statusCode.textContent = display.icon + ' ' + numericCode;
+        statusCode.dataset.statusText = statusText || '';
+        statusCode.className = display.css ? 'status-badge ' + display.css : 'status-badge';
+        statusCode.setAttribute('aria-label', 'Response status ' + numericCode + ' ' + display.label);
+    }
     function formatBytes(bytes) {
         return formatByteCount(bytes);
     }
