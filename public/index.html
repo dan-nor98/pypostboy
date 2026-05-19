@@ -360,12 +360,25 @@
                 <div class="response-header">
                     <h3>Response</h3>
                     <div class="response-meta">
-                        <span id="statusCode" class="status-badge">---</span>
-                        <span id="responseTime">0 ms</span>
-                        <span id="responseSize">0 B</span>
-                        <button class="btn-copy-response" id="saveResponseSnapshotBtn" type="button">💾 Save</button>
-                        <button class="btn-copy-response" id="copyResponseBtn" type="button">📋 Copy</button>
-                        <button class="btn-copy-response" id="responseFullscreenBtn" type="button" aria-pressed="false" title="Expand response viewer">⛶ Fullscreen</button>
+                        <div class="response-summary" role="group" aria-label="Response summary">
+                            <div class="summary-field summary-field-status">
+                                <span class="summary-label">Status</span>
+                                <span id="statusCode" class="status-badge" role="status" aria-live="polite" aria-label="Response status unknown">❔ ---</span>
+                            </div>
+                            <div class="summary-field">
+                                <span class="summary-label">Time</span>
+                                <span id="responseTime" class="summary-value" aria-label="Response time 0 milliseconds">0 ms</span>
+                            </div>
+                            <div class="summary-field">
+                                <span class="summary-label">Size</span>
+                                <span id="responseSize" class="summary-value" aria-label="Response size 0 bytes">0 B</span>
+                            </div>
+                        </div>
+                        <div class="response-actions" role="group" aria-label="Response actions">
+                            <button class="btn-copy-response" id="saveResponseSnapshotBtn" type="button" aria-label="Save response snapshot">💾 Save</button>
+                            <button class="btn-copy-response" id="copyResponseBtn" type="button" aria-label="Copy response body">📋 Copy</button>
+                            <button class="btn-copy-response" id="responseFullscreenBtn" type="button" aria-label="Toggle response fullscreen" aria-pressed="false" title="Expand response viewer">⛶ Fullscreen</button>
+                        </div>
                         <button class="response-sheet-toggle" id="responseSheetToggle" type="button" aria-label="Collapse response panel" aria-expanded="false">×</button>
                     </div>
                 </div>
