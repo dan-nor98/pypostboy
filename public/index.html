@@ -232,6 +232,7 @@
                     <option value="OPTIONS">OPTIONS</option>
                 </select>
                 <input type="text" id="urlInput" placeholder="Enter request URL or paste cURL command...">
+                <button class="btn-send btn btn-primary" id="sendBtn">Send</button>
                 <label class="execution-mode-control" for="executionModeSelect">
                     <span>Run via</span>
                     <select id="executionModeSelect" title="Choose how this request is executed">
@@ -247,8 +248,7 @@
                         <option value="include">include</option>
                     </select>
                 </label>
-                <button class="btn-send" id="sendBtn">Send</button>
-                <button class="btn-loop" id="loopBtn" title="Loop Request">🔁</button>
+                <button class="btn-loop btn btn-tertiary" id="loopBtn" title="Loop Request" aria-label="Loop request">🔁</button>
             </div>
 
             <!-- Loop Controls -->
