@@ -3210,7 +3210,7 @@ document.addEventListener('DOMContentLoaded', () => {
             item.innerHTML =
                 '<span class="method-badge method-' + h.method + '">' + h.method + '</span>' +
                 '<span class="history-url">' + escHtml(h.url) + '</span>' +
-                (sc ? '<span class="history-status ' + cls + '">' + sc + '</span>' : '');
+                (sc ? '<span class="history-status ' + cls + '"><span class="history-status-prefix">' + getStatusDisplay(sc, '').icon + ' ' + getStatusDisplay(sc, '').label + '</span><span aria-hidden="true"> · </span>' + sc + '</span>' : '');
             item.addEventListener('click', function() {
                 methodSelect.value = h.method;
                 urlInput.value = h.url;
@@ -4554,7 +4554,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var hasCode = code != null && code !== '';
         var numericCode = hasCode ? String(code) : '---';
         var display = getStatusDisplay(code, statusText);
-        statusCode.textContent = display.icon + ' ' + numericCode;
+        statusCode.innerHTML = '<span class="status-badge-prefix">' + display.icon + ' ' + display.label + '</span><span aria-hidden="true"> · </span>' + numericCode;
         statusCode.dataset.statusText = statusText || '';
         statusCode.className = display.css ? 'status-badge ' + display.css : 'status-badge';
         statusCode.setAttribute('aria-label', 'Response status ' + numericCode + ' ' + display.label);

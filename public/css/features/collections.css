@@ -223,10 +223,10 @@
   border-radius: 3px;
 }
 
-.history-status.s2xx { background: var(--color-accent-soft); color: var(--color-success); }
+.history-status.s2xx { background: var(--color-accent-soft); color: var(--color-text); }
 .history-status.s3xx { background: var(--color-warning-soft); color: var(--color-warning); }
 .history-status.s4xx { background: var(--color-danger-soft); color: var(--color-danger); }
-.history-status.s5xx { background: var(--color-purple-soft); color: var(--color-purple); }
+.history-status.s5xx { background: var(--color-purple-soft); color: var(--color-text); }
 
 .sidebar-action-row {
   display: flex;

@@ -242,6 +242,7 @@ export function renderResponseIssue(element, issue) {
     var icon = issue.icon || '⛔';
     var title = issue.title || 'Request failed';
     var message = issue.message || 'The request could not be completed.';
+    var severityLabel = variant === 'warning' ? 'Warning' : (variant === 'info' ? 'Info' : 'Error');
     var likelyCause = issue.likelyCause || 'No likely cause was provided.';
     var suggestedFix = issue.suggestedFix || 'Retry the request and verify your settings.';
     var detailsText = issue.detailsText || '';
@@ -251,7 +252,7 @@ export function renderResponseIssue(element, issue) {
     if (codeElement.classList && codeElement.classList.add) codeElement.classList.add('response-issue');
     codeElement.innerHTML = ''
         + '<section class="response-issue-card response-issue-' + escapeHtml(variant) + '" role="alert" aria-live="polite">'
-        + '<header class="response-issue-header"><span class="response-issue-icon" aria-hidden="true">' + escapeHtml(icon) + '</span><h4 class="response-issue-title">' + escapeHtml(title) + '</h4></header>'
+        + '<header class="response-issue-header"><span class="response-issue-icon" aria-hidden="true">' + escapeHtml(icon) + '</span><h4 class="response-issue-title">' + escapeHtml(title) + '</h4><span class="response-issue-severity" aria-label="Severity">' + escapeHtml(severityLabel) + '</span></header>'
         + '<p class="response-issue-message">' + escapeHtml(message) + '</p>'
         + renderIssueMetaRow('Likely cause', likelyCause)
         + renderIssueMetaRow('Suggested fix', suggestedFix)

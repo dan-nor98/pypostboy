@@ -101,10 +101,10 @@
   color: var(--color-text-muted);
 }
 
-.status-badge.s2xx { background: var(--color-accent-soft); color: var(--color-success); }
-.status-badge.s3xx { background: var(--color-warning-soft); color: var(--color-warning); }
+.status-badge.s2xx { background: var(--color-accent-soft); color: var(--color-text); }
+.status-badge.s3xx { background: var(--color-warning-soft); color: var(--color-text); }
 .status-badge.s4xx { background: var(--color-danger-soft); color: var(--color-danger); }
-.status-badge.s5xx { background: var(--color-purple-soft); color: var(--color-purple); }
+.status-badge.s5xx { background: var(--color-purple-soft); color: var(--color-text); }
 
 .btn-copy-response {
   flex: 0 0 auto;
@@ -332,4 +332,19 @@ body.response-viewer-fullscreen-active {
     width: 100%;
     justify-content: flex-start;
   }
+}
+
+.status-badge-prefix,
+.history-status-prefix {
+  font-weight: 700;
+}
+
+.response-issue-severity {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }

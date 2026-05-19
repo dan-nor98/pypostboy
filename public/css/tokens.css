@@ -10,8 +10,8 @@
   --color-border: #252b34;
   --color-border-light: #343b46;
   --color-text: #e2e8f0;
-  --color-text-muted: #a0a0a0;
-  --color-text-dim: #7f8794;
+  --color-text-muted: #b3bbc7;
+  --color-text-dim: #9aa3b2;
   /* Green tokens are reserved for semantic/interactive roles only:
      active states, success states, primary CTA, and branding accents. */
   --color-accent: #3da37a;
@@ -74,8 +74,8 @@
   --color-border: #c6ceda;
   --color-border-light: #9ca7b8;
   --color-text: #17231d;
-  --color-text-muted: #4e6258;
-  --color-text-dim: #5b6a7f;
+  --color-text-muted: #3d4f46;
+  --color-text-dim: #4f5f74;
   --color-accent: #1f7a57;
   --color-accent-hover: #176548;
   --color-accent-active: #0f5238;
