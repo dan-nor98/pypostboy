@@ -195,6 +195,21 @@ def proxy_http_request(body):
             'TLS certificate verification failed for ' + (url_hostname or 'the upstream host')
             + '. Verify the server certificate chain or provide a trusted CA bundle.'
         ) from err
+    except (
+        http_requests.exceptions.MissingSchema,
+        http_requests.exceptions.InvalidSchema,
+        http_requests.exceptions.InvalidURL,
+    ) as err:
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        logger.warning(
+            'Proxy outbound URL validation failed: method=%s host=%s path=%s elapsed_ms=%s skipped_headers_count=%s',
+            method,
+            url_hostname,
+            url_path,
+            int(elapsed),
+            skipped_headers_count,
+        )
+        raise ValueError('URL must include a valid http:// or https:// scheme') from err
     except http_requests.exceptions.ConnectionError as err:
         elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
         logger.warning(
