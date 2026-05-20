@@ -88,6 +88,17 @@ def test_proxy_http_request_requires_url():
         proxy_http_request({"method": "GET"})
 
 
+
+
+def test_proxy_http_request_rejects_invalid_url_scheme(monkeypatch):
+    def raise_invalid_schema(**kwargs):
+        raise requests.exceptions.MissingSchema('Invalid URL')
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", raise_invalid_schema)
+
+    with pytest.raises(ValueError, match="valid http:// or https:// scheme"):
+        proxy_http_request({"url": "example.test", "method": "GET"})
+
 def test_proxy_http_request_maps_timeout_and_connection_errors(monkeypatch):
     def raise_timeout(**kwargs):
         raise requests.exceptions.Timeout()
