@@ -69,6 +69,12 @@ class ProxyConnectionError(ProxyError):
     status_text = 'Connection Error'
 
 
+class ProxyTlsError(ProxyConnectionError):
+    """Raised when TLS certificate verification fails for an outbound request."""
+
+    status_text = 'TLS Error'
+
+
 def _safe_url_parts(url):
     """Return non-secret URL parts for outbound request logging."""
     try:
@@ -175,6 +181,20 @@ def proxy_http_request(body):
             skipped_headers_count,
         )
         raise ProxyTimeoutError(proxy_timeout) from err
+    except http_requests.exceptions.SSLError as err:
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        logger.warning(
+            'Proxy outbound TLS verification failed: method=%s host=%s path=%s elapsed_ms=%s skipped_headers_count=%s',
+            method,
+            url_hostname,
+            url_path,
+            int(elapsed),
+            skipped_headers_count,
+        )
+        raise ProxyTlsError(
+            'TLS certificate verification failed for ' + (url_hostname or 'the upstream host')
+            + '. Verify the server certificate chain or provide a trusted CA bundle.'
+        ) from err
     except http_requests.exceptions.ConnectionError as err:
         elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
         logger.warning(

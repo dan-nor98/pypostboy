@@ -6,6 +6,7 @@ import requests
 from pypostboy.services import proxy_service
 from pypostboy.services.proxy_service import (
     ProxyConnectionError,
+    ProxyTlsError,
     ProxyTimeoutError,
     proxy_http_request,
 )
@@ -100,6 +101,16 @@ def test_proxy_http_request_maps_timeout_and_connection_errors(monkeypatch):
 
     monkeypatch.setattr(proxy_service.http_requests, "request", raise_connection)
     with pytest.raises(ProxyConnectionError, match="offline"):
+        proxy_http_request({"url": "https://api.example.test", "method": "GET"})
+
+
+def test_proxy_http_request_maps_ssl_errors_to_tls_error(monkeypatch):
+    def raise_ssl(**kwargs):
+        raise requests.exceptions.SSLError('certificate verify failed')
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", raise_ssl)
+
+    with pytest.raises(ProxyTlsError, match="TLS certificate verification failed"):
         proxy_http_request({"url": "https://api.example.test", "method": "GET"})
 
 
