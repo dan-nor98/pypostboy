@@ -647,21 +647,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // ─── Right Sidebar Tabs ────────────────────────────────
-    function activateRightSidebarPanel(panelId) {
-        document.querySelectorAll('.right-sidebar-tab').forEach(function(t) {
-            t.classList.toggle('active', t.dataset.target === panelId);
-        });
-        document.querySelectorAll('.right-sidebar-panel').forEach(function(p) {
-            p.classList.toggle('active', p.id === panelId);
-        });
-
-        if (panelId === 'curl-panel') updateSidebarCurlOutput();
-    }
-
+    // ─── Right Sidebar (always-visible sections) ───────────
     function openSnapshotsPanel() {
         setRightSidebarOpen(true);
-        activateRightSidebarPanel('snapshots-panel');
     }
 
     function showSnapshotSavedFeedback(snapshotId) {
@@ -683,11 +671,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.querySelectorAll('.right-sidebar-tab').forEach(function(tab) {
-        tab.addEventListener('click', function() {
-            activateRightSidebarPanel(tab.dataset.target);
-        });
-    });
 
     // ─── Request Tabs (Params, Headers, Body, Auth) ────────
     document.querySelectorAll('.tab').forEach(function(tab) {
