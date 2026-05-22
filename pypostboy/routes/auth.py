@@ -1,4 +1,8 @@
 """Authentication API views for PostBoy."""
+import hashlib
+import hmac
+import secrets
+import time
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.views.decorators.csrf import csrf_exempt
@@ -18,6 +22,12 @@ from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
 from pypostboy.db.serializers import timestamp
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
+
+RECOVERY_KEY_BYTES = 32
+GENERIC_RECOVERY_ERROR = "Invalid recovery credentials"
+RECOVERY_MAX_ATTEMPTS = 5
+RECOVERY_WINDOW_SECONDS = 300
+_recovery_attempts = {}
 
 
 def _public_user(user):
@@ -39,6 +49,41 @@ def _normalize_credentials(payload):
     password = payload.get("password") or ""
     email = (payload.get("email") or "").strip() or None
     return username, password, email
+
+
+def _normalize_recovery_identity(payload):
+    username = (payload.get("username") or "").strip()
+    email = (payload.get("email") or "").strip()
+    return username, email
+
+
+def _validate_password_policy(password):
+    return len(password or "") >= 8
+
+
+def _issue_recovery_key():
+    return secrets.token_urlsafe(RECOVERY_KEY_BYTES)
+
+
+def _hash_recovery_key(recovery_key):
+    return hashlib.sha256((recovery_key or "").encode("utf-8")).hexdigest()
+
+
+def _constant_time_recovery_match(recovery_key, expected_hash):
+    candidate_hash = _hash_recovery_key(recovery_key)
+    return hmac.compare_digest(candidate_hash, expected_hash or "")
+
+
+def _is_recovery_rate_limited(request, identity):
+    now = int(time.time())
+    key = f"{request.META.get('REMOTE_ADDR', 'unknown')}::{identity or 'unknown'}"
+    attempts = [ts for ts in _recovery_attempts.get(key, []) if now - ts < RECOVERY_WINDOW_SECONDS]
+    _recovery_attempts[key] = attempts
+    if len(attempts) >= RECOVERY_MAX_ATTEMPTS:
+        return True
+    attempts.append(now)
+    _recovery_attempts[key] = attempts
+    return False
 
 
 def current_user(request):
@@ -94,7 +139,7 @@ def register(request):
         return error("Invalid JSON request body", 400)
     if not username or not password:
         return error("Username and password are required", 400)
-    if len(password) < 8:
+    if not _validate_password_policy(password):
         return error("Password must be at least 8 characters", 400)
 
     conn = get_connection()
@@ -104,12 +149,16 @@ def register(request):
         return error("Username or email already exists", 409)
 
     now = timestamp()
+    recovery_key = _issue_recovery_key()
+    recovery_key_hash = _hash_recovery_key(recovery_key)
     user_id = insert_and_get_id(
         conn,
         """INSERT INTO users (
-            username, email, password_hash, auth_provider, auth_subject, created_at, updated_at
-        ) VALUES (?, ?, ?, 'local', NULL, ?, ?)""",
-        (username, email, make_password(password), now, now),
+            username, email, password_hash, auth_provider, auth_subject,
+            recovery_key_hash, recovery_key_created_at, recovery_key_rotated_at,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, 'local', NULL, ?, ?, NULL, ?, ?)""",
+        (username, email, make_password(password), recovery_key_hash, now, now, now),
     )
     conn.commit()
 
@@ -121,7 +170,82 @@ def register(request):
     request.session["user_id"] = user["id"]
     request.session.modified = True
     request.current_user = dict(row_to_mapping(user))
-    return clear_legacy_identity_cookies(created(_public_user(user)))
+    return clear_legacy_identity_cookies(
+        created({"user": _public_user(user), "recovery_key": recovery_key})
+    )
+
+
+def _find_user_for_recovery(conn, username, email):
+    if username:
+        return db_execute(conn, "SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    if email:
+        return db_execute(conn, "SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    return None
+
+
+@csrf_exempt
+def recover_verify(request):
+    try:
+        payload = json_body(request, allow_blank=False)
+    except BadJsonBody:
+        return error("Invalid JSON request body", 400)
+
+    username, email = _normalize_recovery_identity(payload)
+    recovery_key = payload.get("recovery_key") or ""
+    if (not username and not email) or not recovery_key:
+        return error(GENERIC_RECOVERY_ERROR, 401)
+
+    identity = username or email
+    if _is_recovery_rate_limited(request, identity):
+        return error("Too many recovery attempts, try again later", 429)
+
+    user = _find_user_for_recovery(get_connection(), username, email)
+    if (
+        not user
+        or not user["recovery_key_hash"]
+        or not _constant_time_recovery_match(recovery_key, user["recovery_key_hash"])
+    ):
+        return error(GENERIC_RECOVERY_ERROR, 401)
+    return ok({"valid": True})
+
+
+@csrf_exempt
+def recover_reset(request):
+    try:
+        payload = json_body(request, allow_blank=False)
+    except BadJsonBody:
+        return error("Invalid JSON request body", 400)
+
+    username, email = _normalize_recovery_identity(payload)
+    recovery_key = payload.get("recovery_key") or ""
+    new_password = payload.get("new_password") or ""
+    if (not username and not email) or not recovery_key or not _validate_password_policy(new_password):
+        return error(GENERIC_RECOVERY_ERROR, 401)
+
+    identity = username or email
+    if _is_recovery_rate_limited(request, identity):
+        return error("Too many recovery attempts, try again later", 429)
+
+    conn = get_connection()
+    user = _find_user_for_recovery(conn, username, email)
+    if (
+        not user
+        or not user["recovery_key_hash"]
+        or not _constant_time_recovery_match(recovery_key, user["recovery_key_hash"])
+    ):
+        return error(GENERIC_RECOVERY_ERROR, 401)
+
+    now = timestamp()
+    new_recovery_key = _issue_recovery_key()
+    db_execute(
+        conn,
+        """UPDATE users
+           SET password_hash = ?, recovery_key_hash = ?, recovery_key_rotated_at = ?, updated_at = ?
+           WHERE id = ?""",
+        (make_password(new_password), _hash_recovery_key(new_recovery_key), now, now, user["id"]),
+    )
+    conn.commit()
+    return ok({"password_reset": True, "recovery_key": new_recovery_key})
 
 
 @csrf_exempt

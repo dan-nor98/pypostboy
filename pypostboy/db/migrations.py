@@ -13,6 +13,11 @@ REQUEST_INSTANCE_COLUMN_MIGRATIONS = {
     'response_time_ms': 'INTEGER',
     'response_size': "TEXT DEFAULT ''",
 }
+USER_RECOVERY_COLUMN_MIGRATIONS = {
+    'recovery_key_hash': 'TEXT',
+    'recovery_key_created_at': 'TEXT',
+    'recovery_key_rotated_at': 'TEXT',
+}
 
 
 def _cursor_backend(cursor):
@@ -53,6 +58,14 @@ def migrate_request_instances(cursor):
             cursor.execute(f"ALTER TABLE request_instances ADD COLUMN {column} {definition}")
 
 
+def migrate_user_recovery_fields(cursor):
+    """Add recovery-key columns introduced after initial auth releases."""
+    existing_columns = table_columns(cursor, 'users')
+    for column, definition in USER_RECOVERY_COLUMN_MIGRATIONS.items():
+        if column not in existing_columns:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
+
+
 def create_users_table(cursor):
     """Create the users table for new and existing databases."""
     id_definition = (
@@ -68,6 +81,9 @@ def create_users_table(cursor):
             password_hash TEXT,
             auth_provider TEXT NOT NULL DEFAULT 'local',
             auth_subject TEXT,
+            recovery_key_hash TEXT,
+            recovery_key_created_at TEXT,
+            recovery_key_rotated_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )

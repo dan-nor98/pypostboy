@@ -70,6 +70,8 @@ export const apiClient = {
     login(payload) { return request('/api/auth/login', buildJsonOptions('POST', payload)); },
     logout() { return request('/api/auth/logout', { method: 'POST' }); },
     register(payload) { return request('/api/auth/register', buildJsonOptions('POST', payload)); },
+    verifyRecovery(payload) { return request('/api/auth/recover/verify', buildJsonOptions('POST', payload)); },
+    resetRecovery(payload) { return request('/api/auth/recover/reset', buildJsonOptions('POST', payload)); },
     getCurrentUser() { return request('/api/auth/me'); },
     getCollections() { return useGuestStorage() ? Promise.resolve(guestStorageApi.getCollections()) : request('/api/collections'); },
     getCollection(id) { return useGuestStorage() ? Promise.resolve(guestStorageApi.getCollection(id)) : request('/api/collections/' + id); },

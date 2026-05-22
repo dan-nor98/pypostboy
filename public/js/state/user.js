@@ -138,15 +138,24 @@ export async function loginUser(credentials) {
 export async function registerUser(credentials) {
     setAuthState({ loading: true, error: '' });
     try {
-        var user = await apiClient.register(credentials);
+        var registrationResult = await apiClient.register(credentials);
+        var user = registrationResult.user;
         saveExplicitGuestChoice(false);
         setAuthState({ currentUser: user, loading: false, error: '', initialized: true, explicitGuest: false });
         authReadyPromise = Promise.resolve(user);
-        return user;
+        return registrationResult;
     } catch (err) {
         setAuthState({ loading: false, error: err.message, initialized: true });
         throw err;
     }
+}
+
+export function verifyRecovery(payload) {
+    return apiClient.verifyRecovery(payload);
+}
+
+export function resetRecovery(payload) {
+    return apiClient.resetRecovery(payload);
 }
 
 export async function logoutUser() {
