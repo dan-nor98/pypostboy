@@ -15,6 +15,16 @@
   overflow: hidden;
 }
 
+.response-section > .response-header,
+.response-section > .response-tabs {
+  flex: 0 0 auto;
+}
+
+.response-section > .response-tab-content.active {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .response-header {
   min-width: 0;
   display: flex;
@@ -126,6 +136,16 @@
 .response-sheet-handle,
 .response-sheet-toggle {
   display: none;
+}
+
+.response-tabs {
+  position: relative;
+  z-index: 2;
+}
+
+.response-code-viewer {
+  position: relative;
+  z-index: 1;
 }
 /* ===== JSON SYNTAX HIGHLIGHTING ===== */
 .json-key     { color: var(--color-text); }
@@ -300,6 +320,11 @@ body.response-viewer-fullscreen-active {
 .response-section.is-fullscreen .response-header,
 .response-section.is-fullscreen .response-tabs {
   flex: 0 0 auto;
+}
+
+.response-section.is-fullscreen .response-tabs {
+  position: relative;
+  z-index: 2;
 }
 
 .response-section.is-fullscreen .response-tab-content.active {
