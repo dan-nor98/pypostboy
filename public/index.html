@@ -43,6 +43,25 @@
         </section>
     </main>
 
+    <div id="registerSuccessModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="registerSuccessTitle" aria-hidden="true">
+        <div class="modal-content">
+            <h3 id="registerSuccessTitle">Registration successful</h3>
+            <p>Copy and store this recovery key now. You will need it to recover this account.</p>
+            <label class="modal-label" for="registerRecoveryKey">Recovery key</label>
+            <textarea id="registerRecoveryKey" class="modal-textarea" rows="4" readonly></textarea>
+            <div class="modal-buttons">
+                <button class="btn-send" id="copyRecoveryKeyBtn" type="button">Copy key</button>
+            </div>
+            <label class="modal-label" for="registerRecoveryAcknowledge">
+                <input type="checkbox" id="registerRecoveryAcknowledge">
+                I have copied and safely stored this recovery key.
+            </label>
+            <div class="modal-buttons">
+                <button class="btn-cancel" id="registerRecoveryCloseBtn" type="button" disabled>Close</button>
+            </div>
+        </div>
+    </div>
+
     <div class="app-container" id="appContainer" hidden>
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">

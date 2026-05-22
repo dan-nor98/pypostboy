@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newColCancelBtn, editCollectionId, collectionModalTitle, requestModal, reqModalClose, reqNameInput,
         reqSaveBtn, reqCancelBtn, editRequestId, editRequestCollectionId, requestModalTitle,
         reqCollectionPickerWrap, reqCollectionSelect, reqNewCollectionWrap, reqNewCollectionName, requestTabsEl, newTabBtn, contextMenu, requestContextMenu,
-        tabContextMenu, snapshotContextMenu, authStatus, appAuthStatus, authUsername, authPassword, loginBtn, registerBtn, forgotPasswordBtn, logoutBtn, guestLoginBtn
+        tabContextMenu, snapshotContextMenu, authStatus, appAuthStatus, authUsername, authPassword, loginBtn, registerBtn, registerSuccessModal, registerRecoveryKey, copyRecoveryKeyBtn, registerRecoveryAcknowledge, registerRecoveryCloseBtn, forgotPasswordBtn, logoutBtn, guestLoginBtn
     } = getDomElements();
 
     // ─── State ─────────────────────────────────────────────
@@ -858,6 +858,80 @@ document.addEventListener('DOMContentLoaded', () => {
     function initAuthControls() {
         subscribeToUserState(renderAuthControls);
 
+        async function copyTextToClipboard(text) {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+
+            var helper = document.createElement('textarea');
+            helper.value = text;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'fixed';
+            helper.style.top = '-9999px';
+            helper.style.left = '-9999px';
+            document.body.appendChild(helper);
+            helper.focus();
+            helper.select();
+
+            var copied = false;
+            try {
+                copied = document.execCommand('copy');
+            } finally {
+                document.body.removeChild(helper);
+            }
+            if (!copied) throw new Error('Clipboard unavailable');
+            return true;
+        }
+
+        function closeRegisterSuccessModal() {
+            if (!registerSuccessModal) return;
+            registerSuccessModal.classList.remove('show');
+            registerSuccessModal.setAttribute('aria-hidden', 'true');
+            if (registerRecoveryKey) registerRecoveryKey.value = '';
+            if (registerRecoveryAcknowledge) registerRecoveryAcknowledge.checked = false;
+            if (registerRecoveryCloseBtn) registerRecoveryCloseBtn.disabled = true;
+        }
+
+        function openRegisterSuccessModal(recoveryKey) {
+            if (!registerSuccessModal || !registerRecoveryKey) return;
+            registerRecoveryKey.value = recoveryKey || '';
+            if (registerRecoveryAcknowledge) registerRecoveryAcknowledge.checked = false;
+            if (registerRecoveryCloseBtn) registerRecoveryCloseBtn.disabled = true;
+            registerSuccessModal.classList.add('show');
+            registerSuccessModal.setAttribute('aria-hidden', 'false');
+            registerRecoveryKey.focus();
+            registerRecoveryKey.select();
+        }
+
+        if (registerRecoveryAcknowledge && registerRecoveryCloseBtn) {
+            registerRecoveryAcknowledge.addEventListener('change', function() {
+                registerRecoveryCloseBtn.disabled = !registerRecoveryAcknowledge.checked;
+            });
+        }
+
+        if (copyRecoveryKeyBtn) {
+            copyRecoveryKeyBtn.addEventListener('click', async function() {
+                var recoveryKey = registerRecoveryKey ? registerRecoveryKey.value : '';
+                if (!recoveryKey) {
+                    showToast('Recovery key unavailable', 'error');
+                    return;
+                }
+                try {
+                    await copyTextToClipboard(recoveryKey);
+                    showToast('Recovery key copied', 'success');
+                } catch (err) {
+                    showToast('Copy failed. Copy it manually.', 'error');
+                }
+            });
+        }
+
+        if (registerRecoveryCloseBtn) {
+            registerRecoveryCloseBtn.addEventListener('click', function() {
+                closeRegisterSuccessModal();
+            });
+        }
+
         async function submitAuth(action) {
             var credentials = getAuthCredentials();
             if (!credentials.username || !credentials.password) {
@@ -868,7 +942,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 if (action === 'register') {
                     var result = await registerUser(credentials);
-                    showToast('Account created. Save recovery key now: ' + result.recovery_key, 'success');
+                    showToast('Account created', 'success');
+                    openRegisterSuccessModal(result && result.recovery_key ? result.recovery_key : '');
                 } else {
                     await loginUser(credentials);
                     showToast('Signed in', 'success');
