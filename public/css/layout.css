@@ -22,6 +22,12 @@
   flex-shrink: 0;
   overflow: hidden;
 }
+
+.sidebar.is-collapsed {
+  width: 0 !important;
+  min-width: 0;
+  border-right: 0;
+}
 /* ===== MAIN CONTENT ===== */
 .main-content {
   flex: 1;
@@ -50,6 +56,35 @@
 .sidebar-header h2 {
   color: var(--color-text);
   font-size: 1.4em;
+}
+
+.sidebar-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 32px;
+  padding: 0 8px;
+  background: var(--color-border);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.sidebar.is-collapsed .sidebar-header > :not(.sidebar-collapse-toggle) {
+  display: none;
+}
+
+.sidebar.is-collapsed .sidebar-header {
+  justify-content: center;
+  padding: 12px 6px;
+  border-bottom: 0;
+}
+
+.sidebar.is-collapsed > :not(.sidebar-header) {
+  display: none;
 }
 
 .sidebar-panel {
