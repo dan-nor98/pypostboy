@@ -58,8 +58,14 @@
   flex-wrap: wrap;
 }
 
+.request-bar-secondary .btn,
+.request-bar-secondary .execution-mode-control select {
+  min-height: 38px;
+}
+
 .request-bar-advanced-toggle {
   align-self: flex-start;
+  min-height: 32px;
   padding: 6px 12px;
   font-size: 0.82em;
 }

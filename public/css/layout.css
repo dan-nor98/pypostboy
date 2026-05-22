@@ -24,8 +24,8 @@
 }
 
 .sidebar.is-collapsed {
-  width: 0 !important;
-  min-width: 0;
+  width: 52px !important;
+  min-width: 52px;
   border-right: 0;
 }
 /* ===== MAIN CONTENT ===== */

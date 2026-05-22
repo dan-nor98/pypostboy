@@ -3,7 +3,7 @@ import { apiClient } from './api/client.js';
 import { clearLegacyGuestHistory, loadEnvVars, saveEnvVarsToStorage, loadHistory, saveHistoryToStorage } from './state/environment.js';
 import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot, clearLegacyOpenTabsSnapshot } from './state/tabs.js';
 import { initTheme } from './state/theme.js';
-import { canUseWorkspace, continueAsGuest, initializeCurrentUser, isExplicitGuestSession, loginUser, logoutUser, registerUser, resetRecovery, subscribeToUserState, userState, verifyRecovery, waitForAuth } from './state/user.js';
+import { canUseWorkspace, continueAsGuest, initializeCurrentUser, isExplicitGuestSession, loginUser, logoutUser, registerUser, subscribeToUserState, userState, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
 import { loadPanelSizes, savePanelCollapsedState, savePanelSize } from './state/panels.js';
 import { createToast } from './ui/toast.js';
@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newColCancelBtn, editCollectionId, collectionModalTitle, requestModal, reqModalClose, reqNameInput,
         reqSaveBtn, reqCancelBtn, editRequestId, editRequestCollectionId, requestModalTitle,
         reqCollectionPickerWrap, reqCollectionSelect, reqNewCollectionWrap, reqNewCollectionName, requestTabsEl, newTabBtn, contextMenu, requestContextMenu,
-        tabContextMenu, snapshotContextMenu, authStatus, appAuthStatus, authUsername, authPassword, loginBtn, registerBtn, forgotPasswordBtn, recoveryPanel, recoverIdentity, recoverKey, recoverNewPassword, recoverVerifyBtn, recoverResetBtn, logoutBtn, guestLoginBtn
+        tabContextMenu, snapshotContextMenu, authStatus, appAuthStatus, authUsername, authPassword, loginBtn, registerBtn, forgotPasswordBtn, logoutBtn, guestLoginBtn
     } = getDomElements();
 
     // ─── State ─────────────────────────────────────────────
@@ -787,7 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
             statusEl.classList.toggle('auth-error', !!state.error);
         });
 
-        [authUsername, authPassword, loginBtn, registerBtn, forgotPasswordBtn, recoverIdentity, recoverKey, recoverNewPassword, recoverVerifyBtn, recoverResetBtn, logoutBtn, guestLoginBtn].forEach(function(control) {
+        [authUsername, authPassword, loginBtn, registerBtn, forgotPasswordBtn, logoutBtn, guestLoginBtn].forEach(function(control) {
             if (control) control.disabled = isLoading;
         });
     }
@@ -882,32 +882,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (loginBtn) loginBtn.addEventListener('click', function() { submitAuth('login'); });
         if (registerBtn) registerBtn.addEventListener('click', function() { submitAuth('register'); });
-        if (forgotPasswordBtn) forgotPasswordBtn.addEventListener('click', function() {
-            if (recoveryPanel) recoveryPanel.hidden = !recoveryPanel.hidden;
-        });
-        if (recoverVerifyBtn) recoverVerifyBtn.addEventListener('click', async function() {
-            try {
-                await verifyRecovery({
-                    username: recoverIdentity.value.trim(),
-                    recovery_key: recoverKey.value
-                });
-                showToast('Recovery key verified. You can now reset your password.', 'success');
-            } catch (err) {
-                showToast('Recovery verification failed: ' + err.message, 'error');
-            }
-        });
-        if (recoverResetBtn) recoverResetBtn.addEventListener('click', async function() {
-            try {
-                var result = await resetRecovery({
-                    username: recoverIdentity.value.trim(),
-                    recovery_key: recoverKey.value,
-                    new_password: recoverNewPassword.value
-                });
-                showToast('Password reset. Save your rotated recovery key: ' + result.recovery_key, 'success');
-            } catch (err) {
-                showToast('Password reset failed: ' + err.message, 'error');
-            }
-        });
         if (guestLoginBtn) {
             guestLoginBtn.addEventListener('click', async function() {
                 try {

@@ -37,18 +37,8 @@
             <div class="login-actions">
                 <button class="btn-primary" id="loginBtn" type="button">Log in</button>
                 <button class="btn-secondary" id="registerBtn" type="button">Create account</button>
-                <button class="btn-ghost" id="forgotPasswordBtn" type="button">Forgot password?</button>
+                <a class="btn-ghost login-link-button" id="forgotPasswordBtn" href="/recover.html">Forgot password?</a>
                 <button class="btn-ghost" id="guestLoginBtn" type="button">Continue as guest</button>
-            </div>
-            <div class="recovery-panel" id="recoveryPanel" hidden>
-                <h3>Password recovery</h3>
-                <input type="text" id="recoverIdentity" placeholder="Username or email">
-                <input type="password" id="recoverKey" placeholder="Recovery key">
-                <input type="password" id="recoverNewPassword" placeholder="New password (min 8 chars)">
-                <div class="login-actions">
-                    <button class="btn-secondary" id="recoverVerifyBtn" type="button">Verify key</button>
-                    <button class="btn-primary" id="recoverResetBtn" type="button">Reset password</button>
-                </div>
             </div>
         </section>
     </main>
