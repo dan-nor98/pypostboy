@@ -13,6 +13,19 @@ body {
   overflow: hidden;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  body,
+  body * {
+    transition:
+      background-color 220ms ease,
+      color 220ms ease,
+      border-color 220ms ease,
+      box-shadow 220ms ease,
+      fill 220ms ease,
+      stroke 220ms ease;
+  }
+}
+
 :where(button, [role="button"], a, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;

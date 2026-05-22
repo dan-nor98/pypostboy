@@ -543,6 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         window.addEventListener('resize', syncResizeHandlesForViewport);
         syncResizeHandlesForViewport();
+        window.addEventListener('load', syncResizeHandlesForViewport, { once: true });
     }
 
     function setSidebarCollapsed(collapsed, persist) {
