@@ -66,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let workspaceInitialized = false;
     let panelSizesRestored = false;
     let lastMobileResizeLayout = null;
+    let sidebarCurlUpdateTimer = null;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
@@ -2358,6 +2359,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderRequestTabs();
         }
         persistOpenTabs();
+        scheduleSidebarCurlUpdate();
     }
 
     function renderRequestTabs() {
@@ -2694,6 +2696,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 60);
 
+        scheduleSidebarCurlUpdate();
     }
 
     function stringifyHeadersForDisplay(headers) {
@@ -3452,6 +3455,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 methodSelect.value = h.method;
                 urlInput.value = h.url;
                 syncParamsFromUrl();
+                scheduleSidebarCurlUpdate();
             });
             historyList.appendChild(item);
         });
@@ -4694,14 +4698,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateSidebarCurlOutput() {
         if (!sidebarCurlOutput) return;
+        var url = (urlInput && urlInput.value ? urlInput.value : '').trim();
+        if (!url) {
+            sidebarCurlOutput.value = '';
+            return;
+        }
         sidebarCurlOutput.value = buildCurlCommand();
+    }
+
+    function scheduleSidebarCurlUpdate(delayMs) {
+        if (!sidebarCurlOutput) return;
+        var wait = typeof delayMs === 'number' ? delayMs : 150;
+        if (sidebarCurlUpdateTimer) window.clearTimeout(sidebarCurlUpdateTimer);
+        sidebarCurlUpdateTimer = window.setTimeout(function() {
+            sidebarCurlUpdateTimer = null;
+            updateSidebarCurlOutput();
+        }, wait);
     }
 
     if (exportCurlBtn) {
         exportCurlBtn.addEventListener('click', function() {
-            var curlCommand = buildCurlCommand();
-            exportOutput.value = curlCommand;
-            if (sidebarCurlOutput) sidebarCurlOutput.value = curlCommand;
+            updateSidebarCurlOutput();
+            exportOutput.value = (urlInput.value || '').trim() ? buildCurlCommand() : '';
+            if (sidebarCurlOutput) sidebarCurlOutput.value = exportOutput.value;
             exportModal.classList.add('active');
         });
     }
