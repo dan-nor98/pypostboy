@@ -431,8 +431,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!Number.isNaN(storedSidebarWidth)) applySidebarWidth(storedSidebarWidth, false);
         if (!Number.isNaN(storedRightSidebarWidth)) applyRightSidebarWidth(storedRightSidebarWidth, false);
         if (!Number.isNaN(storedResponseHeight)) applyResponseHeight(storedResponseHeight, false);
-        setSidebarCollapsed(storedPanelSizes.sidebarCollapsed, false);
-        setRightSidebarCollapsed(storedPanelSizes.rightSidebarCollapsed, false);
+        setSidebarCollapsed(storedPanelSizes.sidebarCollapsed, false, true);
+        setRightSidebarCollapsed(storedPanelSizes.rightSidebarCollapsed, false, true);
+        syncResizeHandlesForViewport(true);
     }
 
     function clearInlinePanelSizesForMobile() {
@@ -444,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function syncResizeHandlesForViewport() {
+    function syncResizeHandlesForViewport(skipRestore) {
         var disabled = isMobileResizeLayout();
         var sidebarCollapsed = sidebar && sidebar.classList.contains('is-collapsed');
         var rightCollapsed = rightSidebar && rightSidebar.classList.contains('is-collapsed');
@@ -455,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (disabled) {
             clearInlinePanelSizesForMobile();
-        } else {
+        } else if (!skipRestore) {
             restorePanelSizes();
         }
     }
@@ -546,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('load', syncResizeHandlesForViewport, { once: true });
     }
 
-    function setSidebarCollapsed(collapsed, persist) {
+    function setSidebarCollapsed(collapsed, persist, skipSync) {
         if (!sidebar) return;
         sidebar.classList.toggle('is-collapsed', !!collapsed);
         if (sidebarCollapseBtn) {
@@ -555,10 +556,10 @@ document.addEventListener('DOMContentLoaded', () => {
             sidebarCollapseBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
         }
         if (persist) savePanelCollapsedState('sidebar', !!collapsed);
-        syncResizeHandlesForViewport();
+        if (!skipSync) syncResizeHandlesForViewport(true);
     }
 
-    function setRightSidebarCollapsed(collapsed, persist) {
+    function setRightSidebarCollapsed(collapsed, persist, skipSync) {
         if (!rightSidebar) return;
         rightSidebar.classList.toggle('is-collapsed', !!collapsed);
         if (rightSidebarCollapseBtn) {
@@ -567,7 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
             rightSidebarCollapseBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
         }
         if (persist) savePanelCollapsedState('rightSidebar', !!collapsed);
-        syncResizeHandlesForViewport();
+        if (!skipSync) syncResizeHandlesForViewport(true);
     }
 
     // ─── Init ──────────────────────────────────────────────
