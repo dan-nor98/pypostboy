@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" href="/favicon.ico">
     <link rel="stylesheet" href="css/tokens.css">
     <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components/forms.css">
     <link rel="stylesheet" href="css/features/login.css">
 </head>
 <body>
@@ -17,9 +18,9 @@
             <p class="login-subtitle">Verify your recovery key, then set a new password.</p>
             <div class="account-status login-status" id="recoveryStatus" role="status"></div>
             <div class="recovery-panel recovery-panel-visible">
-                <input type="text" id="recoverIdentity" placeholder="Username or email">
-                <input type="password" id="recoverKey" placeholder="Recovery key">
-                <input type="password" id="recoverNewPassword" placeholder="New password (min 8 chars)">
+                <input type="text" id="recoverIdentity" class="form-input recovery-input" placeholder="Username or email">
+                <input type="password" id="recoverKey" class="form-input recovery-input" placeholder="Recovery key">
+                <input type="password" id="recoverNewPassword" class="form-input recovery-input" placeholder="New password (min 8 chars)">
                 <div class="login-actions">
                     <button class="btn-secondary" id="recoverVerifyBtn" type="button">Verify key</button>
                     <button class="btn-primary" id="recoverResetBtn" type="button">Reset password</button>
