@@ -205,14 +205,7 @@
                     <p class="empty-state">No history yet.</p>
                 </div>
             </div>
-            <div class="sidebar-panel" id="env-panel">
-                <div class="env-editor">
-                    <h4>Environment Variables</h4>
-                    <p class="env-hint">Use <code>{{key}}</code> in URL, headers, or body.</p>
-                    <div id="envVarsList"></div>
-                    <button class="btn-add-row" id="addEnvVarBtn">+ Add Variable</button>
-                </div>
-            </div>
+            <div class="sidebar-panel" id="env-panel"></div>
         </div>
 
         <div class="resize-handle resize-handle-vertical" id="sidebarResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
@@ -263,6 +256,7 @@
                         </select>
                     </label>
                     <button class="btn-loop btn btn-tertiary" id="loopBtn" title="Loop Request" aria-label="Loop request">🔁</button>
+                    <button class="btn btn-tertiary" id="openEnvVarsModalBtn" type="button" title="Edit environment variables">🧪 Environment</button>
                 </div>
                 <button class="request-bar-advanced-toggle btn btn-tertiary" id="requestAdvancedToggle" type="button" aria-controls="requestBarSecondary" aria-expanded="false" title="Advanced request controls (Alt+.)">Advanced options</button>
             </div>
@@ -494,6 +488,19 @@
             <div class="modal-buttons">
                 <button class="btn-cancel" id="snapshotNameCancelBtn">Cancel</button>
                 <button class="btn-send" id="snapshotNameSaveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="envVarsModal" class="modal" aria-hidden="true">
+        <div class="modal-content env-vars-modal-content" role="dialog" aria-modal="true" aria-labelledby="envVarsModalTitle">
+            <span class="modal-close" id="envVarsModalClose">&times;</span>
+            <h3 id="envVarsModalTitle">Environment Variables</h3>
+            <p class="env-hint">Use <code>{{key}}</code> in URL, headers, or body.</p>
+            <div id="envVarsList"></div>
+            <div class="modal-buttons">
+                <button class="btn-add-row" id="addEnvVarBtn" type="button">+ Add Variable</button>
             </div>
         </div>
     </div>

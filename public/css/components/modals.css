@@ -510,3 +510,31 @@
 .import-action-buttons {
   align-items: center;
 }
+
+.env-vars-modal-content {
+  width: min(92vw, 760px);
+  max-height: min(80vh, 700px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.env-vars-modal-content #envVarsList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.env-vars-modal-content .modal-buttons {
+  margin-top: 12px;
+  justify-content: flex-start;
+}
+
+@media (max-width: 640px) {
+  .env-vars-modal-content {
+    width: 96vw;
+    max-height: 88vh;
+    padding: 16px;
+  }
+}
