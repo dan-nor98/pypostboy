@@ -53,6 +53,12 @@
   box-shadow: 0 0 0 1px var(--color-border-light);
 }
 
+.sidebar.is-collapsed + .resize-handle,
+.resize-handle[aria-disabled="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 body.resizing-panels {
   user-select: none;
 }

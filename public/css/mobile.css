@@ -83,6 +83,11 @@
     font-size: 1.4em;
   }
 
+  .sidebar-collapse-toggle,
+  .right-sidebar-collapse-toggle {
+    display: none;
+  }
+
   .mobile-toolbar {
     display: flex;
     justify-content: space-between;

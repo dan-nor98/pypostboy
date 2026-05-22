@@ -5,7 +5,7 @@ import { loadOpenTabsSnapshot, saveOpenTabsSnapshot, clearOpenTabsSnapshot, clea
 import { initTheme } from './state/theme.js';
 import { canUseWorkspace, continueAsGuest, initializeCurrentUser, isExplicitGuestSession, loginUser, logoutUser, registerUser, resetRecovery, subscribeToUserState, userState, verifyRecovery, waitForAuth } from './state/user.js';
 import { MOBILE_RESIZE_QUERY } from './ui/resize-panels.js';
-import { loadPanelSizes, savePanelSize } from './state/panels.js';
+import { loadPanelSizes, savePanelCollapsedState, savePanelSize } from './state/panels.js';
 import { createToast } from './ui/toast.js';
 import { renderResponseBody, renderResponseIssue, toggleJsonTreeNode } from './ui/response-viewer.js';
 import { countTotalRequests } from './features/collections.js';
@@ -27,8 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
         copyExportBtn, snapshotNameModal, snapshotNameModalClose, snapshotNameModalTitle, snapshotNameInput, snapshotNameCancelBtn, snapshotNameSaveBtn, envVarsModal, envVarsModalClose, openEnvVarsModalBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, responseSnapshotFeedback, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
-        responseResizeHandle, loginScreen, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
-        rightSidebarResizeHandle, rightSidebarToggleBtn, rightSidebarCloseBtn, sidebarCurlOutput,
+        responseResizeHandle, loginScreen, appContainer, sidebar, sidebarCollapseBtn, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
+        rightSidebarCollapseBtn, rightSidebarResizeHandle, rightSidebarToggleBtn, rightSidebarCloseBtn, sidebarCurlOutput,
         generateSidebarCurlBtn, copySidebarCurlBtn, instancesBar, snapshotList, saveInstanceBtn,
         newCollectionBtn, newCollectionModal, newColModalClose, newColName, newColDesc, newColSaveBtn,
         newColCancelBtn, editCollectionId, collectionModalTitle, requestModal, reqModalClose, reqNameInput,
@@ -431,6 +431,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!Number.isNaN(storedSidebarWidth)) applySidebarWidth(storedSidebarWidth, false);
         if (!Number.isNaN(storedRightSidebarWidth)) applyRightSidebarWidth(storedRightSidebarWidth, false);
         if (!Number.isNaN(storedResponseHeight)) applyResponseHeight(storedResponseHeight, false);
+        setSidebarCollapsed(storedPanelSizes.sidebarCollapsed, false);
+        setRightSidebarCollapsed(storedPanelSizes.rightSidebarCollapsed, false);
     }
 
     function clearInlinePanelSizesForMobile() {
@@ -444,11 +446,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function syncResizeHandlesForViewport() {
         var disabled = isMobileResizeLayout();
+        var sidebarCollapsed = sidebar && sidebar.classList.contains('is-collapsed');
+        var rightCollapsed = rightSidebar && rightSidebar.classList.contains('is-collapsed');
 
-        [sidebarResizeHandle, rightSidebarResizeHandle, responseResizeHandle].forEach(function(handle) {
-            if (!handle) return;
-            handle.setAttribute('aria-disabled', disabled ? 'true' : 'false');
-        });
+        if (sidebarResizeHandle) sidebarResizeHandle.setAttribute('aria-disabled', (disabled || sidebarCollapsed) ? 'true' : 'false');
+        if (rightSidebarResizeHandle) rightSidebarResizeHandle.setAttribute('aria-disabled', (disabled || rightCollapsed) ? 'true' : 'false');
+        if (responseResizeHandle) responseResizeHandle.setAttribute('aria-disabled', disabled ? 'true' : 'false');
 
         if (disabled) {
             clearInlinePanelSizesForMobile();
@@ -468,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function initPanelResizing() {
         if (sidebarResizeHandle && sidebar) {
             sidebarResizeHandle.addEventListener('pointerdown', function(event) {
-                if (isMobileResizeLayout()) return;
+                if (isMobileResizeLayout() || (sidebar && sidebar.classList.contains('is-collapsed'))) return;
 
                 event.preventDefault();
                 sidebarResizeHandle.classList.add('active');
@@ -491,7 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (rightSidebarResizeHandle && rightSidebar) {
             rightSidebarResizeHandle.addEventListener('pointerdown', function(event) {
-                if (isMobileResizeLayout()) return;
+                if (isMobileResizeLayout() || (rightSidebar && rightSidebar.classList.contains('is-collapsed'))) return;
 
                 event.preventDefault();
                 rightSidebarResizeHandle.classList.add('active');
@@ -539,6 +542,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         window.addEventListener('resize', syncResizeHandlesForViewport);
+        syncResizeHandlesForViewport();
+    }
+
+    function setSidebarCollapsed(collapsed, persist) {
+        if (!sidebar) return;
+        sidebar.classList.toggle('is-collapsed', !!collapsed);
+        if (sidebarCollapseBtn) {
+            sidebarCollapseBtn.textContent = collapsed ? '⟩⟩' : '⟨⟨';
+            sidebarCollapseBtn.setAttribute('aria-label', collapsed ? 'Expand left sidebar' : 'Collapse left sidebar');
+            sidebarCollapseBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+        }
+        if (persist) savePanelCollapsedState('sidebar', !!collapsed);
+        syncResizeHandlesForViewport();
+    }
+
+    function setRightSidebarCollapsed(collapsed, persist) {
+        if (!rightSidebar) return;
+        rightSidebar.classList.toggle('is-collapsed', !!collapsed);
+        if (rightSidebarCollapseBtn) {
+            rightSidebarCollapseBtn.textContent = collapsed ? '⟨⟨' : '⟩⟩';
+            rightSidebarCollapseBtn.setAttribute('aria-label', collapsed ? 'Expand tools sidebar' : 'Collapse tools sidebar');
+            rightSidebarCollapseBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+        }
+        if (persist) savePanelCollapsedState('rightSidebar', !!collapsed);
         syncResizeHandlesForViewport();
     }
 
@@ -592,6 +619,12 @@ document.addEventListener('DOMContentLoaded', () => {
             setSidebarOpen(false);
         });
     }
+    if (sidebarCollapseBtn) {
+        sidebarCollapseBtn.addEventListener('click', function(event) {
+            event.stopPropagation();
+            setSidebarCollapsed(!(sidebar && sidebar.classList.contains('is-collapsed')), true);
+        });
+    }
 
     if (rightSidebarToggleBtn) {
         rightSidebarToggleBtn.addEventListener('click', function(event) {
@@ -604,6 +637,12 @@ document.addEventListener('DOMContentLoaded', () => {
         rightSidebarCloseBtn.addEventListener('click', function(event) {
             event.stopPropagation();
             setRightSidebarOpen(false);
+        });
+    }
+    if (rightSidebarCollapseBtn) {
+        rightSidebarCollapseBtn.addEventListener('click', function(event) {
+            event.stopPropagation();
+            setRightSidebarCollapsed(!(rightSidebar && rightSidebar.classList.contains('is-collapsed')), true);
         });
     }
 

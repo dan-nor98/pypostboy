@@ -1,6 +1,8 @@
 const SIDEBAR_WIDTH_KEY = 'postboy_sidebar_width';
 const RIGHT_SIDEBAR_WIDTH_KEY = 'postboy_right_sidebar_width';
 const RESPONSE_HEIGHT_KEY = 'postboy_response_height';
+const SIDEBAR_COLLAPSED_KEY = 'postboy_sidebar_collapsed';
+const RIGHT_SIDEBAR_COLLAPSED_KEY = 'postboy_right_sidebar_collapsed';
 
 export function savePanelSize(panel, value) {
     var key = panel === 'sidebar' ? SIDEBAR_WIDTH_KEY : panel === 'rightSidebar' ? RIGHT_SIDEBAR_WIDTH_KEY : RESPONSE_HEIGHT_KEY;
@@ -11,6 +13,13 @@ export function loadPanelSizes() {
     return {
         sidebar: parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY), 10),
         rightSidebar: parseInt(localStorage.getItem(RIGHT_SIDEBAR_WIDTH_KEY), 10),
-        response: parseInt(localStorage.getItem(RESPONSE_HEIGHT_KEY), 10)
+        response: parseInt(localStorage.getItem(RESPONSE_HEIGHT_KEY), 10),
+        sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
+        rightSidebarCollapsed: localStorage.getItem(RIGHT_SIDEBAR_COLLAPSED_KEY) === 'true'
     };
+}
+
+export function savePanelCollapsedState(panel, collapsed) {
+    var key = panel === 'sidebar' ? SIDEBAR_COLLAPSED_KEY : RIGHT_SIDEBAR_COLLAPSED_KEY;
+    localStorage.setItem(key, collapsed ? 'true' : 'false');
 }
