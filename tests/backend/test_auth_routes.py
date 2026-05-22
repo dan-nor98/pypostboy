@@ -27,13 +27,15 @@ def test_login_rejects_malformed_json(client):
     )
 
 def test_register_login_logout_session_scopes_collections(client):
-    user = assert_success(
+    registration = assert_success(
         client.post(
             "/api/auth/register",
             json={"username": "browser-user", "password": "password123"},
         ),
         201,
     )
+    user = registration["user"]
+    assert registration["recovery_key"]
     assert user["username"] == "browser-user"
     assert user["is_guest"] is False
     assert "password_hash" not in user
@@ -191,7 +193,7 @@ def test_invalid_cookie_does_not_override_login(client):
         ),
         201,
     )
-    assert registered["username"] == "cookie-login-user"
+    assert registered["user"]["username"] == "cookie-login-user"
     assert_success(client.post("/api/auth/logout"))
 
     _set_cookie(client, "user_id", "999999")
@@ -201,7 +203,7 @@ def test_invalid_cookie_does_not_override_login(client):
     )
     logged_in = assert_success(login_response)
 
-    assert logged_in["id"] == registered["id"]
+    assert logged_in["id"] == registered["user"]["id"]
     assert logged_in["is_guest"] is False
     _assert_deletes_legacy_identity_cookies(login_response)
 
@@ -216,7 +218,7 @@ def test_stale_cookie_does_not_override_session_and_logout_clears_it(client, use
     _set_cookie(client, "user_id", str(user_b["id"]))
 
     current = assert_success(client.get("/api/auth/me"))
-    assert current["id"] == session_user["id"]
+    assert current["id"] == session_user["user"]["id"]
 
     logout_response = client.post("/api/auth/logout")
     current_after_logout = assert_success(logout_response)
@@ -242,3 +244,53 @@ def test_registration_conflict_query_checks_email_when_provided():
 
     assert sql == "SELECT id FROM users WHERE username = ? OR email = ?"
     assert params == ("new-user", "new-user@example.test")
+
+
+def test_recovery_verify_reset_and_rotate_key(client):
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "recover-user", "password": "password123"},
+        ),
+        201,
+    )
+    recovery_key = registration["recovery_key"]
+
+    verified = assert_success(
+        client.post(
+            "/api/auth/recover/verify",
+            json={"username": "recover-user", "recovery_key": recovery_key},
+        )
+    )
+    assert verified["valid"] is True
+
+    reset = assert_success(
+        client.post(
+            "/api/auth/recover/reset",
+            json={
+                "username": "recover-user",
+                "recovery_key": recovery_key,
+                "new_password": "newpassword123",
+            },
+        )
+    )
+    assert reset["password_reset"] is True
+    assert reset["recovery_key"]
+    assert reset["recovery_key"] != recovery_key
+
+    assert_error(
+        client.post(
+            "/api/auth/recover/verify",
+            json={"username": "recover-user", "recovery_key": recovery_key},
+        ),
+        401,
+        "Invalid recovery credentials",
+    )
+
+    logged_in = assert_success(
+        client.post(
+            "/api/auth/login",
+            json={"username": "recover-user", "password": "newpassword123"},
+        )
+    )
+    assert logged_in["username"] == "recover-user"

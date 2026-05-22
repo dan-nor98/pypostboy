@@ -23,6 +23,8 @@ urlpatterns = [
     path('api/auth/me', auth.current_user),
     path('api/auth/login', auth.login),
     path('api/auth/register', auth.register),
+    path('api/auth/recover/verify', auth.recover_verify),
+    path('api/auth/recover/reset', auth.recover_reset),
     path('api/auth/logout', auth.logout),
     path('api/collections', dispatch({'GET': collections.get_collections, 'POST': collections.create_collection})),
     path('api/collections/reorder', collections.reorder_collections),
