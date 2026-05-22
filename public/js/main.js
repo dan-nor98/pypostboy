@@ -2790,6 +2790,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return openTabs.find(function(t) { return t.id === activeTabId && t.requestId; }) || null;
     }
 
+    function hasExistingRequest(tab) {
+        if (!tab || !tab.requestId) return false;
+        return !!findRequestById(tab.requestId);
+    }
+
 
     function highlightSnapshotRow(snapshotId) {
         if (!snapshotList || !snapshotId) return;
@@ -2805,13 +2810,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderInstancesBar(instances) {
         var tab = getActiveSavedTab();
+        var hasStaleRequest = !!(tab && !hasExistingRequest(tab));
         activeRequestInstances = instances || [];
 
         instancesBar.classList.remove('hidden');
         closeSnapshotContextMenu();
         snapshotList.innerHTML = '';
-        if (saveInstanceBtn) saveInstanceBtn.disabled = !tab;
-        saveResponseSnapshotBtn.disabled = !tab;
+        if (saveInstanceBtn) saveInstanceBtn.disabled = !tab || hasStaleRequest;
+        saveResponseSnapshotBtn.disabled = !tab || hasStaleRequest;
 
         if (!tab) {
             selectedSnapshotId = '';
@@ -2820,6 +2826,16 @@ document.addEventListener('DOMContentLoaded', () => {
             unsaved.className = 'snapshot-list-item is-disabled';
             unsaved.textContent = 'Save this request first to create snapshots.';
             snapshotList.appendChild(unsaved);
+            return;
+        }
+
+        if (hasStaleRequest) {
+            selectedSnapshotId = '';
+            loadingSnapshotId = '';
+            var stale = document.createElement('div');
+            stale.className = 'snapshot-list-item is-disabled';
+            stale.textContent = 'This request no longer exists. Save/restore it before creating snapshots.';
+            snapshotList.appendChild(stale);
             return;
         }
 
@@ -2923,9 +2939,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function saveCurrentInstance() {
-        var tab = getActiveSavedTab();
-        if (!tab) {
+        var activeTab = openTabs.find(function(t) { return t.id === activeTabId; }) || null;
+        if (!activeTab || !activeTab.requestId) {
             showToast('Save the request before creating snapshots', 'error');
+            return;
+        }
+        if (!findRequestById(activeTab.requestId)) {
+            showToast('This request no longer exists. Save/restore it before creating snapshots.', 'error');
             return;
         }
 
@@ -2941,7 +2961,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.name = name;
 
         try {
-            var instance = await apiClient.createRequestInstance(tab.requestId, state);
+            var instance = await apiClient.createRequestInstance(activeTab.requestId, state);
             showToast('Snapshot saved', 'success');
             selectedSnapshotId = String(instance.id);
             await refreshInstancesForActiveTab();
