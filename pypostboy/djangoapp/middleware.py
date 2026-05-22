@@ -1,5 +1,9 @@
 """Django middleware for request context, API auth, and shared headers."""
 
+import re
+
+from django.conf import settings
+
 from pypostboy.auth import (
     AuthenticationError,
     clear_legacy_identity_cookies,
@@ -17,6 +21,21 @@ def _rollback_database_transaction():
     rollback = getattr(connection, 'rollback', None)
     if rollback:
         rollback()
+
+
+def _cors_allowed_origin(origin):
+    """Return True when the request origin is permitted by settings."""
+    if not origin:
+        return False
+    if getattr(settings, 'CORS_ALLOW_ALL_ORIGINS', False):
+        return True
+    allowed_origins = getattr(settings, 'CORS_ALLOWED_ORIGINS', [])
+    if origin in allowed_origins:
+        return True
+    for pattern in getattr(settings, 'CORS_ALLOWED_ORIGIN_REGEXES', []):
+        if re.match(pattern, origin):
+            return True
+    return False
 
 
 def _safe_rollback_database_transaction():
@@ -64,6 +83,9 @@ class PostBoyMiddleware:
         response.headers.pop('X-Content-Security-Policy', None)
         response.headers.pop('X-WebKit-CSP', None)
         response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+        request_origin = request.headers.get('Origin')
+        if _cors_allowed_origin(request_origin):
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Origin'] = request_origin
+
         return response

@@ -26,6 +26,19 @@ PostBoy can execute a request in two ways from the request URL bar:
 - **Client side** sends the request with the browser `fetch` API. This mode can only call APIs that allow browser requests with compatible CORS response headers, browser-allowed request headers, the selected browser credentials mode (`omit`, `same-origin`, or `include`), and other browser security policies.
 - **Server proxy** sends the request from the Django/PostBoy backend. Because the backend makes the outbound request instead of the browser, this mode bypasses browser CORS checks while still depending on backend connectivity, proxy timeout settings, and upstream API availability.
 
+
+For browser-to-PostBoy traffic, CORS can be controlled with environment variables (useful in Docker):
+
+```yaml
+# docker-compose*.yml
+environment:
+  - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+  - CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\\.example\\.com$
+  - CORS_ALLOW_ALL_ORIGINS=false
+```
+
+`CORS_ALLOW_ALL_ORIGINS` defaults to `true` in `DEBUG` and `false` otherwise. For production, set explicit origins and keep `CORS_ALLOW_ALL_ORIGINS=false`.
+
 ## Quick Start
 
 ```bash
@@ -111,6 +124,9 @@ PostBoy works out of the box for local development. Useful environment variables
 | `POSTBOY_CONFIG` | `development` | Built-in config name or import path. |
 | `POSTBOY_DB_PATH` | `postboy-data.db` | SQLite database path. |
 | `POSTBOY_PROXY_TIMEOUT` | `30` | Proxy timeout in seconds. |
+| `CORS_ALLOWED_ORIGINS` | empty | Comma-separated exact origins allowed to call PostBoy from browsers. |
+| `CORS_ALLOWED_ORIGIN_REGEXES` | empty | Comma-separated regex patterns for allowed origins. |
+| `CORS_ALLOW_ALL_ORIGINS` | `true` in debug, else `false` | Allow any origin when enabled. Prefer disabling in production. |
 | `POSTBOY_MAX_CONTENT_LENGTH` | `10485760` | Maximum request/import payload size. |
 
 Example:
