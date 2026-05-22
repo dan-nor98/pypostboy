@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bodyContent, prettifyJsonBtn, responseBodyViewer, responseBody, responseHeaders, statusCode, responseTime, responseSize,
         loadingOverlay, headersContainer, addHeaderBtn, importBtn, importModal, modalClose, importInput,
         importConfirmBtn, collectionList, exportCurlBtn, exportModal, exportModalClose, exportOutput, collectionSearchInput,
-        copyExportBtn, snapshotNameModal, snapshotNameModalClose, snapshotNameModalTitle, snapshotNameInput, snapshotNameCancelBtn, snapshotNameSaveBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, responseSnapshotFeedback, authFields, formDataRows, addFormDataBtn,
+        copyExportBtn, snapshotNameModal, snapshotNameModalClose, snapshotNameModalTitle, snapshotNameInput, snapshotNameCancelBtn, snapshotNameSaveBtn, envVarsModal, envVarsModalClose, openEnvVarsModalBtn, copyResponseBtn, responseFullscreenBtn, saveResponseSnapshotBtn, responseSnapshotFeedback, authFields, formDataRows, addFormDataBtn,
         formDataContainer, historyList, envVarsList, addEnvVarBtn, paramsBody, addParamBtn, mainContent,
         requestSection, responseSection, responseSheetHandle, responseSheetToggle, sidebarResizeHandle,
         responseResizeHandle, loginScreen, appContainer, sidebar, sidebarToggleBtn, sidebarCloseBtn, themeToggleBtn, rightSidebar,
@@ -643,6 +643,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.sidebar-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
+            if (tab.dataset.target === 'env-panel') {
+                openEnvVarsModal();
+                return;
+            }
             activateSidebarPanel(tab.dataset.target);
         });
     });
@@ -3217,6 +3221,33 @@ document.addEventListener('DOMContentLoaded', () => {
         var user = userState.currentUser;
         if (!user || user.is_guest) return;
         addEnvRow();
+    });
+
+    function openEnvVarsModal() {
+        if (!envVarsModal) return;
+        renderEnvVars();
+        envVarsModal.classList.add('active');
+        envVarsModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeEnvVarsModal() {
+        if (!envVarsModal) return;
+        envVarsModal.classList.remove('active');
+        envVarsModal.setAttribute('aria-hidden', 'true');
+    }
+
+    if (openEnvVarsModalBtn) openEnvVarsModalBtn.addEventListener('click', openEnvVarsModal);
+    if (envVarsModalClose) envVarsModalClose.addEventListener('click', closeEnvVarsModal);
+    if (envVarsModal) {
+        envVarsModal.addEventListener('click', function(e) {
+            if (e.target === envVarsModal) closeEnvVarsModal();
+        });
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && envVarsModal && envVarsModal.classList.contains('active')) {
+            closeEnvVarsModal();
+        }
     });
 
     function replaceEnvVars(str) {
