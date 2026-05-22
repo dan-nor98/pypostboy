@@ -78,7 +78,7 @@ function updateResponseLineNumbers(element) {
     for (var i = 1; i <= lineCount; i++) {
         lines.push('<span>' + i + '</span>');
     }
-    lineNumbersElement.innerHTML = lines.join('\n');
+    lineNumbersElement.innerHTML = lines.join('');
 }
 
 function normalizeBody(body) {
