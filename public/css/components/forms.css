@@ -374,3 +374,29 @@
   font-size: 0.82em;
   color: var(--color-text-muted);
 }
+
+
+/* ===== REUSABLE FORM INPUTS ===== */
+.form-input {
+  width: 100%;
+  padding: 11px 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+}
+
+.form-input:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.recovery-panel .recovery-input {
+  margin: 0;
+}

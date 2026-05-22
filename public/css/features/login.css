@@ -74,20 +74,9 @@
 }
 
 .login-fields input {
-  width: 100%;
-  padding: 11px 12px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
   font-size: 1rem;
 }
 
-.login-fields input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-}
 
 .login-actions {
   display: grid;
@@ -110,7 +99,8 @@
 }
 
 .login-actions button:disabled,
-.login-fields input:disabled {
+.login-fields input:disabled,
+.recovery-panel .form-input:disabled {
   opacity: 0.58;
   cursor: not-allowed;
 }

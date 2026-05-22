@@ -30,9 +30,9 @@
             <div class="account-status login-status" id="authStatus" role="status">Checking account…</div>
             <div class="login-fields">
                 <label for="authUsername">Username</label>
-                <input type="text" id="authUsername" autocomplete="username" placeholder="Username">
+                <input type="text" id="authUsername" class="form-input" autocomplete="username" placeholder="Username">
                 <label for="authPassword">Password</label>
-                <input type="password" id="authPassword" autocomplete="current-password" placeholder="Password">
+                <input type="password" id="authPassword" class="form-input" autocomplete="current-password" placeholder="Password">
             </div>
             <div class="login-actions">
                 <button class="btn-primary" id="loginBtn" type="button">Log in</button>
@@ -86,7 +86,7 @@
                         <h3 id="collectionModalTitle">New Collection</h3>
                         <input type="hidden" id="editCollectionId" value="">
                         <label class="modal-label">Name</label>
-                        <input type="text" id="newColName" placeholder="My Collection" class="modal-input">
+                        <input type="text" id="newColName" placeholder="My Collection" class="modal-input form-input">
                         <label class="modal-label">Description (optional)</label>
                         <textarea id="newColDesc" placeholder="Describe this collection..." rows="3" class="modal-textarea"></textarea>
                         <div class="modal-buttons">
@@ -104,13 +104,13 @@
                         <input type="hidden" id="editRequestId" value="">
                         <input type="hidden" id="editRequestCollectionId" value="">
                         <label class="modal-label">Name</label>
-                        <input type="text" id="reqNameInput" placeholder="Get Users" class="modal-input">
+                        <input type="text" id="reqNameInput" placeholder="Get Users" class="modal-input form-input">
                         <div id="reqCollectionPickerWrap" style="display:none;">
                             <label class="modal-label">Collection</label>
-                            <select id="reqCollectionSelect" class="modal-input"></select>
+                            <select id="reqCollectionSelect" class="modal-input form-input"></select>
                             <div id="reqNewCollectionWrap" style="display:none;">
                                 <label class="modal-label" for="reqNewCollectionName">New collection name</label>
-                                <input type="text" id="reqNewCollectionName" placeholder="My Collection" class="modal-input">
+                                <input type="text" id="reqNewCollectionName" placeholder="My Collection" class="modal-input form-input">
                             </div>
                         </div>
                         <div class="modal-buttons">
@@ -487,7 +487,7 @@
             <span class="modal-close" id="snapshotNameModalClose">&times;</span>
             <h3 id="snapshotNameModalTitle">Snapshot name</h3>
             <label class="modal-label" for="snapshotNameInput">Name</label>
-            <input type="text" id="snapshotNameInput" placeholder="Snapshot name" class="modal-input">
+            <input type="text" id="snapshotNameInput" placeholder="Snapshot name" class="modal-input form-input">
             <div class="modal-buttons">
                 <button class="btn-cancel" id="snapshotNameCancelBtn">Cancel</button>
                 <button class="btn-send" id="snapshotNameSaveBtn">Save</button>
