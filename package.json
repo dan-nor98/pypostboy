@@ -1,0 +1,28 @@
+{
+  "name": "pypostboy-electron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop shell for PyPostBoy",
+  "main": "electron/main/index.js",
+  "scripts": {
+    "dev:django": "python app.py",
+    "dev:electron": "wait-on tcp:3001 && electron .",
+    "dev:desktop": "concurrently -k -n DJANGO,ELECTRON \"npm run dev:django\" \"npm run dev:electron\"",
+    "test:electron": "node --test electron/request-executor/*.test.js",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.1",
+    "@electron-forge/maker-deb": "^7.6.1",
+    "@electron-forge/maker-rpm": "^7.6.1",
+    "@electron-forge/maker-squirrel": "^7.6.1",
+    "@electron-forge/maker-zip": "^7.6.1",
+    "concurrently": "^9.1.2",
+    "electron": "^34.5.4",
+    "wait-on": "^8.0.3"
+  },
+  "dependencies": {
+    "undici": "^6.21.2"
+  }
+}

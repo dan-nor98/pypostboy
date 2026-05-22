@@ -164,3 +164,68 @@ PostBoy is intended for local development. The proxy forwards requests as provid
 ## License
 
 Add license information before distribution.
+
+## Electron Desktop Mode (optional)
+
+PyPostBoy can also run as a secure Electron desktop shell while keeping the Django backend and web UI unchanged.
+
+### Why this exists
+
+Browsers enforce CORS and other browser-only policies for direct client requests. In **Desktop native** mode, requests execute in Electron's main process (Node networking), so browser CORS limitations do not apply to that mode.
+
+- **Client side**: browser fetch, CORS applies
+- **Server proxy**: backend proxy route, CORS bypassed via backend
+- **Desktop native**: Electron main-process HTTP execution, CORS bypassed in desktop runtime
+
+### Desktop architecture
+
+- `electron/main/index.js`: creates window and handles narrow IPC endpoint `desktop:request:execute`
+- `electron/preload/index.js`: secure bridge via `contextBridge` only
+- `electron/request-executor/validation.js`: IPC payload validation and normalization
+- `electron/request-executor/index.js`: HTTP execution logic (Node/undici)
+- `public/js/desktop/bridge.js`: frontend adapter for desktop-native execution mode
+
+Security defaults used:
+
+- `contextIsolation: true`
+- `nodeIntegration: false`
+- `sandbox: true`
+- no raw `ipcRenderer` exposed to renderer
+- explicit payload validation before any outbound request
+
+### Development setup
+
+Install JS dependencies once:
+
+```bash
+npm install
+```
+
+Run Django only:
+
+```bash
+npm run dev:django
+```
+
+Run Electron shell (expects Django on `http://localhost:3001`):
+
+```bash
+npm run dev:electron
+```
+
+Run both together:
+
+```bash
+npm run dev:desktop
+```
+
+### Packaging foundation
+
+Electron Forge is configured.
+
+```bash
+npm run package
+npm run make
+```
+
+These commands provide baseline desktop packaging outputs and can be extended per target OS/signing requirements.
