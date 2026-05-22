@@ -30,15 +30,16 @@
 
 .resize-handle-horizontal {
   height: 12px;
-  margin-top: 0;
-  margin-bottom: -12px;
+  min-height: 12px;
+  margin: 0;
   cursor: row-resize;
 }
 
 .resize-handle-horizontal::before {
-  top: auto;
-  bottom: 0;
+  top: 50%;
+  bottom: auto;
   height: 2px;
+  transform: translateY(-50%);
   background: var(--color-border);
 }
 
