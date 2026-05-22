@@ -134,6 +134,24 @@ def _apply_django_settings(config_dict):
             getattr(settings, 'POSTBOY_ALLOW_USER_ID_HEADER', False),
         )
     )
+    settings.CORS_ALLOW_ALL_ORIGINS = bool(
+        config_dict.get(
+            'CORS_ALLOW_ALL_ORIGINS',
+            getattr(settings, 'CORS_ALLOW_ALL_ORIGINS', False),
+        )
+    )
+    settings.CORS_ALLOWED_ORIGINS = list(
+        config_dict.get(
+            'CORS_ALLOWED_ORIGINS',
+            getattr(settings, 'CORS_ALLOWED_ORIGINS', []),
+        )
+    )
+    settings.CORS_ALLOWED_ORIGIN_REGEXES = list(
+        config_dict.get(
+            'CORS_ALLOWED_ORIGIN_REGEXES',
+            getattr(settings, 'CORS_ALLOWED_ORIGIN_REGEXES', []),
+        )
+    )
 
 
 def create_app(config=None):

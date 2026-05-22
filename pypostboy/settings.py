@@ -9,6 +9,17 @@ import os
 
 from pypostboy.config import BaseConfig, DEFAULT_STATIC_FOLDER
 
+
+def _split_csv(value):
+    return [item.strip() for item in (value or '').split(',') if item.strip()]
+
+
+def _as_bool(value, default=False):
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = BaseConfig.SECRET_KEY
 DEBUG = BaseConfig.DEBUG
@@ -46,6 +57,18 @@ POSTBOY_ALLOW_USER_ID_HEADER = BaseConfig.POSTBOY_ALLOW_USER_ID_HEADER
 PUBLIC_DIR = os.path.abspath(os.environ.get('POSTBOY_STATIC_FOLDER', DEFAULT_STATIC_FOLDER))
 PROXY_TIMEOUT = BaseConfig.PROXY_TIMEOUT
 DATA_UPLOAD_MAX_MEMORY_SIZE = BaseConfig.MAX_CONTENT_LENGTH
+
+# CORS controls for browser clients (especially containerized local development).
+# Use comma-separated env vars:
+# - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+# - CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\\.example\\.com$
+CORS_ALLOWED_ORIGINS = _split_csv(os.environ.get('CORS_ALLOWED_ORIGINS'))
+CORS_ALLOWED_ORIGIN_REGEXES = _split_csv(os.environ.get('CORS_ALLOWED_ORIGIN_REGEXES'))
+# Dev-friendly default: allow all origins only in DEBUG unless overridden.
+CORS_ALLOW_ALL_ORIGINS = _as_bool(
+    os.environ.get('CORS_ALLOW_ALL_ORIGINS'),
+    default=DEBUG,
+)
 
 LOG_LEVEL = os.environ.get('POSTBOY_LOG_LEVEL', 'INFO').upper()
 LOGGING = {
