@@ -423,13 +423,9 @@
                 <h2>Tools</h2>
                 <button class="right-sidebar-close" id="rightSidebarCloseBtn" type="button" aria-label="Close tools sidebar">×</button>
             </div>
-            <div class="right-sidebar-tabs">
-                <button class="right-sidebar-tab active" data-target="snapshots-panel">Snapshots</button>
-                <button class="right-sidebar-tab" data-target="curl-panel">cURL</button>
-            </div>
-            <div class="right-sidebar-panel active" id="snapshots-panel">
-                <div class="right-sidebar-section">
-                    <h3>Snapshot Management</h3>
+            <div class="right-sidebar-split">
+                <section class="right-sidebar-section right-sidebar-section--snapshots" id="snapshots-panel" aria-labelledby="snapshotSectionTitle">
+                    <h3 id="snapshotSectionTitle">Snapshot Management</h3>
                     <p class="right-sidebar-hint">Use snapshots to compare responses, keep debugging history, and quickly reuse known-good states. Save a response snapshot from the header, then load any snapshot here.</p>
                     <div class="right-sidebar-actions">
                         <button class="btn-add-row" id="saveInstanceBtn" type="button">Save Snapshot from Response</button>
@@ -437,18 +433,16 @@
                     <div class="instances-bar hidden" id="instancesBar">
                         <div id="snapshotList" class="snapshot-list" aria-label="Snapshots"></div>
                     </div>
-                </div>
-            </div>
-            <div class="right-sidebar-panel" id="curl-panel">
-                <div class="right-sidebar-section">
-                    <h3>cURL Output</h3>
+                </section>
+                <section class="right-sidebar-section right-sidebar-section--curl" id="curl-panel" aria-labelledby="curlSectionTitle">
+                    <h3 id="curlSectionTitle">cURL Output</h3>
                     <p class="right-sidebar-hint">Generate the active request as a cURL command without leaving the editor.</p>
                     <textarea id="sidebarCurlOutput" class="right-sidebar-output" rows="12" readonly placeholder="Generate cURL output for the active request..."></textarea>
                     <div class="right-sidebar-actions">
                         <button class="btn-add-row" id="generateSidebarCurlBtn" type="button">Generate cURL</button>
                         <button class="btn-export" id="copySidebarCurlBtn" type="button">Copy</button>
                     </div>
-                </div>
+                </section>
             </div>
         </aside>
     </div>
