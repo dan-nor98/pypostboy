@@ -64,6 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingSaveToCollectionResolver = null;
     let pendingSnapshotNameResolver = null;
     let workspaceInitialized = false;
+    let panelSizesRestored = false;
+    let lastMobileResizeLayout = null;
 
     const REQUEST_TAB_NAMES = ['params', 'headers', 'body', 'auth'];
     const EMPTY_RESPONSE_MESSAGE = 'Send a request to see the response here.';
@@ -421,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function restorePanelSizes() {
-        if (isMobileResizeLayout()) return;
+        if (isMobileResizeLayout() || panelSizesRestored) return;
 
         var storedPanelSizes = loadPanelSizes();
         var storedSidebarWidth = storedPanelSizes.sidebar;
@@ -433,7 +435,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!Number.isNaN(storedResponseHeight)) applyResponseHeight(storedResponseHeight, false);
         setSidebarCollapsed(storedPanelSizes.sidebarCollapsed, false, true);
         setRightSidebarCollapsed(storedPanelSizes.rightSidebarCollapsed, false, true);
-        syncResizeHandlesForViewport(true);
+        panelSizesRestored = true;
+        syncResizeHandlesForViewport();
     }
 
     function clearInlinePanelSizesForMobile() {
@@ -445,7 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function syncResizeHandlesForViewport(skipRestore) {
+    function syncResizeHandlesForViewport() {
         var disabled = isMobileResizeLayout();
         var sidebarCollapsed = sidebar && sidebar.classList.contains('is-collapsed');
         var rightCollapsed = rightSidebar && rightSidebar.classList.contains('is-collapsed');
@@ -454,11 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (rightSidebarResizeHandle) rightSidebarResizeHandle.setAttribute('aria-disabled', (disabled || rightCollapsed) ? 'true' : 'false');
         if (responseResizeHandle) responseResizeHandle.setAttribute('aria-disabled', disabled ? 'true' : 'false');
 
-        if (disabled) {
-            clearInlinePanelSizesForMobile();
-        } else if (!skipRestore) {
-            restorePanelSizes();
-        }
+        if (disabled) clearInlinePanelSizesForMobile();
     }
 
     function stopPanelResize(handle, moveHandler, upHandler, bodyClass) {
@@ -467,6 +466,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('pointercancel', upHandler);
         document.body.classList.remove('resizing-panels', bodyClass);
         if (handle) handle.classList.remove('active');
+    }
+
+    function restorePanelsForDesktopIfNeeded() {
+        var isMobileLayout = isMobileResizeLayout();
+        var transitionedToDesktop = lastMobileResizeLayout === true && !isMobileLayout;
+        if ((!panelSizesRestored && !isMobileLayout) || transitionedToDesktop) restorePanelSizes();
+        lastMobileResizeLayout = isMobileLayout;
     }
 
     function initPanelResizing() {
@@ -542,9 +548,16 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        window.addEventListener('resize', syncResizeHandlesForViewport);
+        window.addEventListener('resize', function() {
+            syncResizeHandlesForViewport();
+            restorePanelsForDesktopIfNeeded();
+        });
         syncResizeHandlesForViewport();
-        window.addEventListener('load', syncResizeHandlesForViewport, { once: true });
+        restorePanelsForDesktopIfNeeded();
+        window.addEventListener('load', function() {
+            syncResizeHandlesForViewport();
+            restorePanelsForDesktopIfNeeded();
+        }, { once: true });
     }
 
     function setSidebarCollapsed(collapsed, persist, skipSync) {
@@ -556,7 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sidebarCollapseBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
         }
         if (persist) savePanelCollapsedState('sidebar', !!collapsed);
-        if (!skipSync) syncResizeHandlesForViewport(true);
+        if (!skipSync) syncResizeHandlesForViewport();
     }
 
     function setRightSidebarCollapsed(collapsed, persist, skipSync) {
@@ -568,7 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
             rightSidebarCollapseBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
         }
         if (persist) savePanelCollapsedState('rightSidebar', !!collapsed);
-        if (!skipSync) syncResizeHandlesForViewport(true);
+        if (!skipSync) syncResizeHandlesForViewport();
     }
 
     // ─── Init ──────────────────────────────────────────────
