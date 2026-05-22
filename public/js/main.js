@@ -14,6 +14,7 @@ import { buildSnapshotDefaultName } from './features/snapshots.js';
 import { parseResponseTimeMs } from './features/proxy.js';
 import { applyParsedImportPayload, normalizeParsedImportPayload, parseCurlFallback } from './features/import-export.js';
 import { detectBodyFormat, formatByteCount, escapeHtml, highlightByFormat, highlightJson } from './utils/format.js';
+import { executeDesktopNativeRequest, isDesktopNativeAvailable } from './desktop/bridge.js';
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -70,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const CLIENT_CREDENTIALS_MODE_STORAGE_KEY = 'postboy.clientCredentialsMode';
     const REQUEST_ADVANCED_EXPANDED_STORAGE_KEY = 'postboy.requestAdvancedExpanded';
     const DEFAULT_EXECUTION_MODE = 'server';
+    const EXECUTION_MODES = new Set(['client', 'server', 'desktop-native']);
     const DEFAULT_CLIENT_CREDENTIALS_MODE = 'same-origin';
     const CLIENT_CREDENTIALS_MODES = new Set(['omit', 'same-origin', 'include']);
     const FORBIDDEN_CLIENT_HEADERS = new Set([
@@ -3488,12 +3490,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             stored = null;
         }
-        return stored === 'client' || stored === 'server' ? stored : DEFAULT_EXECUTION_MODE;
+        return EXECUTION_MODES.has(stored) ? stored : DEFAULT_EXECUTION_MODE;
     }
 
     function getSelectedExecutionMode() {
         if (!executionModeSelect) return DEFAULT_EXECUTION_MODE;
-        return executionModeSelect.value === 'client' ? 'client' : 'server';
+        var value = executionModeSelect.value;
+        return EXECUTION_MODES.has(value) ? value : DEFAULT_EXECUTION_MODE;
     }
 
     function getStoredClientCredentialsMode() {
@@ -3526,6 +3529,10 @@ document.addEventListener('DOMContentLoaded', () => {
         var control = clientCredentialsSelect.closest('.client-credentials-control');
         if (!control) return;
         control.hidden = getSelectedExecutionMode() !== 'client';
+        if (executionModeSelect) {
+            var desktopModeOption = executionModeSelect.querySelector('option[value=\"desktop-native\"]');
+            if (desktopModeOption) desktopModeOption.disabled = !isDesktopNativeAvailable();
+        }
     }
 
     function initExecutionModeControl() {
@@ -3722,10 +3729,45 @@ document.addEventListener('DOMContentLoaded', () => {
         return proxyPayload;
     }
 
-    async function executeRequest(payload, executionMode) {
-        if (executionMode === 'client') {
-            return sendClientRequest(payload);
+    async function sendDesktopNativeRequest(payload) {
+        var query = {};
+        try {
+            var parsed = new URL(payload.url);
+            parsed.searchParams.forEach(function(v, k) { query[k] = v; });
+        } catch (_err) {}
+
+        var result = await executeDesktopNativeRequest({
+            method: payload.method,
+            url: payload.url,
+            headers: payload.headers || {},
+            query: query,
+            body: payload.body,
+            timeoutMs: 30000,
+            maxRedirects: 5,
+            followRedirects: true
+        });
+
+        if (!result.ok) {
+            var err = new Error(result.error && result.error.message ? result.error.message : 'Desktop native request failed');
+            err.postboyDiagnostics = { executionMode: 'desktop-native', failureCategory: 'desktop-native-error' };
+            throw err;
         }
+
+        var parsedBody = result.body;
+        try { parsedBody = JSON.parse(result.body); } catch (_err) {}
+        return {
+            status: result.status,
+            statusText: result.statusText || '',
+            headers: result.headers || {},
+            body: parsedBody,
+            time: result.durationMs,
+            diagnostics: { executionMode: 'desktop-native' }
+        };
+    }
+
+    async function executeRequest(payload, executionMode) {
+        if (executionMode === 'client') return sendClientRequest(payload);
+        if (executionMode === 'desktop-native') return sendDesktopNativeRequest(payload);
         return apiClient.sendProxyRequest(buildServerProxyPayload(payload));
     }
 
