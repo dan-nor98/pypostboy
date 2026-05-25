@@ -30,12 +30,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 USE_TZ = True
 TIME_ZONE = 'UTC'
 INSTALLED_APPS = [
+    'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
     'pypostboy.djangoapp.middleware.PostBoyMiddleware',
 ]
 # PostBoy owns its application schema through pypostboy.db migrations. Django's
@@ -94,3 +96,5 @@ LOGGING = {
         },
     },
 }
+
+AUTHENTICATION_BACKENDS = ['pypostboy.djangoapp.auth_backend.PostBoyAuthBackend']
