@@ -4,7 +4,8 @@ import hmac
 import secrets
 import time
 
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth import authenticate, login as django_login, logout as django_logout
+from django.contrib.auth.hashers import make_password
 from django.views.decorators.csrf import csrf_exempt
 
 from pypostboy.auth import (
@@ -110,22 +111,14 @@ def login(request):
     if not username or not password:
         return error("Username and password are required", 400)
 
-    user = db_execute(
-        get_connection(),
-        "SELECT * FROM users WHERE username = ?",
-        (username,),
-    ).fetchone()
-    if (
-        not user
-        or not user["password_hash"]
-        or not check_password(password, user["password_hash"])
-    ):
+    user = authenticate(request, username=username, password=password)
+    if not user:
         return error("Invalid username or password", 401)
 
-    request.session["user_id"] = user["id"]
-    request.session.modified = True
-    request.current_user = dict(row_to_mapping(user))
-    return clear_legacy_identity_cookies(ok(_public_user(user)))
+    django_login(request, user, backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend")
+    row = db_execute(get_connection(), "SELECT * FROM users WHERE id = ?", (user.id,)).fetchone()
+    request.current_user = dict(row_to_mapping(row))
+    return clear_legacy_identity_cookies(ok(_public_user(row)))
 
 
 @csrf_exempt
@@ -167,8 +160,11 @@ def register(request):
         "SELECT * FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
-    request.session["user_id"] = user["id"]
-    request.session.modified = True
+    django_login(
+        request,
+        authenticate(request, username=username, password=password),
+        backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend",
+    )
     request.current_user = dict(row_to_mapping(user))
     return clear_legacy_identity_cookies(
         created({"user": _public_user(user), "recovery_key": recovery_key})
@@ -251,8 +247,7 @@ def recover_reset(request):
 @csrf_exempt
 def logout(request):
     """Clear the current browser session."""
-    request.session.pop("user_id", None)
-    request.session.modified = True
+    django_logout(request)
     for cookie_name in USER_ID_COOKIE_NAMES:
         request.COOKIES.pop(cookie_name, None)
     if hasattr(request, "current_user"):
