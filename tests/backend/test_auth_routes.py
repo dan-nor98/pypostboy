@@ -331,3 +331,124 @@ def test_recovery_verify_reset_and_rotate_key(client):
         )
     )
     assert logged_in["username"] == "recover-user"
+
+
+def test_recovery_rate_limit_enforces_threshold(client):
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "rate-limit-user", "password": "password123"},
+        ),
+        201,
+    )
+
+    for _ in range(5):
+        assert_error(
+            client.post(
+                "/api/auth/recover/verify",
+                json={"username": "rate-limit-user", "recovery_key": "wrong"},
+            ),
+            401,
+            "Invalid recovery credentials",
+        )
+
+    assert_error(
+        client.post(
+            "/api/auth/recover/verify",
+            json={"username": "rate-limit-user", "recovery_key": registration["recovery_key"]},
+        ),
+        429,
+        "Too many recovery attempts, try again later",
+    )
+
+
+def test_recovery_rate_limit_resets_after_window_expiry(client, monkeypatch):
+    import time
+
+    from pypostboy.routes import auth
+
+    monkeypatch.setattr(auth, "RECOVERY_WINDOW_SECONDS", 1)
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "rate-limit-reset-user", "password": "password123"},
+        ),
+        201,
+    )
+
+    for _ in range(5):
+        assert_error(
+            client.post(
+                "/api/auth/recover/verify",
+                json={"username": "rate-limit-reset-user", "recovery_key": "wrong"},
+            ),
+            401,
+            "Invalid recovery credentials",
+        )
+
+    assert_error(
+        client.post(
+            "/api/auth/recover/verify",
+            json={"username": "rate-limit-reset-user", "recovery_key": registration["recovery_key"]},
+        ),
+        429,
+        "Too many recovery attempts, try again later",
+    )
+
+    time.sleep(1.1)
+    verified = assert_success(
+        client.post(
+            "/api/auth/recover/verify",
+            json={"username": "rate-limit-reset-user", "recovery_key": registration["recovery_key"]},
+        )
+    )
+    assert verified["valid"] is True
+
+
+def test_recovery_rate_limit_is_consistent_across_repeated_calls(client):
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "rate-limit-consistency-user", "password": "password123"},
+        ),
+        201,
+    )
+
+    for _ in range(5):
+        assert_error(
+            client.post(
+                "/api/auth/recover/reset",
+                json={
+                    "username": "rate-limit-consistency-user",
+                    "recovery_key": "wrong",
+                    "new_password": "newpassword123",
+                },
+            ),
+            401,
+            "Invalid recovery credentials",
+        )
+
+    assert_error(
+        client.post(
+            "/api/auth/recover/reset",
+            json={
+                "username": "rate-limit-consistency-user",
+                "recovery_key": registration["recovery_key"],
+                "new_password": "newpassword123",
+            },
+        ),
+        429,
+        "Too many recovery attempts, try again later",
+    )
+
+    assert_error(
+        client.post(
+            "/api/auth/recover/verify",
+            json={
+                "username": "rate-limit-consistency-user",
+                "recovery_key": registration["recovery_key"],
+            },
+        ),
+        429,
+        "Too many recovery attempts, try again later",
+    )
