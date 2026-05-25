@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import secrets
+import sqlite3
 import time
 
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
@@ -92,6 +93,29 @@ def current_user(request):
     return ok(_public_user(get_current_user(request)))
 
 
+
+
+def _is_unique_constraint_error(exc):
+    """Return True if the exception represents a uniqueness constraint violation."""
+
+    def _matches(candidate):
+        if isinstance(candidate, sqlite3.IntegrityError):
+            return True
+        if getattr(candidate, "sqlstate", None) == "23505":
+            return True
+        if getattr(candidate, "pgcode", None) == "23505":
+            return True
+        if candidate.__class__.__name__ == "UniqueViolation":
+            return True
+        return False
+
+    current = exc
+    while current is not None:
+        if _matches(current):
+            return True
+        current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+    return False
+
 def _registration_conflict_query(username, email):
     """Return SQL and params for detecting conflicting register identities."""
     if email is None:
@@ -144,16 +168,21 @@ def register(request):
     now = timestamp()
     recovery_key = _issue_recovery_key()
     recovery_key_hash = _hash_recovery_key(recovery_key)
-    user_id = insert_and_get_id(
-        conn,
-        """INSERT INTO users (
-            username, email, password_hash, auth_provider, auth_subject,
-            recovery_key_hash, recovery_key_created_at, recovery_key_rotated_at,
-            created_at, updated_at
-        ) VALUES (?, ?, ?, 'local', NULL, ?, ?, NULL, ?, ?)""",
-        (username, email, make_password(password), recovery_key_hash, now, now, now),
-    )
-    conn.commit()
+    try:
+        user_id = insert_and_get_id(
+            conn,
+            """INSERT INTO users (
+                username, email, password_hash, auth_provider, auth_subject,
+                recovery_key_hash, recovery_key_created_at, recovery_key_rotated_at,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, 'local', NULL, ?, ?, NULL, ?, ?)""",
+            (username, email, make_password(password), recovery_key_hash, now, now, now),
+        )
+        conn.commit()
+    except Exception as exc:
+        if _is_unique_constraint_error(exc):
+            return error("Username or email already exists", 409)
+        raise
 
     user = db_execute(
         conn,

@@ -246,6 +246,43 @@ def test_registration_conflict_query_checks_email_when_provided():
     assert params == ("new-user", "new-user@example.test")
 
 
+
+def test_register_returns_conflict_when_insert_raises_sqlite_integrity_error(client, monkeypatch):
+    import sqlite3
+
+    from pypostboy.routes import auth
+
+    def _raise_unique(*_args, **_kwargs):
+        raise sqlite3.IntegrityError("UNIQUE constraint failed: users.username")
+
+    monkeypatch.setattr(auth, "insert_and_get_id", _raise_unique)
+
+    response = client.post(
+        "/api/auth/register",
+        json={"username": "conflict-user", "password": "password123"},
+    )
+
+    assert_error(response, 409, "Username or email already exists")
+
+
+def test_register_returns_conflict_when_insert_raises_postgres_unique_violation(client, monkeypatch):
+    from pypostboy.routes import auth
+
+    class FakeUniqueViolation(Exception):
+        sqlstate = "23505"
+
+    def _raise_unique(*_args, **_kwargs):
+        raise FakeUniqueViolation("duplicate key value violates unique constraint")
+
+    monkeypatch.setattr(auth, "insert_and_get_id", _raise_unique)
+
+    response = client.post(
+        "/api/auth/register",
+        json={"username": "conflict-user-pg", "password": "password123"},
+    )
+
+    assert_error(response, 409, "Username or email already exists")
+
 def test_recovery_verify_reset_and_rotate_key(client):
     registration = assert_success(
         client.post(
