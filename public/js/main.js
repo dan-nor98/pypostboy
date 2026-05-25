@@ -13,8 +13,9 @@ import { getBlankState } from './features/requests.js';
 import { buildSnapshotDefaultName } from './features/snapshots.js';
 import { parseResponseTimeMs } from './features/proxy.js';
 import { applyParsedImportPayload, normalizeParsedImportPayload, parseCurlFallback } from './features/import-export.js';
-import { detectBodyFormat, formatByteCount, escapeHtml, highlightByFormat, highlightJson } from './utils/format.js';
+import { formatByteCount, escapeHtml, highlightJson } from './utils/format.js';
 import { executeDesktopNativeRequest, isDesktopNativeAvailable } from './desktop/bridge.js';
+import { initBodyContentCodeMirror } from './editor/body-codemirror.js';
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -88,62 +89,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initExecutionModeControl();
     initRequestBarAdvancedControls();
-    initBodyContentEditor(bodyContent);
-
-    function initBodyContentEditor(textarea) {
-        if (!textarea) return;
-
-        var editor = document.getElementById('bodyContentEditor');
-        var highlight = document.getElementById('bodyContentHighlight');
-        if (!editor || !highlight) return;
-
-        function getBodyFormat() {
-            var selected = document.querySelector('input[name="bodyType"]:checked');
-            var bodyType = selected ? selected.value : 'text';
-            if (bodyType === 'xml') return 'markup';
-            if (bodyType === 'json') return 'json';
-            return detectBodyFormat(textarea.value, bodyType === 'text' ? 'text/plain' : '');
+    var bodyContentCodeMirror = initBodyContentCodeMirror({
+        container: document.getElementById('bodyContentCm'),
+        onChange: function(value) {
+            if (bodyContent) bodyContent.value = value;
+            markActiveTabUnsaved();
         }
-
-        function syncHighlight() {
-            var value = textarea.value || '';
-            highlight.innerHTML = value ? highlightByFormat(value, getBodyFormat()) : '';
-        }
-
-        function syncScroll() {
-            highlight.parentElement.scrollTop = textarea.scrollTop;
-            highlight.parentElement.scrollLeft = textarea.scrollLeft;
-        }
-
-        function syncVisibility() {
-            editor.style.display = textarea.style.display === 'none' ? 'none' : '';
-        }
-
-        var descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-        if (descriptor && descriptor.get && descriptor.set) {
-            Object.defineProperty(textarea, 'value', {
-                get: function() {
-                    return descriptor.get.call(textarea);
-                },
-                set: function(value) {
-                    descriptor.set.call(textarea, value);
-                    syncHighlight();
-                    syncScroll();
-                }
-            });
-        }
-
-        textarea.addEventListener('input', syncHighlight);
-        textarea.addEventListener('scroll', syncScroll);
-        document.querySelectorAll('input[name="bodyType"]').forEach(function(radio) {
-            radio.addEventListener('change', syncHighlight);
-        });
-
-        new MutationObserver(syncVisibility).observe(textarea, { attributes: true, attributeFilter: ['style'] });
-        syncHighlight();
-        syncScroll();
-        syncVisibility();
-    }
+    });
 
     // ─── Mobile Response Bottom Sheet ─────────────────────
     function setResponseSheetState(state) {
@@ -2660,7 +2612,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Body type
         setEditorBodyType(state.body_type || 'none');
-        bodyContent.value = state.body_content || '';
+        var nextBodyContent = state.body_content || '';
+        bodyContent.value = nextBodyContent;
+        if (bodyContentCodeMirror) bodyContentCodeMirror.setValue(nextBodyContent);
 
         // Form data
         formDataRows.innerHTML = '';
@@ -2805,7 +2759,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         var bodyType = document.querySelector('input[name="bodyType"]:checked').value;
-        var bodyContentVal = bodyContent.value;
+        var bodyContentVal = bodyContentCodeMirror ? bodyContentCodeMirror.getValue() : bodyContent.value;
 
         var formData = [];
         formDataRows.querySelectorAll('.form-data-row').forEach(function(r) {
@@ -3285,10 +3239,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tab) { tab.method = methodSelect.value; renderRequestTabs(); markActiveTabUnsaved(); }
     });
 
-    bodyContent.addEventListener('input', function() { markActiveTabUnsaved(); });
 
     prettifyJsonBtn.addEventListener('click', function() {
-        var originalBody = bodyContent.value;
+        var originalBody = bodyContentCodeMirror ? bodyContentCodeMirror.getValue() : bodyContent.value;
         var parsedBody;
 
         try {
@@ -3301,7 +3254,9 @@ document.addEventListener('DOMContentLoaded', () => {
         var jsonRadio = document.querySelector('input[name="bodyType"][value="json"]');
         if (jsonRadio) jsonRadio.checked = true;
 
-        bodyContent.value = JSON.stringify(parsedBody, null, 2);
+        var prettyJson = JSON.stringify(parsedBody, null, 2);
+        bodyContent.value = prettyJson;
+        if (bodyContentCodeMirror) bodyContentCodeMirror.setValue(prettyJson);
         bodyContent.style.display = '';
         formDataContainer.style.display = 'none';
         markActiveTabUnsaved();
@@ -3519,7 +3474,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!headersContainer.children.length) addHeaderRow();
             },
             setBodyType: setEditorBodyType,
-            setBodyContent: function(content) { bodyContent.value = content || ''; },
+            setBodyContent: function(content) { var next = content || ''; bodyContent.value = next; if (bodyContentCodeMirror) bodyContentCodeMirror.setValue(next); },
             clearFormData: function() { formDataRows.innerHTML = ''; },
             addFormDataRow: addFormDataRow
         };
@@ -3542,6 +3497,9 @@ document.addEventListener('DOMContentLoaded', () => {
         bodyRadio.checked = true;
         var isForm = (value === 'form-data' || value === 'form-urlencoded');
         bodyContent.style.display = (isForm || value === 'none') ? 'none' : '';
+        var cmContainer = document.getElementById('bodyContentEditor');
+        if (cmContainer) cmContainer.style.display = (isForm || value === 'none') ? 'none' : '';
+        if (bodyContentCodeMirror) bodyContentCodeMirror.setBodyType(value);
         formDataContainer.style.display = isForm ? '' : 'none';
     }
 
@@ -3568,6 +3526,9 @@ document.addEventListener('DOMContentLoaded', () => {
             var val = r.value;
             var isForm = (val === 'form-data' || val === 'form-urlencoded');
             bodyContent.style.display = (isForm || val === 'none') ? 'none' : '';
+            var cmContainer = document.getElementById('bodyContentEditor');
+            if (cmContainer) cmContainer.style.display = (isForm || val === 'none') ? 'none' : '';
+            if (bodyContentCodeMirror) bodyContentCodeMirror.setBodyType(val);
             formDataContainer.style.display = isForm ? '' : 'none';
             markActiveTabUnsaved();
         });
@@ -3985,13 +3946,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (['GET', 'HEAD'].indexOf(method) === -1) {
             if (bodyType === 'json') {
-                body = replaceEnvVars(bodyContent.value);
+                body = replaceEnvVars(bodyContentCodeMirror ? bodyContentCodeMirror.getValue() : bodyContent.value);
                 contentType = 'application/json';
             } else if (bodyType === 'text') {
-                body = replaceEnvVars(bodyContent.value);
+                body = replaceEnvVars(bodyContentCodeMirror ? bodyContentCodeMirror.getValue() : bodyContent.value);
                 contentType = 'text/plain';
             } else if (bodyType === 'xml') {
-                body = replaceEnvVars(bodyContent.value);
+                body = replaceEnvVars(bodyContentCodeMirror ? bodyContentCodeMirror.getValue() : bodyContent.value);
                 contentType = 'application/xml';
             } else if (bodyType === 'form-urlencoded') {
                 var pairs = [];
@@ -4674,7 +4635,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var bodyType = document.querySelector('input[name="bodyType"]:checked').value;
         if (['GET', 'HEAD'].indexOf(method) === -1 && bodyType !== 'none') {
             if (['json', 'text', 'xml'].indexOf(bodyType) !== -1) {
-                var b = bodyContent.value.trim();
+                var b = (bodyContentCodeMirror ? bodyContentCodeMirror.getValue() : bodyContent.value).trim();
                 if (b) parts.push("-d '" + b.replace(/'/g, "\\'") + "'");
             } else if (bodyType === 'form-urlencoded' || bodyType === 'form-data') {
                 var fdParts = [];
