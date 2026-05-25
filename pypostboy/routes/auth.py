@@ -3,9 +3,9 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
-import time
 
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
+from django.core.cache import cache
 from django.contrib.auth.hashers import make_password
 from django.views.decorators.csrf import csrf_exempt
 
@@ -29,7 +29,6 @@ RECOVERY_KEY_BYTES = 32
 GENERIC_RECOVERY_ERROR = "Invalid recovery credentials"
 RECOVERY_MAX_ATTEMPTS = 5
 RECOVERY_WINDOW_SECONDS = 300
-_recovery_attempts = {}
 
 
 def _public_user(user):
@@ -76,15 +75,25 @@ def _constant_time_recovery_match(recovery_key, expected_hash):
     return hmac.compare_digest(candidate_hash, expected_hash or "")
 
 
+def _hashed_recovery_identity(identity):
+    normalized = (identity or "unknown").strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _hashed_remote_addr(request):
+    remote_addr = (request.META.get("REMOTE_ADDR") or "unknown").strip()
+    return hashlib.sha256(remote_addr.encode("utf-8")).hexdigest()
+
+
 def _is_recovery_rate_limited(request, identity):
-    now = int(time.time())
-    key = f"{request.META.get('REMOTE_ADDR', 'unknown')}::{identity or 'unknown'}"
-    attempts = [ts for ts in _recovery_attempts.get(key, []) if now - ts < RECOVERY_WINDOW_SECONDS]
-    _recovery_attempts[key] = attempts
-    if len(attempts) >= RECOVERY_MAX_ATTEMPTS:
+    key = f"recover_rate_limit::{_hashed_remote_addr(request)}::{_hashed_recovery_identity(identity)}"
+    current = cache.get(key)
+    if current is None:
+        cache.add(key, 1, timeout=RECOVERY_WINDOW_SECONDS)
+        return False
+    if current >= RECOVERY_MAX_ATTEMPTS:
         return True
-    attempts.append(now)
-    _recovery_attempts[key] = attempts
+    cache.incr(key)
     return False
 
 
