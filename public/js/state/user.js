@@ -105,20 +105,16 @@ export function waitForAuth() {
 }
 
 export async function continueAsGuest() {
-    setAuthState({ loading: true, error: '' });
-    var user = await apiClient.getCurrentUser()
-        .then(function(currentUser) {
-            setExplicitGuestChoice(true);
-            setAuthState({ currentUser: currentUser, loading: false, error: '', initialized: true });
-            authReadyPromise = Promise.resolve(currentUser);
-            return currentUser;
-        })
-        .catch(function(err) {
-            setAuthState({ currentUser: null, loading: false, error: err.message, initialized: true });
-            authReadyPromise = Promise.resolve(null);
-            throw err;
-        });
-    return user;
+    setExplicitGuestChoice(true);
+    setAuthState({
+        currentUser: { username: 'Guest', is_guest: true },
+        loading: false,
+        error: '',
+        initialized: true,
+        explicitGuest: true
+    });
+    authReadyPromise = Promise.resolve(userState.currentUser);
+    return userState.currentUser;
 }
 
 export async function loginUser(credentials) {
