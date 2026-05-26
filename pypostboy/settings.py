@@ -6,8 +6,9 @@ integration.
 """
 
 import os
+from urllib.parse import unquote, urlparse
 
-from pypostboy.config import BaseConfig, DEFAULT_STATIC_FOLDER
+from pypostboy.config import BaseConfig, DEFAULT_DATABASE_PATH, DEFAULT_STATIC_FOLDER
 
 
 def _split_csv(value):
@@ -18,6 +19,24 @@ def _as_bool(value, default=False):
     if value is None:
         return default
     return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _django_db_name():
+    """Resolve Django DB path to the same SQLite database used by repository writes."""
+    explicit = os.environ.get('POSTBOY_DJANGO_DB_PATH')
+    if explicit:
+        return explicit
+
+    database_url = os.environ.get('POSTBOY_DATABASE_URL')
+    if database_url and database_url.startswith('sqlite://'):
+        parsed = urlparse(database_url)
+        if database_url == 'sqlite:///:memory:' or parsed.path == '/:memory:':
+            return ':memory:'
+        if parsed.netloc and parsed.netloc not in {'', 'localhost'}:
+            return os.path.abspath(unquote(f'//{parsed.netloc}{parsed.path}'))
+        return os.path.abspath(unquote(parsed.path or DEFAULT_DATABASE_PATH))
+
+    return os.path.abspath(os.environ.get('POSTBOY_DB_PATH', DEFAULT_DATABASE_PATH))
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,7 +69,7 @@ MIDDLEWARE = [
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.environ.get('POSTBOY_DJANGO_DB_PATH', ':memory:'),
+        'NAME': _django_db_name(),
     }
 }
 SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
