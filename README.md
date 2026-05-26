@@ -114,6 +114,15 @@ docker compose down -v
 | `postboy-sqlite-data` | `docker-compose.dev.yml` | Persists the SQLite database under `/data`. |
 | `postboy-postgres-data` | `docker-compose.yml` | Persists PostgreSQL data under `/var/lib/postgresql/data`. |
 
+## Testing
+
+Install Python dependencies explicitly before running tests:
+
+```bash
+pip install -r requirements.txt
+pytest
+```
+
 ## Configuration
 
 PostBoy works out of the box for local development. Useful environment variables:

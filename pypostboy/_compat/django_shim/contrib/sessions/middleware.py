@@ -4,7 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
-from django.conf import settings
+from pypostboy._compat.django_shim.conf import settings
 
 _COOKIE_SALT = b'django.contrib.sessions.middleware.SessionMiddleware'
 
@@ -45,7 +45,7 @@ def _decode_session(value):
 
 def load_session(cookies):
     """Return a session store hydrated from a signed session cookie."""
-    from django.core.handlers import SessionStore
+    from pypostboy._compat.django_shim.core.handlers import SessionStore
 
     session = SessionStore(_decode_session((cookies or {}).get(_session_cookie_name())))
     session.modified = False
