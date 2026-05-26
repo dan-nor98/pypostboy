@@ -89,13 +89,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initExecutionModeControl();
     initRequestBarAdvancedControls();
-    var bodyContentCodeMirror = initBodyContentCodeMirror({
-        container: document.getElementById('bodyContentCm'),
-        onChange: function(value) {
-            if (bodyContent) bodyContent.value = value;
-            markActiveTabUnsaved();
+    var bodyContentCodeMirror = createBodyEditor();
+
+    function createBodyEditor() {
+        var fallback = {
+            setValue: function(value) {
+                if (bodyContent) bodyContent.value = value || '';
+            },
+            getValue: function() {
+                return bodyContent ? bodyContent.value : '';
+            },
+            setBodyType: function() {},
+            focus: function() {
+                if (bodyContent) bodyContent.focus();
+            },
+            destroy: function() {}
+        };
+
+        try {
+            return initBodyContentCodeMirror({
+                container: document.getElementById('bodyContentCm'),
+                onChange: function(value) {
+                    if (bodyContent) bodyContent.value = value;
+                    markActiveTabUnsaved();
+                }
+            }) || fallback;
+        } catch (err) {
+            console.error('CodeMirror initialization failed; using textarea fallback.', err);
+            if (bodyContent) bodyContent.hidden = false;
+            return fallback;
         }
-    });
+    }
 
     // ─── Mobile Response Bottom Sheet ─────────────────────
     function setResponseSheetState(state) {
