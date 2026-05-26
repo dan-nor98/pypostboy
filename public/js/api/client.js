@@ -130,7 +130,7 @@ export const apiClient = {
     getRequestInstance(id) { return request('/api/request-instances/' + id); },
     updateRequestInstance(id, payload) { return request('/api/request-instances/' + id, buildJsonOptions('PUT', payload)); },
     deleteRequestInstance(id) { return request('/api/request-instances/' + id, { method: 'DELETE' }); },
-    sendProxyRequest(payload) { return requestJson('/api/proxy', buildJsonOptions('POST', payload), true); },
+    sendProxyRequest(payload) { return requestJson('/client-proxy', buildJsonOptions('POST', payload), true); },
     sendProxy(payload) { return this.sendProxyRequest(payload); },
     importData(payload) { return request('/api/import', buildJsonOptions('POST', payload)); },
     bootstrapCsrfToken() { return bootstrapCsrfToken(); }

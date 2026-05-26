@@ -4,13 +4,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    expose:
+      - "${PORT:-3001}"
     environment:
       POSTBOY_CONFIG: production
       POSTBOY_DATABASE_URL: postgresql://postboy:postboy@db:5432/postboy
       POSTBOY_SECRET_KEY: ${POSTBOY_SECRET_KEY:-change-me-for-local-compose-only}
       PORT: ${PORT:-3001}
-    ports:
-      - "${PORT:-3001}:${PORT:-3001}"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
 
   db:
     build:

@@ -96,7 +96,7 @@ Use the default compose file to run PostBoy with a PostgreSQL service:
 POSTBOY_SECRET_KEY=replace-with-a-long-random-value docker compose up --build
 ```
 
-Open `http://localhost:3001` in your browser. PostgreSQL data is stored in the named `postboy-postgres-data` Docker volume.
+Open `http://localhost` in your browser. PostgreSQL data is stored in the named `postboy-postgres-data` Docker volume. The Django app remains internal to Docker and is only reached through Nginx.
 
 To stop containers without deleting persisted data:
 
@@ -109,6 +109,11 @@ To remove the PostgreSQL volume as well:
 ```bash
 docker compose down -v
 ```
+
+
+### Reverse-proxy and CORS model
+
+CORS is enforced by the browser and cannot be bypassed safely with client-side JavaScript. In Docker deployment, PostBoy uses a same-origin proxy route so the browser always calls `POST /client-proxy` on the Nginx origin (`http://localhost`). Nginx forwards that request to Django `POST /api/proxy`, and Django performs the external API call server-side.
 
 ### Docker environment variables and volumes
 
@@ -175,7 +180,8 @@ tests/                  # Backend test suite
 | Collections | `GET/POST /api/collections`, `GET/PUT/DELETE /api/collections/:id`, `POST /api/collections/:id/duplicate` |
 | Requests | `GET/POST/PUT/DELETE /api/requests`, `GET /api/requests/:id`, `POST /api/requests/:id/duplicate`, `PUT /api/requests/:id/move` |
 | Import | `POST /api/import` |
-| Proxy | `POST /api/proxy` |
+| Client proxy ingress (browser → Nginx) | `POST /client-proxy` |
+| Server proxy handler (Nginx → Django) | `POST /api/proxy` |
 
 ## Security Notes
 
