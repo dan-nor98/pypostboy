@@ -11,5 +11,14 @@ services:
     volumes:
       - postboy-sqlite-data:/data
 
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
 volumes:
   postboy-sqlite-data:

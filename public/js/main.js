@@ -3799,53 +3799,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function sendClientRequest(payload) {
         var start = performance.now();
-        var headerResult = buildClientFetchHeaders(payload.headers, payload.contentType);
-        var credentialsMode = getSelectedClientCredentialsMode();
         var diagnostics = {
             executionMode: 'client',
+            transport: 'nginx',
             urlOrigin: getUrlOrigin(payload.url),
-            method: payload.method,
-            credentialsMode: credentialsMode,
-            skippedHeaders: headerResult.skippedHeaders.slice()
-        };
-        var options = {
-            method: payload.method,
-            headers: headerResult.headers,
-            credentials: credentialsMode
+            method: payload.method
         };
 
-        if (payload.body != null && ['GET', 'HEAD'].indexOf(payload.method) === -1) {
-            options.body = payload.body;
-        }
-
-        var response;
         try {
-            response = await fetch(payload.url, options);
+            var proxied = await fetch('/client-proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(buildServerProxyPayload(payload))
+            });
+            var data = await proxied.json();
+            return {
+                status: data.status,
+                statusText: data.statusText || '',
+                headers: data.headers || {},
+                body: data.body,
+                time: typeof data.time === 'number' ? data.time : Math.round(performance.now() - start),
+                diagnostics: diagnostics
+            };
         } catch (err) {
-            diagnostics.failureCategory = inferFailureCategory('client', payload.url, err);
+            diagnostics.failureCategory = 'nginx-client-proxy-failure';
             throw createClientFetchError(err, diagnostics);
         }
-
-        var responseBody = await response.text();
-        var parsedBody = responseBody;
-        try {
-            parsedBody = JSON.parse(responseBody);
-        } catch (err) {
-            parsedBody = responseBody;
-        }
-
-        if (headerResult.skippedHeaders.length) {
-            showToast('Skipped browser-controlled headers in client mode: ' + headerResult.skippedHeaders.join(', '), 'warning');
-        }
-
-        return {
-            status: response.status,
-            statusText: response.statusText,
-            headers: headersToObject(response.headers),
-            body: parsedBody,
-            time: Math.round(performance.now() - start),
-            diagnostics: diagnostics
-        };
     }
 
     function buildServerProxyPayload(payload) {
