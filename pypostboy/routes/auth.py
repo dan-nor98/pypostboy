@@ -7,7 +7,8 @@ import sqlite3
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
 from django.core.cache import cache
 from django.contrib.auth.hashers import make_password
-from django.views.decorators.csrf import csrf_exempt
+from django.middleware.csrf import get_token
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from pypostboy.auth import (
     USER_ID_COOKIE_NAMES,
@@ -102,6 +103,10 @@ def current_user(request):
     return ok(_public_user(get_current_user(request)))
 
 
+@ensure_csrf_cookie
+def csrf_token(request):
+    """Set and return CSRF token for SPA bootstrapping."""
+    return ok({"csrf_token": get_token(request)})
 
 
 def _is_unique_constraint_error(exc):
@@ -132,7 +137,6 @@ def _registration_conflict_query(username, email):
     return "SELECT id FROM users WHERE username = ? OR email = ?", (username, email)
 
 
-@csrf_exempt
 def login(request):
     """Start a session for a username/password user."""
     try:
@@ -154,7 +158,6 @@ def login(request):
     return clear_legacy_identity_cookies(ok(_public_user(row)))
 
 
-@csrf_exempt
 def register(request):
     """Create a local username/password user and start a session."""
     try:
@@ -217,7 +220,6 @@ def _find_user_for_recovery(conn, username, email):
     return None
 
 
-@csrf_exempt
 def recover_verify(request):
     try:
         payload = json_body(request, allow_blank=False)
@@ -243,7 +245,6 @@ def recover_verify(request):
     return ok({"valid": True})
 
 
-@csrf_exempt
 def recover_reset(request):
     try:
         payload = json_body(request, allow_blank=False)
@@ -282,7 +283,6 @@ def recover_reset(request):
     return ok({"password_reset": True, "recovery_key": new_recovery_key})
 
 
-@csrf_exempt
 def logout(request):
     """Clear the current browser session."""
     django_logout(request)

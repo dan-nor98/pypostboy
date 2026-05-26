@@ -26,6 +26,38 @@ def test_login_rejects_malformed_json(client):
         "Invalid JSON request body",
     )
 
+
+
+def test_session_auth_post_rejects_without_csrf_token(app):
+    from django.test import Client as DjangoClient
+
+    client = DjangoClient(enforce_csrf_checks=True)
+    response = client.post(
+        "/api/auth/register",
+        data='{"username": "csrf-user", "password": "password123"}',
+        content_type="application/json",
+    )
+    assert response.status_code == 403
+
+
+def test_session_auth_post_succeeds_with_valid_csrf_token(app):
+    from django.test import Client as DjangoClient
+
+    client = DjangoClient(enforce_csrf_checks=True)
+    csrf_response = client.get("/api/auth/csrf")
+    assert csrf_response.status_code == 200
+    csrf_token = csrf_response.cookies["csrftoken"].value
+
+    response = client.post(
+        "/api/auth/register",
+        data='{"username": "csrf-user-ok", "password": "password123"}',
+        content_type="application/json",
+        HTTP_X_CSRFTOKEN=csrf_token,
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["success"] is True
+
 def test_register_login_logout_session_scopes_collections(client):
     registration = assert_success(
         client.post(

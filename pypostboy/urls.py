@@ -21,6 +21,7 @@ def dispatch(method_map):
 
 urlpatterns = [
     path('api/auth/me', auth.current_user),
+    path('api/auth/csrf', auth.csrf_token),
     path('api/auth/login', auth.login),
     path('api/auth/register', auth.register),
     path('api/auth/recover/verify', auth.recover_verify),
