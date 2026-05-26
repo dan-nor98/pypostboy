@@ -15,7 +15,6 @@ import { parseResponseTimeMs } from './features/proxy.js';
 import { applyParsedImportPayload, normalizeParsedImportPayload, parseCurlFallback } from './features/import-export.js';
 import { formatByteCount, escapeHtml, highlightJson } from './utils/format.js';
 import { executeDesktopNativeRequest, isDesktopNativeAvailable } from './desktop/bridge.js';
-import { initBodyContentCodeMirror } from './editor/body-codemirror.js';
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -92,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     var bodyContentCodeMirror = createBodyEditor();
 
     function createBodyEditor() {
-        var fallback = {
+        var activeEditor = {
             setValue: function(value) {
                 if (bodyContent) bodyContent.value = value || '';
             },
@@ -106,19 +105,42 @@ document.addEventListener('DOMContentLoaded', () => {
             destroy: function() {}
         };
 
+        var proxy = {
+            setValue: function(value) { activeEditor.setValue(value); },
+            getValue: function() { return activeEditor.getValue(); },
+            setBodyType: function(value) { activeEditor.setBodyType(value); },
+            focus: function() { activeEditor.focus(); },
+            destroy: function() { activeEditor.destroy(); }
+        };
+
         try {
-            return initBodyContentCodeMirror({
-                container: document.getElementById('bodyContentCm'),
-                onChange: function(value) {
-                    if (bodyContent) bodyContent.value = value;
-                    markActiveTabUnsaved();
-                }
-            }) || fallback;
+            import('./editor/body-codemirror.js')
+                .then(function(module) {
+                    return module.initBodyContentCodeMirror({
+                        container: document.getElementById('bodyContentCm'),
+                        onChange: function(value) {
+                            if (bodyContent) bodyContent.value = value;
+                            markActiveTabUnsaved();
+                        }
+                    });
+                })
+                .then(function(editor) {
+                    if (!editor) return;
+                    var currentValue = activeEditor.getValue();
+                    activeEditor = editor;
+                    activeEditor.setValue(currentValue);
+                    if (bodyContent) bodyContent.hidden = true;
+                })
+                .catch(function(err) {
+                    console.error('CodeMirror initialization failed; using textarea fallback.', err);
+                    if (bodyContent) bodyContent.hidden = false;
+                });
         } catch (err) {
             console.error('CodeMirror initialization failed; using textarea fallback.', err);
             if (bodyContent) bodyContent.hidden = false;
-            return fallback;
         }
+
+        return proxy;
     }
 
     // ─── Mobile Response Bottom Sheet ─────────────────────
