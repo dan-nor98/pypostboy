@@ -23,7 +23,9 @@ def _as_bool(value, default=False):
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = BaseConfig.SECRET_KEY
 DEBUG = BaseConfig.DEBUG
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = _split_csv(os.environ.get('ALLOWED_HOSTS'))
+if not ALLOWED_HOSTS and DEBUG:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 ROOT_URLCONF = 'pypostboy.urls'
 WSGI_APPLICATION = 'pypostboy.wsgi.application'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -61,6 +63,16 @@ POSTBOY_ALLOW_USER_ID_HEADER = BaseConfig.POSTBOY_ALLOW_USER_ID_HEADER
 PUBLIC_DIR = os.path.abspath(os.environ.get('POSTBOY_STATIC_FOLDER', DEFAULT_STATIC_FOLDER))
 PROXY_TIMEOUT = BaseConfig.PROXY_TIMEOUT
 DATA_UPLOAD_MAX_MEMORY_SIZE = BaseConfig.MAX_CONTENT_LENGTH
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = os.environ.get('X_FRAME_OPTIONS', 'DENY')
+SECURE_REFERRER_POLICY = os.environ.get('SECURE_REFERRER_POLICY', 'same-origin')
+SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _as_bool(
+    os.environ.get('SECURE_HSTS_INCLUDE_SUBDOMAINS'),
+    default=False,
+)
+SECURE_HSTS_PRELOAD = _as_bool(os.environ.get('SECURE_HSTS_PRELOAD'), default=False)
 
 # CORS controls for browser clients (especially containerized local development).
 # Use comma-separated env vars:
