@@ -79,10 +79,6 @@ class PostBoyMiddleware:
             response,
             legacy_identity_cookies_to_clear(request),
         )
-        response.headers.pop('Content-Security-Policy', None)
-        response.headers.pop('X-Content-Security-Policy', None)
-        response.headers.pop('X-WebKit-CSP', None)
-        response.headers['X-Content-Type-Options'] = 'nosniff'
         request_origin = request.headers.get('Origin')
         if _cors_allowed_origin(request_origin):
             response.headers['Access-Control-Allow-Credentials'] = 'true'

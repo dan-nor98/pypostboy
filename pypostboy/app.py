@@ -113,10 +113,31 @@ def load_config(config=None):
     return config_dict
 
 
+
+
+def _split_csv(value):
+    return [item.strip() for item in (value or '').split(',') if item.strip()]
+
+
+def _coerce_allowed_hosts(raw_hosts, debug_enabled):
+    hosts = []
+    if isinstance(raw_hosts, str):
+        hosts = _split_csv(raw_hosts)
+    elif raw_hosts:
+        hosts = [str(host).strip() for host in raw_hosts if str(host).strip()]
+    if hosts:
+        return hosts
+    if debug_enabled:
+        return ['localhost', '127.0.0.1', '[::1]']
+    return []
 def _apply_django_settings(config_dict):
     """Apply mutable PostBoy settings after Django is configured."""
     settings.DEBUG = bool(config_dict.get('DEBUG', settings.DEBUG))
     settings.SECRET_KEY = config_dict.get('SECRET_KEY', settings.SECRET_KEY)
+    settings.ALLOWED_HOSTS = _coerce_allowed_hosts(
+        config_dict.get('ALLOWED_HOSTS', getattr(settings, 'ALLOWED_HOSTS', [])),
+        settings.DEBUG,
+    )
     settings.PUBLIC_DIR = config_dict.get('PUBLIC_DIR', settings.PUBLIC_DIR)
     settings.PROXY_TIMEOUT = config_dict.get('PROXY_TIMEOUT', settings.PROXY_TIMEOUT)
     settings.DATA_UPLOAD_MAX_MEMORY_SIZE = config_dict.get(
@@ -151,6 +172,30 @@ def _apply_django_settings(config_dict):
             'CORS_ALLOWED_ORIGIN_REGEXES',
             getattr(settings, 'CORS_ALLOWED_ORIGIN_REGEXES', []),
         )
+    )
+    settings.SECURE_CONTENT_TYPE_NOSNIFF = bool(
+        config_dict.get(
+            'SECURE_CONTENT_TYPE_NOSNIFF',
+            getattr(settings, 'SECURE_CONTENT_TYPE_NOSNIFF', True),
+        )
+    )
+    settings.X_FRAME_OPTIONS = config_dict.get(
+        'X_FRAME_OPTIONS', getattr(settings, 'X_FRAME_OPTIONS', 'DENY')
+    )
+    settings.SECURE_REFERRER_POLICY = config_dict.get(
+        'SECURE_REFERRER_POLICY', getattr(settings, 'SECURE_REFERRER_POLICY', 'same-origin')
+    )
+    settings.SECURE_HSTS_SECONDS = int(
+        config_dict.get('SECURE_HSTS_SECONDS', getattr(settings, 'SECURE_HSTS_SECONDS', 0))
+    )
+    settings.SECURE_HSTS_INCLUDE_SUBDOMAINS = bool(
+        config_dict.get(
+            'SECURE_HSTS_INCLUDE_SUBDOMAINS',
+            getattr(settings, 'SECURE_HSTS_INCLUDE_SUBDOMAINS', False),
+        )
+    )
+    settings.SECURE_HSTS_PRELOAD = bool(
+        config_dict.get('SECURE_HSTS_PRELOAD', getattr(settings, 'SECURE_HSTS_PRELOAD', False))
     )
 
 
