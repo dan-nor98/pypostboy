@@ -19,7 +19,7 @@ function buildJsonOptions(method, payload) {
 }
 
 function withCredentials(options) {
-    return Object.assign({ credentials: 'same-origin' }, options || {});
+    return Object.assign({ credentials: 'include' }, options || {});
 }
 
 
