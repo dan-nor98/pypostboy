@@ -15,11 +15,13 @@ from pypostboy.db.serializers import (
     stringify_response_body,
     timestamp,
 )
+from pypostboy.apps.core.models import RequestInstance
 from pypostboy.repositories.requests import Requests
 
 
 class RequestInstances:
     connection = None
+    use_orm_reads = True
 
     @classmethod
     def _conn(cls):
@@ -39,7 +41,7 @@ class RequestInstances:
         if not row:
             return None
 
-        result = dict(row_to_mapping(row))
+        result = dict(row) if isinstance(row, dict) else dict(row_to_mapping(row))
         result["headers"] = safe_parse(result["headers"], [])
         result["form_data"] = safe_parse(result["form_data"], [])
         result["auth_data"] = safe_parse(result["auth_data"], {})
@@ -54,11 +56,10 @@ class RequestInstances:
         """Get a single user-owned saved request instance by ID."""
         conn = RequestInstances._conn()
         user_id = RequestInstances._resolve_user_id(conn, user_id)
-        row = db_execute(
-            conn,
-            "SELECT * FROM request_instances WHERE id = ? AND user_id = ?",
-            (id, user_id),
-        ).fetchone()
+        if RequestInstances.use_orm_reads:
+            row = RequestInstance.objects.filter(id=id, user_id=user_id).values().first()
+        else:
+            row = db_execute(conn, "SELECT * FROM request_instances WHERE id = ? AND user_id = ?", (id, user_id)).fetchone()
         return RequestInstances._row_to_instance(row)
 
     @staticmethod
@@ -70,13 +71,12 @@ class RequestInstances:
         if not request_obj:
             raise ValueError("Request not found")
 
-        rows = db_execute(
-            conn,
-            """SELECT * FROM request_instances
+        if RequestInstances.use_orm_reads:
+            rows = list(RequestInstance.objects.filter(request_id=request_id, user_id=user_id).order_by('-updated_at', '-id').values())
+        else:
+            rows = db_execute(conn, """SELECT * FROM request_instances
                WHERE request_id = ? AND user_id = ?
-               ORDER BY updated_at DESC, id DESC""",
-            (request_id, user_id),
-        ).fetchall()
+               ORDER BY updated_at DESC, id DESC""", (request_id, user_id)).fetchall()
         return [RequestInstances._row_to_instance(row) for row in rows]
 
     @staticmethod

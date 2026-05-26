@@ -9,10 +9,12 @@ from pypostboy.db.adapter import (
 from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import safe_parse, timestamp
+from pypostboy.apps.core.models import Collection, Request
 
 
 class Collections:
     connection = None
+    use_orm_reads = True
 
     @classmethod
     def _conn(cls):
@@ -33,31 +35,29 @@ class Collections:
         """Get all collections owned by a user in tree structure."""
         conn = Collections._conn()
         user_id = Collections._resolve_user_id(conn, user_id)
-        all_cols = db_execute(
-            conn,
-            """SELECT * FROM collections
+        if Collections.use_orm_reads:
+            all_cols = list(Collection.objects.filter(user_id=user_id).order_by('sort_order', 'id').values())
+        else:
+            all_cols = db_execute(conn, """SELECT * FROM collections
                WHERE user_id = ?
-               ORDER BY sort_order ASC, id ASC""",
-            (user_id,),
-        ).fetchall()
+               ORDER BY sort_order ASC, id ASC""", (user_id,)).fetchall()
 
         col_map = {}
         for c in all_cols:
-            c_dict = dict(row_to_mapping(c))
+            c_dict = dict(c) if isinstance(c, dict) else dict(row_to_mapping(c))
             c_dict["children"] = []
             c_dict["requests"] = []
             col_map[c_dict["id"]] = c_dict
 
-        all_reqs = db_execute(
-            conn,
-            """SELECT * FROM requests
+        if Collections.use_orm_reads:
+            all_reqs = list(Request.objects.filter(user_id=user_id).order_by('sort_order', 'id').values())
+        else:
+            all_reqs = db_execute(conn, """SELECT * FROM requests
                WHERE user_id = ?
-               ORDER BY sort_order ASC, id ASC""",
-            (user_id,),
-        ).fetchall()
+               ORDER BY sort_order ASC, id ASC""", (user_id,)).fetchall()
 
         for r in all_reqs:
-            r_dict = dict(row_to_mapping(r))
+            r_dict = dict(r) if isinstance(r, dict) else dict(row_to_mapping(r))
             r_dict["headers"] = safe_parse(r_dict["headers"], [])
             r_dict["form_data"] = safe_parse(r_dict["form_data"], [])
             r_dict["auth_data"] = safe_parse(r_dict["auth_data"], {})
@@ -78,16 +78,15 @@ class Collections:
         """Get single collection owned by a user with children and requests."""
         conn = Collections._conn()
         user_id = Collections._resolve_user_id(conn, user_id)
-        col = db_execute(
-            conn,
-            "SELECT * FROM collections WHERE id = ? AND user_id = ?",
-            (id, user_id),
-        ).fetchone()
+        if Collections.use_orm_reads:
+            col = Collection.objects.filter(id=id, user_id=user_id).values().first()
+        else:
+            col = db_execute(conn, "SELECT * FROM collections WHERE id = ? AND user_id = ?", (id, user_id)).fetchone()
 
         if not col:
             return None
 
-        result = dict(row_to_mapping(col))
+        result = dict(col) if isinstance(col, dict) else dict(row_to_mapping(col))
         result["children"] = []
         result["requests"] = []
 
