@@ -57,6 +57,17 @@ venv\Scripts\activate
 ```
 
 
+
+## Django management workflows
+
+Use `manage.py` for common project maintenance commands:
+
+```bash
+python manage.py check
+python manage.py migrate
+python manage.py runserver
+```
+
 ## Docker
 
 PostBoy includes Docker assets for both local SQLite development and production-like PostgreSQL runs. Both modes build the same image, install `requirements.txt`, and serve the WSGI app with Gunicorn.
