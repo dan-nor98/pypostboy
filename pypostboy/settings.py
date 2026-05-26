@@ -38,6 +38,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'pypostboy.djangoapp.middleware.PostBoyMiddleware',
 ]
 # PostBoy owns its application schema through pypostboy.db migrations. Django's
@@ -55,6 +56,7 @@ SESSION_COOKIE_PATH = '/'
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_TRUSTED_ORIGINS = _split_csv(os.environ.get('CSRF_TRUSTED_ORIGINS'))
 POSTBOY_ALLOW_USER_ID_HEADER = BaseConfig.POSTBOY_ALLOW_USER_ID_HEADER
 PUBLIC_DIR = os.path.abspath(os.environ.get('POSTBOY_STATIC_FOLDER', DEFAULT_STATIC_FOLDER))
 PROXY_TIMEOUT = BaseConfig.PROXY_TIMEOUT

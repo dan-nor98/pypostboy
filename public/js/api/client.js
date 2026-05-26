@@ -22,6 +22,24 @@ function withCredentials(options) {
     return Object.assign({ credentials: 'same-origin' }, options || {});
 }
 
+
+let csrfToken = null;
+
+function getCsrfTokenFromCookie() {
+    var match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+function isUnsafeMethod(method) {
+    return !/^(GET|HEAD|OPTIONS|TRACE)$/i.test(method || 'GET');
+}
+
+async function bootstrapCsrfToken() {
+    var data = await request('/api/auth/csrf');
+    csrfToken = (data && data.csrf_token) || getCsrfTokenFromCookie();
+    return csrfToken;
+}
+
 function createApiError(message, status, payload) {
     var err = new Error(message || 'API request failed');
     err.name = 'ApiError';
@@ -32,7 +50,18 @@ function createApiError(message, status, payload) {
 }
 
 async function request(path, options) {
-    return requestJson(path, options, false);
+    var requestOptions = Object.assign({}, options || {});
+    var method = requestOptions.method || 'GET';
+    if (isUnsafeMethod(method)) {
+        if (!csrfToken) {
+            csrfToken = getCsrfTokenFromCookie();
+        }
+        if (!csrfToken) {
+            await bootstrapCsrfToken();
+        }
+        requestOptions.headers = Object.assign({}, requestOptions.headers || {}, { 'X-CSRFToken': csrfToken });
+    }
+    return requestJson(path, requestOptions, false);
 }
 
 async function requestJson(path, options, allowRawSuccess) {
@@ -103,5 +132,6 @@ export const apiClient = {
     deleteRequestInstance(id) { return request('/api/request-instances/' + id, { method: 'DELETE' }); },
     sendProxyRequest(payload) { return requestJson('/api/proxy', buildJsonOptions('POST', payload), true); },
     sendProxy(payload) { return this.sendProxyRequest(payload); },
-    importData(payload) { return request('/api/import', buildJsonOptions('POST', payload)); }
+    importData(payload) { return request('/api/import', buildJsonOptions('POST', payload)); },
+    bootstrapCsrfToken() { return bootstrapCsrfToken(); }
 };
