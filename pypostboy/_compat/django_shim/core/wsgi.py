@@ -2,8 +2,8 @@
 
 import importlib
 
-from django.conf import settings
-from django.core.handlers import WSGIApplication
+from pypostboy._compat.django_shim.conf import settings
+from pypostboy._compat.django_shim.core.handlers import WSGIApplication
 
 
 def get_wsgi_application():

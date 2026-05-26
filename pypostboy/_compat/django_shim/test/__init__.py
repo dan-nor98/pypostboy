@@ -1,7 +1,7 @@
 """Small test client for the local Django-compatible runtime."""
 
-from django.core.handlers import Request, SessionStore
-from django.core.wsgi import get_wsgi_application
+from pypostboy._compat.django_shim.core.handlers import Request, SessionStore
+from pypostboy._compat.django_shim.core.wsgi import get_wsgi_application
 
 
 class Client:

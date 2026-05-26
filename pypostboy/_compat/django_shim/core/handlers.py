@@ -3,9 +3,9 @@
 import importlib
 from http.cookies import SimpleCookie
 
-from django.conf import settings
-from django.http import Http404, HttpResponse
-from django.contrib.sessions.middleware import load_session
+from pypostboy._compat.django_shim.conf import settings
+from pypostboy._compat.django_shim.http import Http404, HttpResponse
+from pypostboy._compat.django_shim.contrib.sessions.middleware import load_session
 
 
 _MISSING = object()
