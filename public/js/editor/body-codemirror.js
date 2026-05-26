@@ -1,13 +1,43 @@
-import { EditorState, Compartment } from 'https://esm.sh/@codemirror/state@6.5.2';
-import { EditorView, keymap } from 'https://esm.sh/@codemirror/view@6.28.6';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from 'https://esm.sh/@codemirror/commands@6.8.1';
-import { json } from 'https://esm.sh/@codemirror/lang-json@6.0.2';
-import { xml } from 'https://esm.sh/@codemirror/lang-xml@6.1.0';
+let codemirrorModulesPromise = null;
 
-export function initBodyContentCodeMirror(options) {
+function loadCodeMirrorModules() {
+    if (!codemirrorModulesPromise) {
+        codemirrorModulesPromise = Promise.all([
+            import('https://esm.sh/@codemirror/state@6.5.2'),
+            import('https://esm.sh/@codemirror/view@6.28.6'),
+            import('https://esm.sh/@codemirror/commands@6.8.1'),
+            import('https://esm.sh/@codemirror/lang-json@6.0.2'),
+            import('https://esm.sh/@codemirror/lang-xml@6.1.0')
+        ]).then(function(modules) {
+            return {
+                state: modules[0],
+                view: modules[1],
+                commands: modules[2],
+                json: modules[3],
+                xml: modules[4]
+            };
+        });
+    }
+
+    return codemirrorModulesPromise;
+}
+
+export async function initBodyContentCodeMirror(options) {
     var container = options && options.container;
     var onChange = options && options.onChange;
     if (!container) return null;
+
+    var loaded = await loadCodeMirrorModules();
+    var EditorState = loaded.state.EditorState;
+    var Compartment = loaded.state.Compartment;
+    var EditorView = loaded.view.EditorView;
+    var keymap = loaded.view.keymap;
+    var defaultKeymap = loaded.commands.defaultKeymap;
+    var history = loaded.commands.history;
+    var historyKeymap = loaded.commands.historyKeymap;
+    var indentWithTab = loaded.commands.indentWithTab;
+    var json = loaded.json.json;
+    var xml = loaded.xml.xml;
 
     var languageCompartment = new Compartment();
 
