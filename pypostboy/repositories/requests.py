@@ -8,10 +8,12 @@ from pypostboy.db.adapter import (
 from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import safe_parse, safe_stringify, timestamp
+from pypostboy.apps.core.models import Collection, Request
 
 
 class Requests:
     connection = None
+    use_orm_reads = True
 
     @classmethod
     def _conn(cls):
@@ -29,7 +31,7 @@ class Requests:
     def _row_to_request(row):
         if not row:
             return None
-        result = dict(row_to_mapping(row))
+        result = dict(row) if isinstance(row, dict) else dict(row_to_mapping(row))
         result["headers"] = safe_parse(result["headers"], [])
         result["form_data"] = safe_parse(result["form_data"], [])
         result["auth_data"] = safe_parse(result["auth_data"], {})
@@ -40,9 +42,10 @@ class Requests:
         """Get a single user-owned request by ID."""
         conn = Requests._conn()
         user_id = Requests._resolve_user_id(conn, user_id)
-        req = db_execute(
-            conn, "SELECT * FROM requests WHERE id = ? AND user_id = ?", (id, user_id)
-        ).fetchone()
+        if Requests.use_orm_reads:
+            req = Request.objects.filter(id=id, user_id=user_id).values().first()
+            return Requests._row_to_request(req)
+        req = db_execute(conn, "SELECT * FROM requests WHERE id = ? AND user_id = ?", (id, user_id)).fetchone()
         return Requests._row_to_request(req)
 
     @staticmethod
@@ -50,21 +53,19 @@ class Requests:
         """Get all user-owned requests in a user-owned collection."""
         conn = Requests._conn()
         user_id = Requests._resolve_user_id(conn, user_id)
-        collection = db_execute(
-            conn,
-            "SELECT id FROM collections WHERE id = ? AND user_id = ?",
-            (collection_id, user_id),
-        ).fetchone()
+        if Requests.use_orm_reads:
+            collection = Collection.objects.filter(id=collection_id, user_id=user_id).values('id').first()
+        else:
+            collection = db_execute(conn, "SELECT id FROM collections WHERE id = ? AND user_id = ?", (collection_id, user_id)).fetchone()
         if not collection:
             raise ValueError("Collection not found")
 
-        reqs = db_execute(
-            conn,
-            """SELECT * FROM requests
+        if Requests.use_orm_reads:
+            reqs = list(Request.objects.filter(collection_id=collection_id, user_id=user_id).order_by('sort_order', 'id').values())
+        else:
+            reqs = db_execute(conn, """SELECT * FROM requests
                WHERE collection_id = ? AND user_id = ?
-               ORDER BY sort_order ASC, id ASC""",
-            (collection_id, user_id),
-        ).fetchall()
+               ORDER BY sort_order ASC, id ASC""", (collection_id, user_id)).fetchall()
         return [Requests._row_to_request(row) for row in reqs]
 
     @staticmethod
