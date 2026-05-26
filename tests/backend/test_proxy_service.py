@@ -180,6 +180,28 @@ def test_proxy_route_allows_authenticated_requests(client, monkeypatch):
     assert response.get_json()["body"] == {"ok": True}
 
 
+def test_proxy_route_is_csrf_exempt_for_post_requests(app, monkeypatch):
+    from django.test import Client as DjangoClient
+    import pypostboy.routes.proxy as proxy_route
+
+    monkeypatch.setattr(proxy_route, "require_current_user", lambda _request: {"id": 99})
+    monkeypatch.setattr(
+        proxy_route,
+        "proxy_http_request",
+        lambda body: {"status": 200, "statusText": "OK", "headers": {}, "body": {"ok": True}, "time": 1},
+    )
+
+    client = DjangoClient(enforce_csrf_checks=True)
+    response = client.post(
+        "/api/proxy",
+        data='{"url": "https://api.example.test", "method": "GET"}',
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["body"] == {"ok": True}
+
+
 def test_proxy_http_request_serializes_form_data_as_multipart(monkeypatch):
     calls = []
 
