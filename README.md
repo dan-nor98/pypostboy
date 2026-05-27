@@ -80,13 +80,9 @@ Use the development compose file when you want a quick local container with SQLi
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-Open `http://localhost:3001` in your browser. SQLite data is stored in the named `postboy-sqlite-data` Docker volume at `/data/postboy-data.db` inside the container.
+Open `http://localhost:8080` in your browser. SQLite data is stored in the named `postboy-sqlite-data` Docker volume at `/data/postboy-data.db` inside the container. The Django app stays internal on Docker network `app:3001`, and Nginx is the public entrypoint.
 
-To use a different host port, set `PORT` before running compose:
-
-```bash
-PORT=8080 docker compose -f docker-compose.dev.yml up --build
-```
+The dev compose file publishes Nginx on `8080:80` explicitly to avoid conflicts on host port 80. Browser calls should use same-origin `/client-proxy` (never `http://localhost:3001/client-proxy`).
 
 ### Production-like PostgreSQL mode
 
@@ -111,6 +107,14 @@ docker compose down -v
 ```
 
 
+
+### Docker dev proxy notes
+
+- Django/Gunicorn runs only on the Docker network as `app:3001` (`expose`, not host `ports`).
+- Nginx is the local public entrypoint at `http://localhost:8080`.
+- Browser proxy calls must target relative `POST /client-proxy`, which Nginx rewrites to Django `POST /api/proxy`.
+- On SELinux hosts, the Nginx config bind mount uses `:ro,Z` so `/etc/nginx/conf.d/default.conf` is readable inside the container.
+
 ### Reverse-proxy and CORS model
 
 CORS is enforced by the browser and cannot be bypassed safely with client-side JavaScript. In Docker deployment, PostBoy uses a same-origin proxy route so the browser always calls `POST /client-proxy` on the Nginx origin (`http://localhost`). Nginx forwards that request to Django `POST /api/proxy`, and Django performs the external API call server-side.
@@ -123,7 +127,7 @@ CORS is enforced by the browser and cannot be bypassed safely with client-side J
 | `POSTBOY_DATABASE_URL` | Required for PostgreSQL mode; the default compose file points at the `db` service. Leave unset for SQLite mode. |
 | `POSTBOY_DB_PATH` | SQLite database path for dev mode; `docker-compose.dev.yml` sets it to `/data/postboy-data.db`. |
 | `POSTBOY_SECRET_KEY` | Required for signed sessions. Override the local defaults with a strong random value before sharing or deploying. |
-| `PORT` | Container and host port, defaulting to `3001`. |
+| `PORT` | App listen port in non-Docker runs; Docker compose keeps internal app port fixed at `3001` for the Nginx upstream. |
 
 | Volume | Used by | Purpose |
 | --- | --- | --- |
