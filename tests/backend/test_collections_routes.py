@@ -227,3 +227,11 @@ def test_user_cannot_reorder_collections_with_other_users_ids(
         400,
         "exactly the sibling collections",
     )
+
+
+def test_collections_endpoint_accepts_trailing_slash(client, user_a_headers):
+    response = client.get('/api/collections/', headers=user_a_headers)
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['success'] is True

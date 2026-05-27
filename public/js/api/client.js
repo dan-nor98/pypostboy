@@ -67,6 +67,8 @@ async function request(path, options) {
 async function requestJson(path, options, allowRawSuccess) {
     var response;
     var json;
+    var contentType;
+    var rawText;
 
     try {
         response = await fetch(path, withCredentials(options));
@@ -74,10 +76,18 @@ async function requestJson(path, options, allowRawSuccess) {
         throw createApiError(err.message, 0, null);
     }
 
+    contentType = response.headers.get('content-type') || '';
+    rawText = await response.text();
+    console.debug('[api] response', path, 'status=', response.status, 'content-type=', contentType);
+    console.debug('[api] raw body', path, rawText);
+
     try {
-        json = await response.json();
+        json = rawText ? JSON.parse(rawText) : null;
     } catch (err) {
-        throw createApiError('Invalid JSON response from server', response.status, null);
+        throw createApiError('Invalid JSON response from server', response.status, {
+            contentType: contentType,
+            rawText: rawText,
+        });
     }
 
     if (allowRawSuccess && response.ok && json && json.success === undefined) {
