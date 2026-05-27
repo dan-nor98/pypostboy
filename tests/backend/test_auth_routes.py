@@ -58,6 +58,49 @@ def test_session_auth_post_succeeds_with_valid_csrf_token(app):
     payload = response.json()
     assert payload["success"] is True
 
+
+def test_login_succeeds_with_csrf_for_localhost_8080_origin(app, monkeypatch):
+    from django.test import Client as DjangoClient
+
+    monkeypatch.setattr(
+        'django.conf.settings.CSRF_TRUSTED_ORIGINS',
+        ['http://localhost:8080', 'http://127.0.0.1:8080'],
+        raising=False,
+    )
+
+    client = DjangoClient(enforce_csrf_checks=True)
+    csrf_response = client.get('/api/auth/csrf')
+    assert csrf_response.status_code == 200
+    csrf_token = csrf_response.cookies['csrftoken'].value
+
+    register_response = client.post(
+        '/api/auth/register',
+        data='{"username": "csrf-login-user", "password": "password123"}',
+        content_type='application/json',
+        HTTP_X_CSRFTOKEN=csrf_token,
+        HTTP_ORIGIN='http://localhost:8080',
+    )
+    assert register_response.status_code == 201
+
+    logout_response = client.post(
+        '/api/auth/logout',
+        HTTP_X_CSRFTOKEN=csrf_token,
+        HTTP_ORIGIN='http://localhost:8080',
+    )
+    assert logout_response.status_code == 200
+
+    login_response = client.post(
+        '/api/auth/login',
+        data='{"username": "csrf-login-user", "password": "password123"}',
+        content_type='application/json',
+        HTTP_X_CSRFTOKEN=csrf_token,
+        HTTP_ORIGIN='http://localhost:8080',
+    )
+    assert login_response.status_code == 200
+    payload = login_response.json()
+    assert payload['success'] is True
+    assert payload['data']['username'] == 'csrf-login-user'
+
 def test_register_login_logout_session_scopes_collections(client):
     registration = assert_success(
         client.post(

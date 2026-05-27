@@ -32,9 +32,11 @@ For browser-to-PostBoy traffic, CORS can be controlled with environment variable
 ```yaml
 # docker-compose*.yml
 environment:
-  - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+  - CORS_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
   - CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\\.example\\.com$
   - CORS_ALLOW_ALL_ORIGINS=false
+  - CORS_ALLOW_CREDENTIALS=true
+  - CSRF_TRUSTED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
 ```
 
 `CORS_ALLOW_ALL_ORIGINS` defaults to `true` in `DEBUG` and `false` otherwise. For production, set explicit origins and keep `CORS_ALLOW_ALL_ORIGINS=false`.
@@ -156,6 +158,8 @@ PostBoy works out of the box for local development. Useful environment variables
 | `CORS_ALLOWED_ORIGINS` | empty | Comma-separated exact origins allowed to call PostBoy from browsers. |
 | `CORS_ALLOWED_ORIGIN_REGEXES` | empty | Comma-separated regex patterns for allowed origins. |
 | `CORS_ALLOW_ALL_ORIGINS` | `true` in debug, else `false` | Allow any origin when enabled. Prefer disabling in production. |
+| `CORS_ALLOW_CREDENTIALS` | `true` | Include `Access-Control-Allow-Credentials: true` for allowed origins. |
+| `CSRF_TRUSTED_ORIGINS` | empty | Comma-separated trusted origins for Django CSRF origin checks (must include scheme and port). |
 | `POSTBOY_MAX_CONTENT_LENGTH` | `10485760` | Maximum request/import payload size. |
 
 Example:

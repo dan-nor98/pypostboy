@@ -100,6 +100,10 @@ SECURE_HSTS_PRELOAD = _as_bool(os.environ.get('SECURE_HSTS_PRELOAD'), default=Fa
 # - CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\\.example\\.com$
 CORS_ALLOWED_ORIGINS = _split_csv(os.environ.get('CORS_ALLOWED_ORIGINS'))
 CORS_ALLOWED_ORIGIN_REGEXES = _split_csv(os.environ.get('CORS_ALLOWED_ORIGIN_REGEXES'))
+CORS_ALLOW_CREDENTIALS = _as_bool(
+    os.environ.get('CORS_ALLOW_CREDENTIALS'),
+    default=True,
+)
 # Dev-friendly default: allow all origins only in DEBUG unless overridden.
 CORS_ALLOW_ALL_ORIGINS = _as_bool(
     os.environ.get('CORS_ALLOW_ALL_ORIGINS'),

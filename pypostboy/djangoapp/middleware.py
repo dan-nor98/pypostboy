@@ -81,7 +81,8 @@ class PostBoyMiddleware:
         )
         request_origin = request.headers.get('Origin')
         if _cors_allowed_origin(request_origin):
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            if getattr(settings, 'CORS_ALLOW_CREDENTIALS', True):
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Access-Control-Allow-Origin'] = request_origin
 
         return response

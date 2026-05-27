@@ -173,6 +173,12 @@ def _apply_django_settings(config_dict):
             getattr(settings, 'CORS_ALLOWED_ORIGIN_REGEXES', []),
         )
     )
+    settings.CORS_ALLOW_CREDENTIALS = bool(
+        config_dict.get(
+            'CORS_ALLOW_CREDENTIALS',
+            getattr(settings, 'CORS_ALLOW_CREDENTIALS', True),
+        )
+    )
     settings.SECURE_CONTENT_TYPE_NOSNIFF = bool(
         config_dict.get(
             'SECURE_CONTENT_TYPE_NOSNIFF',
