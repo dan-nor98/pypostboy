@@ -136,3 +136,5 @@ LOGGING = {
 }
 
 AUTHENTICATION_BACKENDS = ['pypostboy.djangoapp.auth_backend.PostBoyAuthBackend']
+
+AUTH_USER_MODEL = 'core.User'

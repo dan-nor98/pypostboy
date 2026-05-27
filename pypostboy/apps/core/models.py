@@ -1,10 +1,12 @@
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, UserManager
 from django.db import models
 
 
-class User(models.Model):
+class User(AbstractBaseUser, PermissionsMixin):
     username = models.TextField(unique=True)
     email = models.TextField(unique=True, null=True)
-    password_hash = models.TextField(null=True)
+    # Map Django password field to existing users.password_hash column.
+    password = models.TextField(db_column='password_hash', null=True)
     auth_provider = models.TextField(default='local')
     auth_subject = models.TextField(null=True)
     recovery_key_hash = models.TextField(null=True)
@@ -12,6 +14,14 @@ class User(models.Model):
     recovery_key_rotated_at = models.TextField(null=True)
     created_at = models.TextField()
     updated_at = models.TextField()
+
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = []
+
+    objects = UserManager()
 
     class Meta:
         db_table = 'users'
