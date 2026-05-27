@@ -151,6 +151,36 @@ def test_auth_me_uses_default_local_user_for_legacy_local_mode(client):
     assert current["username"] == "local_user"
     assert current["is_guest"] is True
 
+
+def test_auth_session_register_logout_login_and_me_flow(client):
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "session-flow-user", "password": "password123"},
+        ),
+        201,
+    )
+    assert "sessionid" in client._client.cookies
+    assert registered["user"]["username"] == "session-flow-user"
+
+    current = assert_success(client.get("/api/auth/me"))
+    assert current["id"] == registered["user"]["id"]
+    assert current["username"] == "session-flow-user"
+
+    assert_success(client.post("/api/auth/logout"))
+    logged_in = assert_success(
+        client.post(
+            "/api/auth/login",
+            json={"username": "session-flow-user", "password": "password123"},
+        )
+    )
+    assert logged_in["id"] == registered["user"]["id"]
+
+    current_after_login = assert_success(client.get("/api/auth/me"))
+    assert current_after_login["id"] == registered["user"]["id"]
+    assert current_after_login["username"] == "session-flow-user"
+
+
 def test_wsgi_browser_session_cookie_persists_login_for_collections(app, sqlite_connection):
     """A WSGI/browser cookie flow keeps login state without shared test-client memory."""
     import io
@@ -330,6 +360,25 @@ def test_stale_cookie_does_not_override_session_and_logout_clears_it(client, use
     assert current_after_logout["username"] == "local_user"
     assert current_after_logout["is_guest"] is True
     _assert_deletes_legacy_identity_cookies(logout_response)
+
+
+def test_legacy_identity_cookies_are_ignored_and_cleared_even_with_valid_session(client, user_b):
+    session_user = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "legacy-cookie-session-user", "password": "password123"},
+        ),
+        201,
+    )
+    _set_cookie(client, "user_id", str(user_b["id"]))
+    _set_cookie(client, "postboy_user_id", str(user_b["id"]))
+
+    response = client.get("/api/auth/me")
+    current = assert_success(response)
+
+    assert current["id"] == session_user["user"]["id"]
+    assert current["username"] == "legacy-cookie-session-user"
+    _assert_deletes_legacy_identity_cookies(response)
 
 
 def test_registration_conflict_query_omits_nullable_email_parameter_when_absent():
