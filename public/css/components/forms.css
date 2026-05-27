@@ -302,7 +302,7 @@
   background-color: var(--color-accent-softer) !important;
 }
 
-#bodyContent { display: none; }
+.is-hidden { display: none !important; }
 
 .form-data-container {
   padding: 8px 0;

@@ -99,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return bodyContent ? bodyContent.value : '';
             },
             setBodyType: function() {},
+            requestMeasure: function() {},
             focus: function() {
                 if (bodyContent) bodyContent.focus();
             },
@@ -109,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setValue: function(value) { activeEditor.setValue(value); },
             getValue: function() { return activeEditor.getValue(); },
             setBodyType: function(value) { activeEditor.setBodyType(value); },
+            requestMeasure: function() { activeEditor.requestMeasure(); },
             focus: function() { activeEditor.focus(); },
             destroy: function() { activeEditor.destroy(); }
         };
@@ -141,6 +143,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         return proxy;
+    }
+
+    function updateBodyEditorsVisibility(bodyType) {
+        var value = bodyType || 'none';
+        var isForm = (value === 'form-data' || value === 'form-urlencoded');
+        var showRawEditor = !isForm && value !== 'none';
+        var cmContainer = document.getElementById('bodyContentEditor');
+        if (cmContainer) cmContainer.hidden = !showRawEditor;
+        if (bodyContent) bodyContent.hidden = !showRawEditor;
+        if (formDataContainer) formDataContainer.hidden = !isForm;
     }
 
     // ─── Mobile Response Bottom Sheet ─────────────────────
@@ -748,6 +760,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         activeRequestTab = tabName;
+        if (tabName === 'body' && bodyContentCodeMirror) bodyContentCodeMirror.requestMeasure();
     }
 
     // ─── Response Tabs ─────────────────────────────────────
@@ -3541,12 +3554,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!bodyRadio) return;
         bodyRadio.checked = true;
-        var isForm = (value === 'form-data' || value === 'form-urlencoded');
-        bodyContent.style.display = (isForm || value === 'none') ? 'none' : '';
-        var cmContainer = document.getElementById('bodyContentEditor');
-        if (cmContainer) cmContainer.style.display = (isForm || value === 'none') ? 'none' : '';
+        updateBodyEditorsVisibility(value);
         if (bodyContentCodeMirror) bodyContentCodeMirror.setBodyType(value);
-        formDataContainer.style.display = isForm ? '' : 'none';
     }
 
 
@@ -3570,12 +3579,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('input[name="bodyType"]').forEach(function(r) {
         r.addEventListener('change', function() {
             var val = r.value;
-            var isForm = (val === 'form-data' || val === 'form-urlencoded');
-            bodyContent.style.display = (isForm || val === 'none') ? 'none' : '';
-            var cmContainer = document.getElementById('bodyContentEditor');
-            if (cmContainer) cmContainer.style.display = (isForm || val === 'none') ? 'none' : '';
+            updateBodyEditorsVisibility(val);
             if (bodyContentCodeMirror) bodyContentCodeMirror.setBodyType(val);
-            formDataContainer.style.display = isForm ? '' : 'none';
             markActiveTabUnsaved();
         });
     });
