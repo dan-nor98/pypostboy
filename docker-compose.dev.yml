@@ -5,9 +5,9 @@ services:
       POSTBOY_CONFIG: development
       POSTBOY_DB_PATH: /data/postboy-data.db
       POSTBOY_SECRET_KEY: ${POSTBOY_SECRET_KEY:-postboy-dev-secret-key}
-      PORT: ${PORT:-3001}
-    ports:
-      - "${PORT:-3001}:${PORT:-3001}"
+      PORT: 3001
+    expose:
+      - "3001"
     volumes:
       - postboy-sqlite-data:/data
 
@@ -16,9 +16,9 @@ services:
     depends_on:
       - app
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro,Z
 
 volumes:
   postboy-sqlite-data:
