@@ -89,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initExecutionModeControl();
     initRequestBarAdvancedControls();
     var bodyContentCodeMirror = createBodyEditor();
+    var isBodyCodeMirrorReady = false;
 
     function createBodyEditor() {
         var activeEditor = {
@@ -131,14 +132,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     var currentValue = activeEditor.getValue();
                     activeEditor = editor;
                     activeEditor.setValue(currentValue);
+                    isBodyCodeMirrorReady = true;
                     if (bodyContent) bodyContent.hidden = true;
                 })
                 .catch(function(err) {
                     console.error('CodeMirror initialization failed; using textarea fallback.', err);
+                    isBodyCodeMirrorReady = false;
                     if (bodyContent) bodyContent.hidden = false;
                 });
         } catch (err) {
             console.error('CodeMirror initialization failed; using textarea fallback.', err);
+            isBodyCodeMirrorReady = false;
             if (bodyContent) bodyContent.hidden = false;
         }
 
@@ -149,9 +153,10 @@ document.addEventListener('DOMContentLoaded', () => {
         var value = bodyType || 'none';
         var isForm = (value === 'form-data' || value === 'form-urlencoded');
         var showRawEditor = !isForm && value !== 'none';
+        var showFallbackTextarea = showRawEditor && !isBodyCodeMirrorReady;
         var cmContainer = document.getElementById('bodyContentEditor');
         if (cmContainer) cmContainer.hidden = !showRawEditor;
-        if (bodyContent) bodyContent.hidden = !showRawEditor;
+        if (bodyContent) bodyContent.hidden = !showFallbackTextarea;
         if (formDataContainer) formDataContainer.hidden = !isForm;
     }
 
