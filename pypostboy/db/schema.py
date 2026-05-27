@@ -3,6 +3,7 @@
 from .migrations import (
     migrate_ownership,
     migrate_request_instances,
+    migrate_user_auth_fields,
     migrate_user_recovery_fields,
 )
 
@@ -152,4 +153,5 @@ def initialize_schema(cursor, backend='sqlite'):
     migrate_request_instances(cursor)
     migrate_ownership(cursor)
     migrate_user_recovery_fields(cursor)
+    migrate_user_auth_fields(cursor)
     create_indexes(cursor)

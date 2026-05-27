@@ -18,6 +18,24 @@ USER_RECOVERY_COLUMN_MIGRATIONS = {
     'recovery_key_created_at': 'TEXT',
     'recovery_key_rotated_at': 'TEXT',
 }
+USER_AUTH_COLUMN_MIGRATIONS = {
+    'last_login': {
+        'sqlite': 'TEXT',
+        'postgresql': 'TIMESTAMP NULL',
+    },
+    'is_superuser': {
+        'sqlite': 'INTEGER NOT NULL DEFAULT 0',
+        'postgresql': 'BOOLEAN NOT NULL DEFAULT FALSE',
+    },
+    'is_staff': {
+        'sqlite': 'INTEGER NOT NULL DEFAULT 0',
+        'postgresql': 'BOOLEAN NOT NULL DEFAULT FALSE',
+    },
+    'is_active': {
+        'sqlite': 'INTEGER NOT NULL DEFAULT 1',
+        'postgresql': 'BOOLEAN NOT NULL DEFAULT TRUE',
+    },
+}
 
 
 def _cursor_backend(cursor):
@@ -64,6 +82,17 @@ def migrate_user_recovery_fields(cursor):
     for column, definition in USER_RECOVERY_COLUMN_MIGRATIONS.items():
         if column not in existing_columns:
             cursor.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
+
+
+def migrate_user_auth_fields(cursor):
+    """Add auth-status columns introduced after initial user-table releases."""
+    existing_columns = table_columns(cursor, 'users')
+    backend = _cursor_backend(cursor)
+    for column, definitions in USER_AUTH_COLUMN_MIGRATIONS.items():
+        if column in existing_columns:
+            continue
+        definition = definitions.get(backend, definitions['sqlite'])
+        cursor.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
 
 
 def create_users_table(cursor):
