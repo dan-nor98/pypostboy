@@ -21,6 +21,10 @@ SQLITE_TABLE_SCHEMAS = {
             recovery_key_hash TEXT,
             recovery_key_created_at TEXT,
             recovery_key_rotated_at TEXT,
+            last_login TEXT,
+            is_superuser INTEGER NOT NULL DEFAULT 0,
+            is_staff INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
@@ -88,6 +92,25 @@ POSTGRES_TABLE_SCHEMAS = {
     table_name: schema.replace(SQLITE_IDENTITY, POSTGRES_IDENTITY)
     for table_name, schema in SQLITE_TABLE_SCHEMAS.items()
 }
+POSTGRES_TABLE_SCHEMAS['users'] = f"""
+        CREATE TABLE IF NOT EXISTS users (
+            id {POSTGRES_IDENTITY},
+            username TEXT NOT NULL UNIQUE,
+            email TEXT UNIQUE,
+            password_hash TEXT,
+            auth_provider TEXT NOT NULL DEFAULT 'local',
+            auth_subject TEXT,
+            recovery_key_hash TEXT,
+            recovery_key_created_at TEXT,
+            recovery_key_rotated_at TEXT,
+            last_login TEXT,
+            is_superuser BOOLEAN NOT NULL DEFAULT FALSE,
+            is_staff BOOLEAN NOT NULL DEFAULT FALSE,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """
 
 TABLE_SCHEMA_BY_BACKEND = {
     'sqlite': SQLITE_TABLE_SCHEMAS,
