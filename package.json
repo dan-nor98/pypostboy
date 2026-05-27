@@ -10,7 +10,10 @@
     "dev:desktop": "concurrently -k -n DJANGO,ELECTRON \"npm run dev:django\" \"npm run dev:electron\"",
     "test:electron": "node --test electron/request-executor/*.test.js",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:install": "npm --prefix frontend install"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.6.1",

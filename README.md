@@ -263,3 +263,38 @@ npm run make
 ```
 
 These commands provide baseline desktop packaging outputs and can be extended per target OS/signing requirements.
+
+## React dashboard frontend (Vite + Tailwind)
+
+A new React + TypeScript dashboard entrypoint is available at `/dashboard/` while the legacy app remains at `/`.
+
+### Why this hosting strategy
+
+The dashboard build outputs directly into `public/dashboard/`, which is already served by the existing Django static/SPA handler. This avoids backend route disruption and keeps existing routes/pages intact.
+
+### Install frontend dependencies
+
+```bash
+npm run frontend:install
+```
+
+### Run dashboard dev server
+
+```bash
+npm run frontend:dev
+```
+
+Default Vite dev URL: `http://localhost:5173/dashboard/`.
+
+### Build dashboard for Django static serving
+
+```bash
+npm run frontend:build
+```
+
+Build output is written to:
+
+- `public/dashboard/index.html`
+- `public/dashboard/assets/*`
+
+Because Django already serves files under `public/`, deployment does not need a new static mount.
