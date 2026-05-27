@@ -22,3 +22,13 @@ def test_extensionless_client_route_still_falls_back_to_index_html(client):
 
     assert response.status_code == 200
     assert b"PostBoy - API Testing Client" in response.data
+
+
+def test_missing_api_endpoint_returns_json_404_not_spa_html(client, user_a_headers):
+    response = client.get('/api/does-not-exist', headers=user_a_headers)
+
+    assert response.status_code == 404
+    assert response.mimetype == 'application/json'
+    payload = response.get_json()
+    assert payload['success'] is False
+    assert 'not found' in payload['error'].lower()

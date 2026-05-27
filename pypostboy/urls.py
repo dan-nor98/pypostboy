@@ -6,6 +6,7 @@ from pypostboy.routes import static
 
 urlpatterns = [
     path('api/auth/', include('pypostboy.apps.auth.urls')),
+    path('api/collections', include('pypostboy.apps.collections.urls')),
     path('api/collections/', include('pypostboy.apps.collections.urls')),
     path('api/', include('pypostboy.apps.instances.urls')),
     path('api/requests/', include('pypostboy.apps.requests.urls')),

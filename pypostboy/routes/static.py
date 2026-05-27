@@ -7,6 +7,8 @@ import os
 from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponse
 
+from pypostboy.http.responses import error
+
 
 def favicon(request):
     """Serve a minimal transparent PNG favicon."""
@@ -32,6 +34,9 @@ def index(request):
 
 def serve_static(request, path):
     """Serve static files and fallback to index.html for SPA."""
+    if path.startswith('api/'):
+        return error('API endpoint not found', status=404)
+
     public_dir = settings.PUBLIC_DIR
     safe_path = os.path.normpath(path).lstrip(os.sep)
     full_path = os.path.abspath(os.path.join(public_dir, safe_path))
