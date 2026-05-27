@@ -1,22 +1,25 @@
+import { escapeHtml, highlightJson, highlightXml } from '../utils/format.js';
+
 function normalizeValue(value) {
     return value == null ? '' : String(value);
 }
 
 function createEditorElement() {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'body-content-cm-fallback';
+
+    var highlightLayer = document.createElement('pre');
+    highlightLayer.className = 'body-content-cm-highlight';
+    highlightLayer.setAttribute('aria-hidden', 'true');
+
     var textarea = document.createElement('textarea');
-    textarea.className = 'form-input body-content-cm-fallback';
+    textarea.className = 'form-input body-content-cm-textarea';
     textarea.setAttribute('aria-label', 'Request body editor');
     textarea.setAttribute('spellcheck', 'false');
-    textarea.style.width = '100%';
-    textarea.style.height = '100%';
-    textarea.style.resize = 'none';
-    textarea.style.border = '0';
-    textarea.style.outline = 'none';
-    textarea.style.background = 'transparent';
-    textarea.style.color = 'inherit';
-    textarea.style.font = 'inherit';
-    textarea.style.padding = '12px';
-    return textarea;
+
+    wrapper.appendChild(highlightLayer);
+    wrapper.appendChild(textarea);
+    return { wrapper, textarea, highlightLayer };
 }
 
 export async function initBodyContentCodeMirror(options) {
@@ -26,21 +29,45 @@ export async function initBodyContentCodeMirror(options) {
 
     if (!container) return null;
 
-    var textarea = createEditorElement();
+    var editorElements = createEditorElement();
+    var wrapper = editorElements.wrapper;
+    var textarea = editorElements.textarea;
+    var highlightLayer = editorElements.highlightLayer;
     var destroyed = false;
     var bodyType = 'none';
+    var highlightedText = '';
+
+    function highlightBodyValue(value) {
+        var normalized = normalizeValue(value);
+        if (!normalized) return '<br />';
+        if (bodyType === 'json') return highlightJson(normalized);
+        if (bodyType === 'xml') return highlightXml(normalized);
+        return escapeHtml(normalized);
+    }
+
+    function renderHighlight() {
+        highlightedText = highlightBodyValue(textarea.value);
+        highlightLayer.innerHTML = highlightedText;
+    }
 
     function emitChange() {
         if (destroyed) return;
+        renderHighlight();
         onChange(textarea.value);
     }
 
     textarea.addEventListener('input', emitChange);
-    container.replaceChildren(textarea);
+    textarea.addEventListener('scroll', function() {
+        highlightLayer.scrollTop = textarea.scrollTop;
+        highlightLayer.scrollLeft = textarea.scrollLeft;
+    });
+    container.replaceChildren(wrapper);
+    renderHighlight();
 
     return {
         setValue: function(value) {
             textarea.value = normalizeValue(value);
+            renderHighlight();
         },
         getValue: function() {
             return textarea.value;
@@ -59,6 +86,7 @@ export async function initBodyContentCodeMirror(options) {
                 textarea.setAttribute('placeholder', 'Enter request body...');
                 textarea.setAttribute('inputmode', 'text');
             }
+            renderHighlight();
         },
         requestMeasure: function() {
             if (destroyed) return;
