@@ -18,5 +18,6 @@ def test_body_editor_uses_local_module_and_hidden_attribute_visibility():
 
     assert "import('./editor/body-codemirror.js')" in source
     assert 'function updateBodyEditorsVisibility(bodyType)' in source
-    assert 'bodyContent.hidden = !showRawEditor;' in source
+    assert 'var showFallbackTextarea = showRawEditor && !isBodyCodeMirrorReady;' in source
+    assert 'bodyContent.hidden = !showFallbackTextarea;' in source
     assert 'if (tabName === \'body\' && bodyContentCodeMirror) bodyContentCodeMirror.requestMeasure();' in source
