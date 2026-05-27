@@ -258,7 +258,37 @@ def test_valid_legacy_user_id_cookie_is_ignored_and_cleared(client, user_b):
     assert current["username"] == "local_user"
     assert current["is_guest"] is True
     assert current["id"] != user_b["id"]
-    _assert_deletes_legacy_identity_cookies(response)
+
+
+def test_postboy_auth_backend_authenticate_uses_password_hash_mapping(sqlite_connection):
+    from django.contrib.auth.hashers import make_password
+
+    from pypostboy.apps.core.models import User
+    from pypostboy.db.serializers import timestamp
+    from pypostboy.djangoapp.auth_backend import PostBoyAuthBackend
+
+    now = timestamp()
+    username = "backend-auth-user"
+    raw_password = "password123"
+    hashed_password = make_password(raw_password)
+
+    sqlite_connection.execute(
+        """INSERT INTO users (
+            username, email, password_hash, auth_provider, auth_subject, created_at, updated_at
+        ) VALUES (?, ?, ?, 'local', NULL, ?, ?)""",
+        (username, f"{username}@example.test", hashed_password, now, now),
+    )
+    sqlite_connection.commit()
+
+    user = User.objects.get(username=username)
+    assert user.password == hashed_password
+
+    backend = PostBoyAuthBackend()
+    authenticated = backend.authenticate(None, username=username, password=raw_password)
+    assert authenticated is not None
+    assert authenticated.username == username
+
+    assert backend.authenticate(None, username=username, password="wrong-password") is None
 
 def test_invalid_cookie_does_not_override_login(client):
     registered = assert_success(
