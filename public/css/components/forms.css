@@ -298,6 +298,47 @@
   border-left-color: var(--color-text);
 }
 
+.body-content-cm-fallback {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.body-content-cm-highlight,
+.body-content-cm-textarea {
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.88em;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+.body-content-cm-highlight {
+  z-index: 1;
+  pointer-events: none;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.body-content-cm-textarea {
+  z-index: 2;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--color-text);
+}
+
 .request-body-editor .cm-selectionBackground {
   background-color: var(--color-accent-softer) !important;
 }
