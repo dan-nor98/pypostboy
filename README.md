@@ -270,7 +270,7 @@ A new React + TypeScript dashboard entrypoint is available at `/dashboard/` whil
 
 ### Why this hosting strategy
 
-The dashboard build outputs directly into `public/dashboard/`, which is already served by the existing Django static/SPA handler. This avoids backend route disruption and keeps existing routes/pages intact.
+The dashboard build outputs directly into `public/dashboard/`, which is generated build output and intentionally not committed. The generated directory is required for `/dashboard/` in any deployment where the dashboard link is enabled. Build workflows must run `npm run frontend:build` before serving, packaging, or deploying the app so `public/dashboard/index.html` and its assets exist. The existing Django static/SPA handler then serves the generated dashboard without a new backend route.
 
 ### Install frontend dependencies
 
@@ -290,6 +290,7 @@ Default Vite dev URL: `http://localhost:5173/dashboard/`.
 
 ```bash
 npm run frontend:build
+npm run frontend:check
 ```
 
 Build output is written to:
@@ -297,4 +298,4 @@ Build output is written to:
 - `public/dashboard/index.html`
 - `public/dashboard/assets/*`
 
-Because Django already serves files under `public/`, deployment does not need a new static mount.
+Because Django already serves files under `public/`, deployment does not need a new static mount. Docker and Electron packaging workflows build the dashboard first, and CI runs `npm run frontend:check` to fail if the `/dashboard/` link is enabled without a generated `public/dashboard/index.html`.

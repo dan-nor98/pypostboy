@@ -62,6 +62,20 @@ const statusIcons: Record<InfraStatus['icon'], ComponentType<{ className?: strin
   check: CheckCircle2,
 };
 
+type SidebarNavItem = [label: string, Icon: ComponentType<{ className?: string }>];
+
+const sidebarNavItems: SidebarNavItem[] = [
+  ['Dashboard', LayoutDashboard],
+  ['APIs', Server],
+  ['Collections', Database],
+  ['Environments', Globe2],
+  ['Monitors', Activity],
+  ['Workflows', Workflow],
+  ['Analytics', ListChecks],
+  ['Security', Shield],
+  ['Team', Users],
+];
+
 export default function EnterpriseApiDashboard() {
   const [viewModel, setViewModel] = useState<DashboardViewModel | null>(null);
 
@@ -91,10 +105,7 @@ export default function EnterpriseApiDashboard() {
             <span>Workspace · Global Platform</span><ChevronDown className="h-4 w-4" />
           </button>
           <nav className="space-y-1 text-sm">
-            {[
-              ['Dashboard', LayoutDashboard], ['APIs', Server], ['Collections', Database], ['Environments', Globe2],
-              ['Monitors', Activity], ['Workflows', Workflow], ['Analytics', ListChecks], ['Security', Shield], ['Team', Users],
-            ].map(([label, Icon], i) => (
+            {sidebarNavItems.map(([label, Icon], i) => (
               <button key={String(label)} className={`nav-item interactive ${i === 0 ? 'bg-accent/20 text-foreground' : ''}`}>
                 <Icon className="h-4 w-4" /> {label}
               </button>

@@ -1,0 +1,19 @@
+# Node dependencies
+node_modules/
+frontend/node_modules/
+
+# Generated frontend output
+public/dashboard/
+frontend/tsconfig.tsbuildinfo
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local env/data
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3

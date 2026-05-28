@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  dashboard-build:
+    name: Dashboard build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dashboard dependencies
+        run: npm run frontend:install
+
+      - name: Build dashboard before serving
+        run: npm run frontend:build
+
+      - name: Verify dashboard artifact exists when linked
+        run: npm run frontend:check

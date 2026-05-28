@@ -32,3 +32,54 @@ def test_missing_api_endpoint_returns_json_404_not_spa_html(client, user_a_heade
     payload = response.get_json()
     assert payload['success'] is False
     assert 'not found' in payload['error'].lower()
+
+
+def test_dashboard_route_serves_generated_dashboard_index(client, tmp_path, monkeypatch):
+    from django.conf import settings
+
+    public_dir = tmp_path / "public"
+    dashboard_dir = public_dir / "dashboard"
+    dashboard_dir.mkdir(parents=True)
+    (public_dir / "index.html").write_text("legacy shell", encoding="utf-8")
+    (dashboard_dir / "index.html").write_text("react dashboard shell", encoding="utf-8")
+
+    monkeypatch.setattr(settings, "PUBLIC_DIR", str(public_dir))
+
+    response = client.get("/dashboard/")
+
+    assert response.status_code == 200
+    assert b"react dashboard shell" in response.data
+    assert b"legacy shell" not in response.data
+
+
+def test_dashboard_extensionless_routes_fall_back_to_dashboard_index(client, tmp_path, monkeypatch):
+    from django.conf import settings
+
+    public_dir = tmp_path / "public"
+    dashboard_dir = public_dir / "dashboard"
+    dashboard_dir.mkdir(parents=True)
+    (public_dir / "index.html").write_text("legacy shell", encoding="utf-8")
+    (dashboard_dir / "index.html").write_text("react dashboard shell", encoding="utf-8")
+
+    monkeypatch.setattr(settings, "PUBLIC_DIR", str(public_dir))
+
+    response = client.get("/dashboard/requests/active")
+
+    assert response.status_code == 200
+    assert b"react dashboard shell" in response.data
+    assert b"legacy shell" not in response.data
+
+
+def test_dashboard_route_returns_404_when_generated_dashboard_is_missing(client, tmp_path, monkeypatch):
+    from django.conf import settings
+
+    public_dir = tmp_path / "public"
+    public_dir.mkdir()
+    (public_dir / "index.html").write_text("legacy shell", encoding="utf-8")
+
+    monkeypatch.setattr(settings, "PUBLIC_DIR", str(public_dir))
+
+    response = client.get("/dashboard/")
+
+    assert response.status_code == 404
+    assert b"legacy shell" not in response.data
