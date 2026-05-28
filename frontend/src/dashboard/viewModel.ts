@@ -1,43 +1,20 @@
 export type WorkspaceMode = 'authenticated' | 'guest' | 'anonymous';
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
-export type Loadable<T> = {
-  status: LoadStatus;
-  data: T;
-  error?: string;
-};
+export type Loadable<T> = { status: LoadStatus; data: T; error?: string };
 
-export type PostBoyUser = {
-  id: number | null;
-  username: string;
-  email: string | null;
-  authProvider: string | null;
-  isGuest: boolean;
-};
-
+export type PostBoyUser = { id: number | null; username: string; email: string | null; authProvider: string | null; isGuest: boolean };
 export type WorkspaceUserState =
   | { mode: 'authenticated'; user: PostBoyUser }
   | { mode: 'guest'; user: PostBoyUser | null; reason?: string }
   | { mode: 'anonymous'; user: null; reason?: string };
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | string;
-
-export type KeyValuePair = {
-  key: string;
-  value: string;
-  enabled: boolean;
-  description?: string;
-};
-
+export type KeyValuePair = { key: string; value: string; enabled: boolean; description?: string };
 export type RequestBodyType = 'none' | 'json' | 'xml' | 'text' | 'form-data' | 'form-urlencoded' | string;
 export type AuthType = 'none' | 'bearer' | 'basic' | 'api-key' | string;
-
 export type AuthData = Record<string, string | number | boolean | null | undefined>;
-
-export type RequestFormField = KeyValuePair & {
-  type?: 'text' | 'file';
-  fileName?: string;
-};
+export type RequestFormField = KeyValuePair & { type?: 'text' | 'file'; fileName?: string };
 
 export type RequestIdentity = {
   id: number;
@@ -81,6 +58,7 @@ export type ProxyRequestPayload = {
   body?: string | null;
   contentType?: string | null;
   formData?: RequestFormField[];
+  auth?: { type: AuthType; data: AuthData };
   verifySsl?: boolean;
 };
 
@@ -105,16 +83,14 @@ export type RequestInstance = Omit<RequestDetails, 'instances'> & {
 };
 
 export type ImportType = 'postman' | 'curl';
-
-export type ImportPayload = {
-  type: ImportType;
-  data: unknown;
-};
-
+export type ImportPayload = { type: ImportType; data: unknown };
 export type ImportOutcome =
   | { type: 'postman'; collection: CollectionNode; warnings: string[] }
   | { type: 'curl'; request: Partial<RequestDetails>; warnings: string[] }
   | { type: ImportType; raw: unknown; warnings: string[] };
+
+export type SidebarTab = 'collections' | 'history' | 'environment';
+export type EnvVars = Record<string, string>;
 
 export type DashboardViewModel = {
   workspace: WorkspaceUserState;
@@ -129,7 +105,6 @@ export const emptyLoadable = <T>(data: T): Loadable<T> => ({ status: 'idle', dat
 export const loadingLoadable = <T>(data: T): Loadable<T> => ({ status: 'loading', data });
 export const readyLoadable = <T>(data: T): Loadable<T> => ({ status: 'ready', data });
 export const errorLoadable = <T>(data: T, error: string): Loadable<T> => ({ status: 'error', data, error });
-
 export const anonymousWorkspace: WorkspaceUserState = { mode: 'anonymous', user: null };
 
 export const createInitialDashboardViewModel = (): DashboardViewModel => ({
