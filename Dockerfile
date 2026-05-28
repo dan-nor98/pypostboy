@@ -1,3 +1,14 @@
+FROM node:22-slim AS frontend-build
+
+WORKDIR /app
+
+COPY package.json ./
+COPY frontend/package.json frontend/package.json
+RUN npm run frontend:install
+
+COPY frontend frontend
+RUN npm run frontend:build
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,6 +22,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+COPY --from=frontend-build /app/public/dashboard ./public/dashboard
 RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 3001

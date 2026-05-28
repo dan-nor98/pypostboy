@@ -34,6 +34,16 @@ def index(request):
 
 def serve_static(request, path):
     """Serve static files and fallback to index.html for SPA."""
+    dashboard_index_path = os.path.join(settings.PUBLIC_DIR, 'dashboard', 'index.html')
+    if path in {'dashboard', 'dashboard/'}:
+        if not os.path.isfile(dashboard_index_path):
+            raise Http404()
+        return _serve_file(dashboard_index_path)
+    if path.startswith('dashboard/') and not os.path.splitext(path)[1]:
+        if not os.path.isfile(dashboard_index_path):
+            raise Http404()
+        return _serve_file(dashboard_index_path)
+
     if path.startswith('api/'):
         return error('API endpoint not found', status=404)
 

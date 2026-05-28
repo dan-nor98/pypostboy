@@ -9,10 +9,13 @@
     "dev:electron": "wait-on tcp:3001 && electron .",
     "dev:desktop": "concurrently -k -n DJANGO,ELECTRON \"npm run dev:django\" \"npm run dev:electron\"",
     "test:electron": "node --test electron/request-executor/*.test.js",
+    "prepackage": "npm run frontend:build",
     "package": "electron-forge package",
+    "premake": "npm run frontend:build",
     "make": "electron-forge make",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
+    "frontend:check": "python scripts/check_dashboard_build.py",
     "frontend:install": "npm --prefix frontend install"
   },
   "devDependencies": {
