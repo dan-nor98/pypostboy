@@ -4,14 +4,20 @@ import os
 import sqlite3
 import tempfile
 
-# The legacy compatibility module initializes a database at import time. Point it
-# outside the repository before importing application modules.
+# Point framework and repository bootstrap databases outside the repository before
+# importing application modules.
 os.environ.setdefault(
     "POSTBOY_DB_PATH",
     os.path.join(tempfile.gettempdir(), "postboy-pytest-bootstrap.db"),
 )
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "pypostboy.settings")
 
+import django
 import pytest
+from django.conf import settings
+from django.db import connections
+
+django.setup()
 
 from pypostboy import create_app
 from pypostboy.db.schema import initialize_schema
@@ -46,6 +52,9 @@ def _auth_headers(user):
 def sqlite_connection(tmp_path, monkeypatch):
     """Provide an isolated SQLite database for each test."""
     db_path = tmp_path / "postboy-test.db"
+    connections.close_all()
+    settings.DATABASES["default"]["NAME"] = str(db_path)
+
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
@@ -66,6 +75,7 @@ def sqlite_connection(tmp_path, monkeypatch):
     Collections.connection = None
     Requests.connection = None
     RequestInstances.connection = None
+    connections.close_all()
     conn.close()
 
 
@@ -78,6 +88,7 @@ def app(sqlite_connection):
             "DATABASE": sqlite_connection,
             "WTF_CSRF_ENABLED": False,
             "POSTBOY_ALLOW_USER_ID_HEADER": True,
+            "ALLOWED_HOSTS": ["testserver"],
         }
     )
 

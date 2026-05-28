@@ -37,6 +37,8 @@ class DjangoResponseAdapter:
 
     @property
     def data(self):
+        if getattr(self._response, 'streaming', False):
+            return b''.join(self._response.streaming_content)
         return self._response.content
 
     @property
@@ -44,7 +46,7 @@ class DjangoResponseAdapter:
         return (self._response.headers.get('Content-Type') or '').split(';', 1)[0]
 
     def get_json(self):
-        return json.loads(self._response.content.decode(self._response.charset or 'utf-8'))
+        return json.loads(self.data.decode(self._response.charset or 'utf-8'))
 
 
 class LegacyDjangoClient:
@@ -135,7 +137,7 @@ def _apply_django_settings(config_dict):
     settings.DEBUG = bool(config_dict.get('DEBUG', settings.DEBUG))
     settings.SECRET_KEY = config_dict.get('SECRET_KEY', settings.SECRET_KEY)
     settings.ALLOWED_HOSTS = _coerce_allowed_hosts(
-        config_dict.get('ALLOWED_HOSTS', getattr(settings, 'ALLOWED_HOSTS', [])),
+        config_dict.get('ALLOWED_HOSTS'),
         settings.DEBUG,
     )
     settings.PUBLIC_DIR = config_dict.get('PUBLIC_DIR', settings.PUBLIC_DIR)

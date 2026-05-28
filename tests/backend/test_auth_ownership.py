@@ -138,7 +138,7 @@ def test_session_identity_wins_over_forged_user_id_header(client, collection, us
     forged_headers = {"X-Postboy-User-Id": str(user_b["id"])}
 
     current = assert_success(client.get("/api/auth/me", headers=forged_headers))
-    assert current["id"] == registered["id"]
+    assert current["id"] == registered["user"]["id"]
 
     collections = assert_success(client.get("/api/collections", headers=forged_headers))
     assert [item["id"] for item in collections] == [own_collection["id"]]

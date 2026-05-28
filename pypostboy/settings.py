@@ -62,6 +62,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'pypostboy.djangoapp.middleware.PostBoyMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 # PostBoy owns its application schema through pypostboy.db migrations. Django's
 # database setting is still required for framework internals, but sessions use

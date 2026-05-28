@@ -64,6 +64,11 @@ def _request_identity(request):
     only when a test/development configuration explicitly opts in. Legacy
     unsigned identity cookies are never accepted and are marked for deletion.
     """
+    for cookie_name in USER_ID_COOKIE_NAMES:
+        if request.COOKIES.get(cookie_name):
+            _mark_invalid_identity_cookies(request)
+            break
+
     if getattr(request, 'user', None) is not None and request.user.is_authenticated:
         return 'session', '_auth_user_id', request.user.id
 
@@ -72,11 +77,6 @@ def _request_identity(request):
             value = request.META.get(header_name)
             if value:
                 return 'header', header_name, value
-
-    for cookie_name in USER_ID_COOKIE_NAMES:
-        if request.COOKIES.get(cookie_name):
-            _mark_invalid_identity_cookies(request)
-            break
 
     return None, None, None
 
