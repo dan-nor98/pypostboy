@@ -82,6 +82,8 @@ def test_login_succeeds_with_csrf_for_localhost_8080_origin(app, monkeypatch):
     )
     assert register_response.status_code == 201
 
+    csrf_token = register_response.cookies['csrftoken'].value
+
     logout_response = client.post(
         '/api/auth/logout',
         HTTP_X_CSRFTOKEN=csrf_token,
@@ -209,7 +211,7 @@ def test_wsgi_browser_session_cookie_persists_login_for_collections(app, sqlite_
     user_id = cursor.lastrowid
     collection = Collections.create(user_id, {"name": "WSGI browser collection"})
 
-    def wsgi_request(method, path, payload=None, cookie_header=None):
+    def wsgi_request(method, path, payload=None, cookie_header=None, headers=None):
         body = b'' if payload is None else json.dumps(payload).encode('utf-8')
         environ = {
             'REQUEST_METHOD': method,
@@ -222,20 +224,36 @@ def test_wsgi_browser_session_cookie_persists_login_for_collections(app, sqlite_
             environ['HTTP_CONTENT_TYPE'] = 'application/json'
         if cookie_header:
             environ['HTTP_COOKIE'] = cookie_header
+        for key, value in (headers or {}).items():
+            environ[f"HTTP_{key.upper().replace('-', '_')}"] = value
 
         captured = {}
 
         def start_response(status, headers):
             captured['status'] = status
-            captured['headers'] = dict(headers)
+            captured['headers'] = headers
 
         response_body = b''.join(app(environ, start_response))
-        return captured['status'], captured['headers'], json.loads(response_body.decode('utf-8'))
+        header_map = {}
+        for key, value in captured['headers']:
+            if key.lower() == 'set-cookie' and key in header_map:
+                header_map[key] = f"{header_map[key]}, {value}"
+            else:
+                header_map[key] = value
+        return captured['status'], header_map, json.loads(response_body.decode('utf-8'))
+
+    csrf_status, csrf_headers, csrf_payload = wsgi_request('GET', '/api/auth/csrf')
+    assert csrf_status.startswith('200')
+    assert csrf_payload['success'] is True
+    csrf_cookie = SimpleCookie(csrf_headers['Set-Cookie'])
+    csrf_cookie_header = '; '.join(f'{morsel.key}={morsel.value}' for morsel in csrf_cookie.values())
 
     login_status, login_headers, login_payload = wsgi_request(
         'POST',
         '/api/auth/login',
         {'username': 'wsgi-browser-user', 'password': 'password123'},
+        cookie_header=csrf_cookie_header,
+        headers={'X-CSRFToken': csrf_cookie['csrftoken'].value},
     )
     assert login_status.startswith('200')
     assert login_payload['success'] is True
@@ -245,7 +263,7 @@ def test_wsgi_browser_session_cookie_persists_login_for_collections(app, sqlite_
     assert 'sessionid' in session_cookie
     assert session_cookie['sessionid']['samesite'] == 'Lax'
 
-    cookie_header = session_cookie.output(header='', attrs=[]).strip()
+    cookie_header = '; '.join(f'{morsel.key}={morsel.value}' for morsel in session_cookie.values())
     collections_status, _headers, collections_payload = wsgi_request(
         'GET',
         '/api/collections',

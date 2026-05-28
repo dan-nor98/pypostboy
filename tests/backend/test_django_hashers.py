@@ -1,5 +1,6 @@
-"""Coverage for the local Django password hasher compatibility layer."""
+"""Coverage for site-packages Django password hashing."""
 
+import base64
 import hashlib
 
 import pytest
@@ -11,7 +12,7 @@ from django.contrib.auth.hashers import (
 )
 
 
-def test_make_password_round_trip_without_werkzeug_dependency():
+def test_make_password_round_trip_with_site_packages_django():
     encoded = make_password("password123")
 
     assert encoded.startswith("pbkdf2_sha256$")
@@ -26,9 +27,9 @@ def test_make_password_supports_django_compatible_arguments():
     assert check_password("", encoded) is True
 
 
-def test_make_password_rejects_unsupported_hashers():
-    with pytest.raises(ValueError, match="Unsupported password hasher"):
-        make_password("password123", hasher="argon2")
+def test_make_password_rejects_unknown_hashers():
+    with pytest.raises(ValueError, match="Unknown password hashing algorithm"):
+        make_password("password123", hasher="not-a-hasher")
 
 
 def test_none_passwords_are_unusable():
@@ -39,23 +40,21 @@ def test_none_passwords_are_unusable():
     assert check_password("password123", encoded) is False
 
 
-def test_check_password_accepts_legacy_werkzeug_scrypt_hashes():
+def test_check_password_accepts_older_django_pbkdf2_hashes():
     password = "password123"
     salt = "legacy-salt"
-    digest = hashlib.scrypt(
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
         password.encode("utf-8"),
-        salt=salt.encode("utf-8"),
-        n=32768,
-        r=8,
-        p=1,
-        maxmem=128 * 1024 * 1024,
-    ).hex()
-    encoded = f"scrypt:32768:8:1${salt}${digest}"
+        salt.encode("utf-8"),
+        260000,
+    )
+    encoded = f"pbkdf2_sha256$260000${salt}${base64.b64encode(digest).decode('ascii').strip()}"
 
     assert check_password(password, encoded) is True
 
 
-def test_check_password_setter_runs_for_legacy_hashes():
+def test_check_password_setter_runs_for_older_django_hashes():
     upgraded = []
     password = "password123"
     salt = "legacy-salt"
@@ -64,8 +63,8 @@ def test_check_password_setter_runs_for_legacy_hashes():
         password.encode("utf-8"),
         salt.encode("utf-8"),
         260000,
-    ).hex()
-    encoded = f"pbkdf2:sha256:260000${salt}${digest}"
+    )
+    encoded = f"pbkdf2_sha256$260000${salt}${base64.b64encode(digest).decode('ascii').strip()}"
 
     assert check_password(password, encoded, setter=upgraded.append) is True
     assert upgraded == [password]
