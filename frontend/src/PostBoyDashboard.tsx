@@ -1,431 +1,155 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Braces, Check, ChevronDown, Clock3, Copy, Database, Download, FileJson, Folder, History, KeyRound, LogOut, Moon, Plus, Save, Send, Settings2, Trash2, Upload, UserCircle2, Wand2 } from 'lucide-react';
 import {
-  Braces,
-  Check,
-  ChevronDown,
-  Clock3,
-  Code2,
-  Copy,
-  Database,
-  Download,
-  FileJson,
-  Folder,
-  Globe2,
-  History,
-  KeyRound,
-  Lock,
-  LogOut,
-  Moon,
-  Plus,
-  Save,
-  Search,
-  Send,
-  Settings2,
-  Upload,
-  UserCircle2,
-  Wand2,
-} from 'lucide-react';
-import {
+  continueAsGuest,
+  createCollection,
+  createRequest,
+  createRequestInstance,
+  deleteCollection,
+  deleteRequest,
+  deleteRequestInstance,
+  duplicateCollection,
+  duplicateRequest,
   firstRequestInCollections,
+  flattenCollections,
   headersToProxyMap,
+  importWorkspaceData,
   loadCollections,
+  loadPanelState,
   loadRequestDetails,
-  loadResponseHistory,
+  loadThemePreference,
   loadWorkspaceUser,
+  login,
+  logout,
+  register,
+  reorderCollections,
+  reorderRequests,
+  savePanelCollapsedState,
+  saveThemePreference,
   sendProxyRequest,
+  updateCollection,
+  updateRequest,
 } from './dashboard/adapters';
-import {
-  createInitialDashboardViewModel,
-  errorLoadable,
-  loadingLoadable,
-  readyLoadable,
-  type CollectionNode,
-  type DashboardViewModel,
-  type KeyValuePair,
-  type RequestDetails,
-  type RequestIdentity,
-  type RequestInstance,
-} from './dashboard/viewModel';
+import { createInitialDashboardViewModel, errorLoadable, loadingLoadable, readyLoadable, type AuthType, type CollectionNode, type DashboardViewModel, type KeyValuePair, type RequestBodyType, type RequestDetails, type RequestFormField, type RequestIdentity, type RequestInstance, type SidebarTab } from './dashboard/viewModel';
 
-const methodBadgeStyles: Record<string, string> = {
-  GET: 'bg-sky-500/15 text-sky-600 dark:text-sky-300',
-  POST: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
-  PUT: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300',
-  PATCH: 'bg-amber-500/15 text-amber-600 dark:text-amber-300',
-  DELETE: 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
-};
+const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+const methodBadgeStyles: Record<string, string> = { GET: 'bg-sky-500/15 text-sky-600 dark:text-sky-300', POST: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300', PUT: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300', PATCH: 'bg-amber-500/15 text-amber-600 dark:text-amber-300', DELETE: 'bg-rose-500/15 text-rose-600 dark:text-rose-300' };
+const emptyPair = (): KeyValuePair => ({ key: '', value: '', enabled: true });
+const emptyField = (): RequestFormField => ({ key: '', value: '', enabled: true, type: 'text' });
 
-function ShellButton({ children, active = false, onClick }: { children: ReactNode; active?: boolean; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-        active
-          ? 'border-accent/40 bg-accent/15 text-foreground'
-          : 'border-border/80 bg-card/70 text-muted hover:border-accent/40 hover:text-foreground'
-      }`}
-    >
-      {children}
-    </button>
-  );
+type Notice = { type: 'info' | 'error' | 'success'; message: string } | null;
+
+function cx(...classes: Array<string | false | null | undefined>) { return classes.filter(Boolean).join(' '); }
+function Panel({ children, className = '' }: { children: ReactNode; className?: string }) { return <section className={cx('rounded-2xl border border-border/80 bg-card/85 shadow-sm', className)}>{children}</section>; }
+function Button({ children, active = false, danger = false, className = '', onClick, type = 'button', disabled = false }: { children: ReactNode; active?: boolean; danger?: boolean; className?: string; onClick?: () => void; type?: 'button' | 'submit'; disabled?: boolean }) {
+  return <button type={type} disabled={disabled} onClick={onClick} className={cx('inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50', active ? 'border-accent/40 bg-accent/15 text-foreground' : danger ? 'border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/15' : 'border-border/80 bg-card/70 text-muted hover:border-accent/40 hover:text-foreground', className)}>{children}</button>;
+}
+function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="grid gap-1 text-xs font-medium uppercase tracking-wide text-muted"><span>{label}</span>{children}</label>; }
+function TextInput(props: JSX.IntrinsicElements['input']) { return <input {...props} className={cx('rounded-xl border border-border/80 bg-background/60 px-3 py-2 text-sm outline-none focus:border-accent', props.className)} />; }
+function Select(props: JSX.IntrinsicElements['select']) { return <select {...props} className={cx('rounded-xl border border-border/80 bg-background/60 px-3 py-2 text-sm outline-none focus:border-accent', props.className)} />; }
+function TextArea(props: JSX.IntrinsicElements['textarea']) { return <textarea {...props} className={cx('rounded-xl border border-border/80 bg-background/60 p-3 text-sm outline-none focus:border-accent', props.className)} />; }
+function formatBody(value: unknown) { if (value === null || value === undefined || value === '') return ''; if (typeof value === 'string') return value; return JSON.stringify(value, null, 2); }
+function tryFormatBody(value: unknown, headers?: Record<string, string> | string) { const text = formatBody(value); if (!text) return 'No body content.'; const contentType = typeof headers === 'object' ? Object.entries(headers).find(([k]) => k.toLowerCase() === 'content-type')?.[1] || '' : ''; if (contentType.includes('json') || /^[\[{]/.test(text.trim())) { try { return JSON.stringify(JSON.parse(text), null, 2); } catch (_err) { return text; } } return text; }
+function statusLabel(instance: RequestInstance) { const status = instance.responseStatus ? String(instance.responseStatus) : 'Not sent'; return instance.responseStatusText ? `${status} ${instance.responseStatusText}` : status; }
+function collectionRequestIds(collection: CollectionNode) { return collection.requests.map((request) => request.id); }
+function allRequests(collections: CollectionNode[]): RequestIdentity[] { return collections.flatMap((collection) => [...collection.requests, ...allRequests(collection.children)]); }
+function requestToCurl(request: RequestDetails | null) { if (!request) return ''; const headerArgs = request.headers.filter((h) => h.enabled && h.key).map((h) => ` -H ${JSON.stringify(`${h.key}: ${h.value}`)}`).join(''); const data = request.bodyContent && request.bodyType !== 'none' ? ` --data ${JSON.stringify(request.bodyContent)}` : ''; return `curl -X ${request.method}${headerArgs}${data} ${JSON.stringify(request.url)}`; }
+
+function AuthGate({ workspace, onLogin, onRegister, onGuest, onLogout, notice }: { workspace: DashboardViewModel['workspace']; onLogin: (p: { username: string; password: string }) => Promise<void>; onRegister: (p: { username: string; password: string; email?: string }) => Promise<void>; onGuest: () => Promise<void>; onLogout: () => Promise<void>; notice: Notice }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const signedIn = workspace.mode !== 'anonymous';
+  async function submit() { setBusy(true); try { if (mode === 'login') await onLogin({ username, password }); else await onRegister({ username, password, email: email || undefined }); } finally { setBusy(false); } }
+  return <Panel className="p-4">
+    <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="font-semibold">Account</h2><p className="text-sm text-muted">Login, register, or use explicit guest mode.</p></div><UserCircle2 className="h-5 w-5 text-accent" /></div>
+    {signedIn ? <div className="space-y-3"><div className="rounded-xl border border-border/80 bg-background/45 p-3 text-sm"><p className="font-medium">{workspace.user?.username ?? 'Guest'}</p><p className="text-muted">{workspace.mode === 'guest' ? 'Guest workspace in browser storage' : workspace.user?.email || 'Authenticated account'}</p></div><Button onClick={onLogout} className="w-full"><LogOut className="h-4 w-4" /> Logout</Button></div> : <div className="space-y-3"><div className="grid grid-cols-2 gap-2"><Button active={mode === 'login'} onClick={() => setMode('login')}>Login</Button><Button active={mode === 'register'} onClick={() => setMode('register')}>Register</Button></div>{mode === 'register' ? <TextInput placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} /> : null}<TextInput placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} /><TextInput placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /><Button onClick={submit} disabled={busy} className="w-full"><KeyRound className="h-4 w-4" /> {mode === 'login' ? 'Login' : 'Create account'}</Button><Button onClick={onGuest} className="w-full"><UserCircle2 className="h-4 w-4" /> Continue as guest</Button></div>}
+    {notice ? <p className={cx('mt-3 rounded-xl p-2 text-sm', notice.type === 'error' ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500')}>{notice.message}</p> : null}
+  </Panel>;
 }
 
-function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-border/80 bg-card/85 shadow-sm ${className}`}>{children}</section>;
+function CollectionTree({ collections, selectedRequestId, selectedCollectionId, onSelectRequest, onSelectCollection, onCollectionAction, onRequestAction }: { collections: CollectionNode[]; selectedRequestId?: number; selectedCollectionId?: number | null; onSelectRequest: (request: RequestIdentity) => void; onSelectCollection: (collection: CollectionNode) => void; onCollectionAction: (action: string, collection: CollectionNode) => void; onRequestAction: (action: string, request: RequestIdentity) => void }) {
+  if (collections.length === 0) return <div className="rounded-2xl border border-dashed border-border/80 bg-background/45 p-4 text-sm text-muted">No collections yet. Create one or import Postman/cURL data.</div>;
+  return <div className="space-y-3">{collections.map((collection) => <article key={collection.id} className={cx('rounded-2xl border p-3', selectedCollectionId === collection.id ? 'border-accent/50 bg-accent/5' : 'border-border/70 bg-background/45')}>
+    <button type="button" onClick={() => onSelectCollection(collection)} className="mb-2 flex w-full items-center justify-between gap-2 text-left"><span className="flex min-w-0 items-center gap-2 font-medium"><Folder className="h-4 w-4 shrink-0 text-accent" /><span className="truncate">{collection.name}</span></span><span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">{collection.requests.length}</span></button>
+    <div className="mb-2 flex flex-wrap gap-1"><Button onClick={() => onCollectionAction('rename', collection)} className="px-2 py-1 text-xs">Rename</Button><Button onClick={() => onCollectionAction('duplicate', collection)} className="px-2 py-1 text-xs">Duplicate</Button><Button onClick={() => onCollectionAction('up', collection)} className="px-2 py-1 text-xs">↑</Button><Button onClick={() => onCollectionAction('down', collection)} className="px-2 py-1 text-xs">↓</Button><Button danger onClick={() => onCollectionAction('delete', collection)} className="px-2 py-1 text-xs"><Trash2 className="h-3 w-3" /></Button></div>
+    <div className="space-y-1">{collection.requests.map((request) => <div key={request.id} className={cx('group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm', selectedRequestId === request.id ? 'bg-accent/15 text-foreground' : 'text-muted hover:bg-card hover:text-foreground')}><button type="button" onClick={() => onSelectRequest(request)} className="flex min-w-0 flex-1 items-center gap-2 text-left"><span className={cx('rounded px-1.5 py-0.5 text-[10px] font-semibold', methodBadgeStyles[request.method] ?? 'bg-slate-500/15 text-slate-500')}>{request.method}</span><FileJson className="h-3.5 w-3.5" /><span className="truncate">{request.name}</span></button><button title="Duplicate request" onClick={() => onRequestAction('duplicate', request)}>⧉</button><button title="Delete request" onClick={() => onRequestAction('delete', request)}>×</button></div>)}{collection.children.length > 0 ? <CollectionTree collections={collection.children} selectedRequestId={selectedRequestId} selectedCollectionId={selectedCollectionId} onSelectRequest={onSelectRequest} onSelectCollection={onSelectCollection} onCollectionAction={onCollectionAction} onRequestAction={onRequestAction} /> : null}</div>
+  </article>)}</div>;
 }
 
-function formatBody(value: unknown) {
-  if (value === null || value === undefined || value === '') return 'No body content for this request.';
-  if (typeof value === 'string') return value;
-  return JSON.stringify(value, null, 2);
+function PairEditor({ rows, onChange, placeholderKey = 'Header', placeholderValue = 'Value' }: { rows: KeyValuePair[]; onChange: (rows: KeyValuePair[]) => void; placeholderKey?: string; placeholderValue?: string }) {
+  const display = rows.length ? rows : [emptyPair()];
+  return <div className="space-y-2">{display.map((row, index) => <div key={index} className="grid grid-cols-[auto_1fr_1fr_auto] gap-2"><input type="checkbox" checked={row.enabled} onChange={(e) => onChange(display.map((r, i) => i === index ? { ...r, enabled: e.target.checked } : r))} /><TextInput placeholder={placeholderKey} value={row.key} onChange={(e) => onChange(display.map((r, i) => i === index ? { ...r, key: e.target.value } : r))} /><TextInput placeholder={placeholderValue} value={row.value} onChange={(e) => onChange(display.map((r, i) => i === index ? { ...r, value: e.target.value } : r))} /><Button onClick={() => onChange(display.filter((_, i) => i !== index))}>×</Button></div>)}<Button onClick={() => onChange([...display, emptyPair()])}><Plus className="h-4 w-4" /> Add row</Button></div>;
 }
 
-function statusLabel(instance: RequestInstance) {
-  const status = instance.responseStatus ? String(instance.responseStatus) : 'Not sent';
-  return instance.responseStatusText ? `${status} ${instance.responseStatusText}` : status;
+function RequestBuilder({ request, collections, onChange, onSave, onSend, sending }: { request: RequestDetails | null; collections: CollectionNode[]; onChange: (request: RequestDetails) => void; onSave: () => void; onSend: () => void; sending: boolean }) {
+  const [tab, setTab] = useState<'params' | 'headers' | 'auth' | 'body' | 'form'>('headers');
+  if (!request) return <Panel className="flex min-h-[420px] items-center justify-center p-8 text-center text-muted">Select or create a request to start building.</Panel>;
+  const update = (patch: Partial<RequestDetails>) => onChange({ ...request, ...patch });
+  const bodyTypes: RequestBodyType[] = ['none', 'json', 'xml', 'text', 'form-data', 'form-urlencoded'];
+  const authTypes: AuthType[] = ['none', 'bearer', 'basic', 'api-key'];
+  return <Panel className="overflow-hidden"><div className="border-b border-border/80 p-4"><div className="mb-3 grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)_auto_auto]"><Select value={request.method} onChange={(e) => update({ method: e.target.value })}>{methods.map((m) => <option key={m}>{m}</option>)}</Select><TextInput value={request.url} placeholder="https://api.example.com/resource" onChange={(e) => update({ url: e.target.value })} /><Button onClick={onSave}><Save className="h-4 w-4" /> Save</Button><Button active onClick={onSend} disabled={sending}><Send className="h-4 w-4" /> {sending ? 'Sending…' : 'Send'}</Button></div><div className="grid gap-3 md:grid-cols-[1fr_220px]"><TextInput value={request.name} onChange={(e) => update({ name: e.target.value })} placeholder="Request name" /><Select value={request.collectionId} onChange={(e) => update({ collectionId: Number(e.target.value) })}>{flattenCollections(collections).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></div></div><div className="flex flex-wrap gap-2 border-b border-border/80 p-3">{(['params', 'headers', 'auth', 'body', 'form'] as const).map((item) => <Button key={item} active={tab === item} onClick={() => setTab(item)}>{item}</Button>)}</div><div className="p-4">{tab === 'params' ? <PairEditor rows={request.params} onChange={(params) => update({ params })} placeholderKey="Query key" /> : null}{tab === 'headers' ? <PairEditor rows={request.headers} onChange={(headers) => update({ headers })} /> : null}{tab === 'auth' ? <div className="grid gap-3 md:grid-cols-2"><Field label="Auth type"><Select value={request.authType} onChange={(e) => update({ authType: e.target.value })}>{authTypes.map((a) => <option key={a}>{a}</option>)}</Select></Field><Field label="Auth data JSON"><TextArea value={JSON.stringify(request.authData ?? {}, null, 2)} onChange={(e) => { try { update({ authData: JSON.parse(e.target.value) }); } catch (_err) { /* keep typing */ } }} /></Field></div> : null}{tab === 'body' ? <div className="grid gap-3"><div className="grid gap-3 md:grid-cols-2"><Field label="Body mode"><Select value={request.bodyType} onChange={(e) => update({ bodyType: e.target.value })}>{bodyTypes.map((b) => <option key={b}>{b}</option>)}</Select></Field><Field label="Raw content type"><TextInput value={request.bodyRawType} onChange={(e) => update({ bodyRawType: e.target.value })} /></Field></div><TextArea rows={12} value={request.bodyContent} onChange={(e) => update({ bodyContent: e.target.value })} placeholder="Raw body content" /></div> : null}{tab === 'form' ? <div className="space-y-2">{(request.formData.length ? request.formData : [emptyField()]).map((field, index, fields) => <div key={index} className="grid grid-cols-[auto_100px_1fr_1fr_auto] gap-2"><input type="checkbox" checked={field.enabled} onChange={(e) => update({ formData: fields.map((f, i) => i === index ? { ...f, enabled: e.target.checked } : f) })} /><Select value={field.type || 'text'} onChange={(e) => update({ formData: fields.map((f, i) => i === index ? { ...f, type: e.target.value as 'text' | 'file' } : f) })}><option>text</option><option>file</option></Select><TextInput placeholder="Field" value={field.key} onChange={(e) => update({ formData: fields.map((f, i) => i === index ? { ...f, key: e.target.value } : f) })} /><TextInput placeholder="Value / file name" value={field.value} onChange={(e) => update({ formData: fields.map((f, i) => i === index ? { ...f, value: e.target.value } : f) })} /><Button onClick={() => update({ formData: fields.filter((_, i) => i !== index) })}>×</Button></div>)}<Button onClick={() => update({ formData: [...request.formData, emptyField()] })}><Plus className="h-4 w-4" /> Add form field</Button></div> : null}</div></Panel>;
 }
 
-function requestParams(request: RequestDetails | null): KeyValuePair[] {
-  if (!request?.url) return [];
-  try {
-    const parsed = new URL(request.url);
-    return Array.from(parsed.searchParams.entries()).map(([key, value]) => ({ key, value, enabled: true }));
-  } catch (_err) {
-    return request.params;
-  }
-}
-
-function CollectionTree({ collections, selectedRequestId, onSelectRequest }: { collections: CollectionNode[]; selectedRequestId?: number; onSelectRequest: (request: RequestIdentity) => void }) {
-  if (collections.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-border/80 bg-background/45 p-4 text-sm text-muted">
-        No collections yet. Import a Postman collection or create a collection in the classic workspace.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {collections.map((collection) => (
-        <article key={collection.id} className="rounded-2xl border border-border/70 bg-background/45 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex min-w-0 items-center gap-2 font-medium"><Folder className="h-4 w-4 shrink-0 text-accent" /> <span className="truncate">{collection.name}</span></div>
-            <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">{collection.requests.length}</span>
-          </div>
-          <div className="space-y-1">
-            {collection.requests.map((request) => (
-              <button
-                key={request.id}
-                type="button"
-                onClick={() => onSelectRequest(request)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm ${
-                  selectedRequestId === request.id ? 'bg-accent/15 text-foreground' : 'text-muted hover:bg-card hover:text-foreground'
-                }`}
-              >
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${methodBadgeStyles[request.method] ?? 'bg-slate-500/15 text-slate-500'}`}>{request.method}</span>
-                <FileJson className="h-3.5 w-3.5" />
-                <span className="truncate">{request.name}</span>
-              </button>
-            ))}
-            {collection.children.length > 0 ? <CollectionTree collections={collection.children} selectedRequestId={selectedRequestId} onSelectRequest={onSelectRequest} /> : null}
-          </div>
-        </article>
-      ))}
-    </div>
-  );
+function ResponseViewer({ response, loading, error, onSaveSnapshot }: { response: DashboardViewModel['lastResponse']; loading: boolean; error: string; onSaveSnapshot: () => void }) {
+  return <Panel className="overflow-hidden"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 bg-background/35 p-4"><div><h2 className="font-semibold">Response</h2><p className="text-sm text-muted">Status, timing, headers, and formatted body.</p></div><div className="flex flex-wrap gap-2 text-sm"><span className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-600 dark:text-emerald-300">Status {response?.status || '—'} {response?.statusText || ''}</span><span className="rounded-full border border-border/80 px-3 py-1 text-muted">{response?.responseTimeMs ?? '—'} ms</span><span className="rounded-full border border-border/80 px-3 py-1 text-muted">{response?.responseSize ?? '—'}</span><Button onClick={onSaveSnapshot}><Save className="h-4 w-4" /> Save Snapshot</Button><Button onClick={() => navigator.clipboard?.writeText(tryFormatBody(response?.body, response?.headers))}><Copy className="h-4 w-4" /> Copy</Button></div></div>{loading ? <div className="p-8 text-muted">Loading response…</div> : error ? <div className="m-4 rounded-xl bg-rose-500/10 p-4 text-rose-500">{error}</div> : <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]"><pre className="min-h-72 overflow-auto rounded-xl bg-slate-950 p-4 text-sm leading-6 text-slate-100"><code>{tryFormatBody(response?.body, response?.headers)}</code></pre><div className="rounded-xl border border-border/80 bg-background/45 p-3 text-sm text-muted"><h3 className="mb-2 font-medium text-foreground">Headers</h3>{Object.entries(response?.headers ?? {}).length > 0 ? Object.entries(response?.headers ?? {}).map(([key, value]) => <p key={key} className="break-all font-mono">{key}: {value}</p>) : <p>No response headers yet.</p>}</div></div>}</Panel>;
 }
 
 export default function PostBoyDashboard() {
   const [model, setModel] = useState<DashboardViewModel>(() => createInitialDashboardViewModel());
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('collections');
+  const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
+  const [sending, setSending] = useState(false);
+  const [responseError, setResponseError] = useState('');
+  const [importText, setImportText] = useState('');
+  const [envVars, setEnvVars] = useState<Record<string, string>>({});
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => loadThemePreference());
+  const [panels, setPanels] = useState(() => loadPanelState());
   const selectedRequest = model.selectedRequest.data;
-  const queryParams = useMemo(() => requestParams(selectedRequest), [selectedRequest]);
-  const latestResponse = model.lastResponse;
+  const requestHistory = useMemo(() => allRequests(model.collections.data), [model.collections.data]);
 
+  useEffect(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); document.documentElement.dataset.theme = theme; saveThemePreference(theme); }, [theme]);
+  useEffect(() => { refreshWorkspace(); }, []);
   useEffect(() => {
-    let active = true;
+    const user = model.workspace.user;
+    const key = user && !user.isGuest && user.id !== null ? `postboy_env_user_${user.id}` : null;
+    if (!key) { setEnvVars({}); return; }
+    try { setEnvVars(JSON.parse(localStorage.getItem(key) || '{}')); } catch (_err) { setEnvVars({}); }
+  }, [model.workspace.user?.id, model.workspace.user?.isGuest]);
+  useEffect(() => {
+    const user = model.workspace.user;
+    const key = user && !user.isGuest && user.id !== null ? `postboy_env_user_${user.id}` : null;
+    if (key) localStorage.setItem(key, JSON.stringify(envVars));
+  }, [envVars, model.workspace.user?.id, model.workspace.user?.isGuest]);
 
+  async function refreshWorkspace(selectFirst = true) {
     setModel((current) => ({ ...current, collections: loadingLoadable(current.collections.data) }));
-
-    Promise.all([loadWorkspaceUser(), loadCollections()])
-      .then(([workspace, collections]) => {
-        if (!active) return;
-        const firstRequest = firstRequestInCollections(collections);
-        setModel((current) => ({ ...current, workspace, collections: readyLoadable(collections) }));
-        if (firstRequest) {
-          selectRequest(firstRequest.id);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!active) return;
-        setModel((current) => ({ ...current, collections: errorLoadable(current.collections.data, err instanceof Error ? err.message : 'Unable to load collections') }));
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  function selectRequest(requestId: number) {
-    setModel((current) => ({
-      ...current,
-      selectedRequest: loadingLoadable(current.selectedRequest.data),
-      responseHistory: loadingLoadable(current.responseHistory.data),
-    }));
-
-    loadRequestDetails(requestId)
-      .then((request) => {
-        setModel((current) => ({
-          ...current,
-          selectedRequest: readyLoadable(request),
-          responseHistory: readyLoadable(request.instances),
-        }));
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : 'Unable to load request details';
-        setModel((current) => ({
-          ...current,
-          selectedRequest: errorLoadable(current.selectedRequest.data, message),
-          responseHistory: errorLoadable(current.responseHistory.data, message),
-        }));
-      });
+    try { const [workspace, collections] = await Promise.all([loadWorkspaceUser(), loadCollections()]); setModel((current) => ({ ...current, workspace, collections: readyLoadable(collections) })); const first = firstRequestInCollections(collections); if (selectFirst && first) void selectRequest(first.id); }
+    catch (err) { setModel((current) => ({ ...current, collections: errorLoadable(current.collections.data, err instanceof Error ? err.message : 'Unable to load collections') })); }
   }
+  async function refreshCollections() { const collections = await loadCollections(); setModel((current) => ({ ...current, collections: readyLoadable(collections) })); }
+  async function selectRequest(requestId: number) { setModel((current) => ({ ...current, selectedRequest: loadingLoadable(current.selectedRequest.data), responseHistory: loadingLoadable([]) })); try { const details = await loadRequestDetails(requestId); setSelectedCollectionId(details.collectionId); setModel((current) => ({ ...current, selectedRequest: readyLoadable(details), responseHistory: readyLoadable(details.instances) })); } catch (err) { setModel((current) => ({ ...current, selectedRequest: errorLoadable(current.selectedRequest.data, err instanceof Error ? err.message : 'Unable to load request') })); } }
+  function setSelectedRequest(request: RequestDetails) { setModel((current) => ({ ...current, selectedRequest: readyLoadable(request) })); }
+  async function saveCurrentRequest() { if (!selectedRequest) return; const saved = await updateRequest(selectedRequest); setSelectedRequest(saved); await refreshCollections(); setNotice({ type: 'success', message: 'Request saved.' }); }
+  async function sendCurrentRequest() { if (!selectedRequest) return; setSending(true); setResponseError(''); try { const response = await sendProxyRequest({ method: selectedRequest.method, url: selectedRequest.url, headers: headersToProxyMap(selectedRequest.headers), body: selectedRequest.bodyType === 'none' || selectedRequest.bodyType === 'form-data' ? null : selectedRequest.bodyContent, contentType: selectedRequest.bodyType === 'form-data' ? 'multipart/form-data' : selectedRequest.bodyRawType, formData: selectedRequest.bodyType === 'form-data' || selectedRequest.bodyType === 'form-urlencoded' ? selectedRequest.formData.filter((f) => f.enabled && f.key) : undefined, auth: { type: selectedRequest.authType, data: selectedRequest.authData } }); setModel((current) => ({ ...current, lastResponse: response })); } catch (err) { setResponseError(err instanceof Error ? err.message : 'Request failed'); } finally { setSending(false); } }
+  async function saveSnapshot() { if (!selectedRequest || !model.lastResponse) return; const instance = await createRequestInstance(selectedRequest.id, { ...selectedRequest, requestId: selectedRequest.id, responseStatus: model.lastResponse.status, responseStatusText: model.lastResponse.statusText, responseHeaders: model.lastResponse.headers, responseBody: model.lastResponse.body, responseTimeMs: model.lastResponse.responseTimeMs ?? null, responseSize: model.lastResponse.responseSize ?? null }); setModel((current) => ({ ...current, responseHistory: readyLoadable([instance, ...current.responseHistory.data]) })); setNotice({ type: 'success', message: 'Snapshot saved.' }); }
+  async function createNewCollection() { const name = window.prompt('Collection name', 'New collection'); if (!name) return; const created = await createCollection({ name, parent_id: selectedCollectionId }); setSelectedCollectionId(created.id); await refreshCollections(); }
+  async function createNewRequest() { const collectionId = selectedCollectionId ?? flattenCollections(model.collections.data)[0]?.id; if (!collectionId) { setNotice({ type: 'error', message: 'Create a collection first.' }); return; } const created = await createRequest({ collectionId, name: 'New request', method: 'GET', url: '' }); await refreshCollections(); await selectRequest(created.id); }
+  async function handleCollectionAction(action: string, collection: CollectionNode) { if (action === 'rename') { const name = window.prompt('Collection name', collection.name); if (name) await updateCollection(collection.id, { name }); } if (action === 'duplicate') await duplicateCollection(collection.id); if (action === 'delete' && window.confirm(`Delete ${collection.name}?`)) await deleteCollection(collection.id); if (action === 'up' || action === 'down') { const siblings = flattenCollections(model.collections.data).filter((c) => c.parentId === collection.parentId).sort((a, b) => a.sortOrder - b.sortOrder); const index = siblings.findIndex((c) => c.id === collection.id); const swap = action === 'up' ? index - 1 : index + 1; if (swap >= 0 && swap < siblings.length) { [siblings[index], siblings[swap]] = [siblings[swap], siblings[index]]; await reorderCollections(collection.parentId, siblings.map((c) => c.id)); } } await refreshCollections(); }
+  async function handleRequestAction(action: string, request: RequestIdentity) { if (action === 'duplicate') { const copy = await duplicateRequest(request.id); await refreshCollections(); await selectRequest(copy.id); } if (action === 'delete' && window.confirm(`Delete ${request.name}?`)) { await deleteRequest(request.id); await refreshCollections(); setModel((current) => ({ ...current, selectedRequest: readyLoadable(null) })); } }
+  async function moveSelectedRequest(direction: 'up' | 'down') { if (!selectedRequest) return; const collection = flattenCollections(model.collections.data).find((c) => c.id === selectedRequest.collectionId); if (!collection) return; const ids = collectionRequestIds(collection); const index = ids.indexOf(selectedRequest.id); const swap = direction === 'up' ? index - 1 : index + 1; if (swap >= 0 && swap < ids.length) { [ids[index], ids[swap]] = [ids[swap], ids[index]]; await reorderRequests(collection.id, ids); await refreshCollections(); } }
+  async function importData(type: 'postman' | 'curl') { if (!importText.trim()) return; try { const data = type === 'postman' ? JSON.parse(importText) : importText; const outcome = await importWorkspaceData({ type, data }); setModel((current) => ({ ...current, importOutcome: outcome })); if (type === 'curl' && 'request' in outcome && selectedRequest) setSelectedRequest({ ...selectedRequest, ...outcome.request, id: selectedRequest.id, collectionId: selectedRequest.collectionId } as RequestDetails); await refreshCollections(); setNotice({ type: 'success', message: `${type} import completed.` }); } catch (err) { setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Import failed' }); } }
+  async function authLogin(payload: { username: string; password: string }) { const workspace = await login(payload); setModel((current) => ({ ...current, workspace })); await refreshWorkspace(); }
+  async function authRegister(payload: { username: string; password: string; email?: string }) { const result = await register(payload); setModel((current) => ({ ...current, workspace: result.workspace })); setNotice({ type: 'success', message: result.recoveryKey ? `Account created. Recovery key: ${result.recoveryKey}` : 'Account created.' }); await refreshWorkspace(); }
+  async function authGuest() { const workspace = await continueAsGuest(); setModel((current) => ({ ...current, workspace })); await refreshWorkspace(); }
+  async function authLogout() { const workspace = await logout(); setModel((current) => ({ ...current, workspace, selectedRequest: readyLoadable(null), lastResponse: null })); await refreshWorkspace(false); }
 
-  function refreshHistory(requestId: number) {
-    setModel((current) => ({ ...current, responseHistory: loadingLoadable(current.responseHistory.data) }));
-    loadResponseHistory(requestId)
-      .then((history) => setModel((current) => ({ ...current, responseHistory: readyLoadable(history) })))
-      .catch((err: unknown) => setModel((current) => ({ ...current, responseHistory: errorLoadable(current.responseHistory.data, err instanceof Error ? err.message : 'Unable to load response history') })));
-  }
-
-  function handleSend() {
-    if (!selectedRequest) return;
-    setModel((current) => ({ ...current, lastResponse: null }));
-    sendProxyRequest({
-      method: selectedRequest.method,
-      url: selectedRequest.url,
-      headers: headersToProxyMap(selectedRequest.headers),
-      body: selectedRequest.bodyType === 'none' ? null : selectedRequest.bodyContent,
-      contentType: selectedRequest.bodyRawType,
-      formData: selectedRequest.formData,
-      verifySsl: true,
-    })
-      .then((response) => {
-        setModel((current) => ({ ...current, lastResponse: response }));
-        refreshHistory(selectedRequest.id);
-      })
-      .catch((err: unknown) => {
-        setModel((current) => ({
-          ...current,
-          lastResponse: {
-            status: 0,
-            statusText: 'Error',
-            headers: {},
-            body: err instanceof Error ? err.message : 'Unable to send request',
-            error: err instanceof Error ? err.message : 'Unable to send request',
-          },
-        }));
-      });
-  }
-
-  const workspaceLabel = model.workspace.user?.username ?? (model.workspace.mode === 'guest' ? 'Guest workspace' : 'Signed-out workspace');
-  const workspaceStatus = model.workspace.mode === 'authenticated' ? 'Authenticated session active' : model.workspace.mode === 'guest' ? 'Temporary guest session active' : 'Sign in or continue as guest';
-
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="grid min-h-screen grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_300px]">
-        <aside className="border-b border-border/80 bg-[hsl(var(--bg-panel-1)/0.95)] p-4 xl:border-b-0 xl:border-r">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/20 text-accent">
-              <Send className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-[hsl(var(--text-meta))]">API Testing Client</p>
-              <h1 className="text-xl font-semibold">PostBoy</h1>
-            </div>
-          </div>
-
-          <div className="mb-4 rounded-2xl border border-border/80 bg-background/55 p-3">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-              <UserCircle2 className="h-4 w-4 text-accent" /> {workspaceLabel}
-            </div>
-            <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-300">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" /> {workspaceStatus}
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <ShellButton><LogOut className="h-4 w-4" /> Log out</ShellButton>
-              <ShellButton><Moon className="h-4 w-4" /> Theme</ShellButton>
-            </div>
-          </div>
-
-          <div className="mb-4 grid grid-cols-3 gap-2">
-            <ShellButton active><Folder className="h-4 w-4" /> Collections</ShellButton>
-            <ShellButton><History className="h-4 w-4" /> History</ShellButton>
-            <ShellButton><Globe2 className="h-4 w-4" /> Environ</ShellButton>
-          </div>
-
-          <div className="mb-4 flex gap-2">
-            <button type="button" className="flex-1 rounded-xl bg-accent px-3 py-2 text-sm font-semibold text-black shadow-lg shadow-orange-500/20">
-              <Plus className="mr-1 inline h-4 w-4" /> New Collection
-            </button>
-            <ShellButton><Upload className="h-4 w-4" /> Import</ShellButton>
-          </div>
-
-          <label className="mb-4 flex items-center gap-2 rounded-xl border border-border/80 bg-background/60 px-3 py-2 text-sm text-muted">
-            <Search className="h-4 w-4" />
-            <input className="w-full bg-transparent outline-none placeholder:text-muted" placeholder="Search collections, folders, requests…" />
-          </label>
-
-          {model.collections.status === 'loading' ? <div className="rounded-2xl border border-border/70 bg-background/45 p-4 text-sm text-muted">Loading workspace collections…</div> : null}
-          {model.collections.status === 'error' ? <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-600">{model.collections.error}</div> : null}
-          <CollectionTree collections={model.collections.data} selectedRequestId={selectedRequest?.id} onSelectRequest={(request) => selectRequest(request.id)} />
-        </aside>
-
-        <main className="flex min-w-0 flex-col p-4 md:p-5">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <ShellButton active>{selectedRequest?.name ?? 'No request selected'}</ShellButton>
-            {selectedRequest ? <ShellButton>{selectedRequest.method} {selectedRequest.url || 'Untitled URL'}</ShellButton> : null}
-            <ShellButton><Plus className="h-4 w-4" /> New tab</ShellButton>
-          </div>
-
-          <Panel className="mb-4 p-4">
-            <div className="grid gap-3 lg:grid-cols-[160px_minmax(0,1fr)_110px]">
-              <button type="button" className="flex items-center justify-between rounded-xl border border-border/80 bg-background/60 px-3 py-3 text-left font-semibold text-sky-600 dark:text-sky-300">
-                {selectedRequest?.method ?? 'GET'} <ChevronDown className="h-4 w-4 text-muted" />
-              </button>
-              <input className="rounded-xl border border-border/80 bg-background/60 px-4 py-3 text-sm outline-none focus:border-accent" value={selectedRequest?.url ?? ''} readOnly placeholder="Select a request to load its URL" />
-              <button type="button" onClick={handleSend} disabled={!selectedRequest?.url} className="rounded-xl bg-accent px-4 py-3 font-semibold text-black shadow-lg shadow-orange-500/25 disabled:cursor-not-allowed disabled:opacity-50">
-                <Send className="mr-2 inline h-4 w-4" /> Send
-              </button>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-              <ShellButton><Settings2 className="h-4 w-4" /> Server proxy</ShellButton>
-              <ShellButton><Lock className="h-4 w-4" /> {selectedRequest?.authType === 'none' ? 'Credentials omitted' : `${selectedRequest?.authType} auth configured`}</ShellButton>
-              <ShellButton><Wand2 className="h-4 w-4" /> Advanced options</ShellButton>
-            </div>
-          </Panel>
-
-          <div className="grid flex-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-            <Panel className="overflow-hidden">
-              <div className="flex flex-wrap border-b border-border/80 bg-background/35 p-2">
-                {['Params', 'Headers', 'Body', 'Auth'].map((tab, index) => (
-                  <button key={tab} type="button" className={`rounded-xl px-4 py-2 text-sm font-medium ${index === 0 ? 'bg-accent/15 text-foreground' : 'text-muted hover:text-foreground'}`}>{tab}</button>
-                ))}
-              </div>
-              <div className="p-4">
-                <div className="mb-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-sm text-sky-700 dark:text-sky-200">
-                  Query parameters are derived from the selected request URL as soon as details load.
-                </div>
-                <div className="overflow-hidden rounded-xl border border-border/80">
-                  <table className="w-full min-w-[620px] text-left text-sm">
-                    <thead className="bg-background/70 text-xs uppercase tracking-wide text-muted">
-                      <tr><th className="px-3 py-2">On</th><th className="px-3 py-2">Key</th><th className="px-3 py-2">Value</th><th className="px-3 py-2">Description</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/70">
-                      {queryParams.length > 0 ? queryParams.map((param) => (
-                        <tr key={`${param.key}-${param.value}`} className="bg-card/40">
-                          <td className="px-3 py-2">{param.enabled ? <Check className="h-4 w-4 text-emerald-500" /> : null}</td>
-                          <td className="px-3 py-2 font-mono text-foreground">{param.key}</td>
-                          <td className="px-3 py-2 font-mono text-muted">{param.value}</td>
-                          <td className="px-3 py-2 text-muted">{param.description ?? ''}</td>
-                        </tr>
-                      )) : (
-                        <tr className="bg-card/40"><td colSpan={4} className="px-3 py-4 text-center text-muted">No query parameters.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </Panel>
-
-            <Panel className="flex min-h-[420px] flex-col overflow-hidden">
-              <div className="border-b border-border/80 bg-background/35 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="font-semibold">Request body</h2>
-                  <span className="rounded-full bg-accent/10 px-2 py-1 text-xs text-accent">{selectedRequest?.bodyType ?? 'none'}</span>
-                </div>
-                <div className="flex flex-wrap gap-2 text-sm text-muted">
-                  {(selectedRequest?.headers ?? []).map((header) => <span key={header.key} className="rounded-full border border-border/70 px-2 py-1 font-mono">{header.key}: {header.value}</span>)}
-                </div>
-              </div>
-              <pre className="flex-1 overflow-auto p-4 text-sm leading-6 text-[hsl(var(--text-secondary))]"><code>{formatBody(selectedRequest?.bodyContent)}</code></pre>
-            </Panel>
-          </div>
-
-          <Panel className="mt-4 overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 bg-background/35 p-4">
-              <div>
-                <h2 className="font-semibold">Response</h2>
-                <p className="text-sm text-muted">Send a request to inspect status, timing, headers, and body.</p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-sm">
-                <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-600 dark:text-emerald-300">Status {latestResponse?.status ?? '—'}</span>
-                <span className="rounded-full border border-border/80 px-3 py-1 text-muted">{latestResponse?.responseTimeMs ?? '—'} ms</span>
-                <span className="rounded-full border border-border/80 px-3 py-1 text-muted">{latestResponse?.responseSize ?? '—'}</span>
-                <ShellButton><Save className="h-4 w-4" /> Save Snapshot</ShellButton>
-                <ShellButton><Copy className="h-4 w-4" /> Copy</ShellButton>
-              </div>
-            </div>
-            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-              <pre className="overflow-auto rounded-xl bg-slate-950 p-4 text-sm leading-6 text-slate-100"><code>{formatBody(latestResponse?.body)}</code></pre>
-              <div className="rounded-xl border border-border/80 bg-background/45 p-3 text-sm text-muted">
-                <h3 className="mb-2 font-medium text-foreground">Headers</h3>
-                {Object.entries(latestResponse?.headers ?? {}).length > 0 ? Object.entries(latestResponse?.headers ?? {}).map(([key, value]) => <p key={key} className="font-mono">{key}: {value}</p>) : <p>No response headers yet.</p>}
-              </div>
-            </div>
-          </Panel>
-        </main>
-
-        <aside className="border-t border-border/80 bg-[hsl(var(--bg-panel-2)/0.95)] p-4 xl:border-l xl:border-t-0">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Tools</h2>
-            <Settings2 className="h-4 w-4 text-muted" />
-          </div>
-
-          <Panel className="mb-4 p-4">
-            <h3 className="mb-2 flex items-center gap-2 font-medium"><Database className="h-4 w-4 text-accent" /> Snapshot Management</h3>
-            <p className="mb-3 text-sm text-muted">Save useful responses and reload them while debugging request changes.</p>
-            <button type="button" className="w-full rounded-xl border border-border/80 px-3 py-2 text-sm text-muted hover:border-accent/40 hover:text-foreground">Save Snapshot from Response</button>
-          </Panel>
-
-          <Panel className="mb-4 p-4">
-            <h3 className="mb-2 flex items-center gap-2 font-medium"><Code2 className="h-4 w-4 text-accent" /> cURL Output</h3>
-            <textarea className="min-h-36 w-full rounded-xl border border-border/80 bg-background/60 p-3 font-mono text-xs outline-none focus:border-accent" readOnly value={selectedRequest ? `curl -X ${selectedRequest.method} "${selectedRequest.url}"` : ''} />
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <ShellButton><Braces className="h-4 w-4" /> Generate</ShellButton>
-              <ShellButton><Copy className="h-4 w-4" /> Copy</ShellButton>
-            </div>
-          </Panel>
-
-          <Panel className="p-4">
-            <h3 className="mb-3 flex items-center gap-2 font-medium"><KeyRound className="h-4 w-4 text-accent" /> Request Auth</h3>
-            <div className="rounded-xl border border-border/80 bg-background/45 p-3 text-sm text-muted">
-              <p>Type: <span className="font-mono text-foreground">{selectedRequest?.authType ?? 'none'}</span></p>
-              <p className="mt-2 break-all font-mono text-xs">{formatBody(selectedRequest?.authData ?? {})}</p>
-            </div>
-            <button type="button" className="mt-3 w-full rounded-xl bg-accent px-3 py-2 text-sm font-semibold text-black"><Download className="mr-2 inline h-4 w-4" /> Export Collection</button>
-          </Panel>
-
-          <div className="mt-4 rounded-2xl border border-border/80 bg-background/45 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-medium">Recent history</h3>
-              {model.responseHistory.status === 'loading' ? <Clock3 className="h-4 w-4 text-muted" /> : null}
-            </div>
-            <div className="space-y-2">
-              {model.responseHistory.data.length > 0 ? model.responseHistory.data.map((item) => (
-                <div key={item.id} className="rounded-xl border border-border/60 p-2 text-xs">
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className={`rounded px-1.5 py-0.5 font-semibold ${methodBadgeStyles[item.method] ?? 'bg-slate-500/15 text-slate-500'}`}>{item.method}</span>
-                    <span className="text-muted">{item.updatedAt ?? item.createdAt ?? ''}</span>
-                  </div>
-                  <p className="truncate font-mono text-sm">{item.url}</p>
-                  <p className="text-muted">{statusLabel(item)}</p>
-                </div>
-              )) : <p className="text-sm text-muted">No saved response history for this request.</p>}
-            </div>
-          </div>
-        </aside>
-      </div>
-    </div>
-  );
+  return <div className="min-h-screen bg-background text-foreground"><header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 bg-[hsl(var(--bg-panel-1)/0.92)] px-4 py-3 backdrop-blur"><div><h1 className="text-xl font-bold">PostBoy React Dashboard</h1><p className="text-sm text-muted">A React rebuild of the classic workspace features.</p></div><div className="flex flex-wrap gap-2"><Button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><Moon className="h-4 w-4" /> {theme}</Button><Button onClick={() => { const collapsed = !panels.sidebarCollapsed; setPanels({ ...panels, sidebarCollapsed: collapsed }); savePanelCollapsedState('sidebar', collapsed); }}><ChevronDown className="h-4 w-4" /> Sidebar</Button><Button onClick={() => { const collapsed = !panels.rightSidebarCollapsed; setPanels({ ...panels, rightSidebarCollapsed: collapsed }); savePanelCollapsedState('rightSidebar', collapsed); }}><Settings2 className="h-4 w-4" /> Tools</Button></div></header><div className={cx('grid min-h-[calc(100vh-73px)]', panels.sidebarCollapsed ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : panels.rightSidebarCollapsed ? 'xl:grid-cols-[340px_minmax(0,1fr)]' : 'xl:grid-cols-[340px_minmax(0,1fr)_360px]')}>
+    {!panels.sidebarCollapsed ? <aside className="border-r border-border/80 bg-[hsl(var(--bg-panel-2)/0.95)] p-4"><AuthGate workspace={model.workspace} onLogin={authLogin} onRegister={authRegister} onGuest={authGuest} onLogout={authLogout} notice={notice} /><div className="my-4 grid grid-cols-3 gap-2">{(['collections', 'history', 'environment'] as SidebarTab[]).map((tab) => <Button key={tab} active={sidebarTab === tab} onClick={() => setSidebarTab(tab)}>{tab === 'collections' ? <Folder className="h-4 w-4" /> : tab === 'history' ? <History className="h-4 w-4" /> : <Database className="h-4 w-4" />}{tab}</Button>)}</div>{sidebarTab === 'collections' ? <div className="space-y-3"><div className="grid grid-cols-2 gap-2"><Button onClick={createNewCollection}><Plus className="h-4 w-4" /> Collection</Button><Button onClick={createNewRequest}><Plus className="h-4 w-4" /> Request</Button></div><CollectionTree collections={model.collections.data} selectedRequestId={selectedRequest?.id} selectedCollectionId={selectedCollectionId} onSelectCollection={(c) => setSelectedCollectionId(c.id)} onSelectRequest={(r) => selectRequest(r.id)} onCollectionAction={handleCollectionAction} onRequestAction={handleRequestAction} /></div> : null}{sidebarTab === 'history' ? <div className="space-y-2">{requestHistory.map((request) => <button key={request.id} onClick={() => selectRequest(request.id)} className="w-full rounded-xl border border-border/70 p-3 text-left text-sm hover:border-accent/50"><span className={cx('mr-2 rounded px-1.5 py-0.5 text-[10px] font-semibold', methodBadgeStyles[request.method] ?? 'bg-slate-500/15')}>{request.method}</span>{request.name}<p className="truncate font-mono text-xs text-muted">{request.url}</p></button>)}</div> : null}{sidebarTab === 'environment' ? <div className="space-y-2"><p className="text-sm text-muted">Environment variables persist locally for the React workspace.</p>{Object.entries(envVars).map(([key, value]) => <div key={key} className="grid grid-cols-[1fr_1fr_auto] gap-2"><TextInput value={key} readOnly /><TextInput value={value} onChange={(e) => setEnvVars({ ...envVars, [key]: e.target.value })} /><Button onClick={() => { const next = { ...envVars }; delete next[key]; setEnvVars(next); }}>×</Button></div>)}<Button onClick={() => setEnvVars({ ...envVars, NEW_VAR: '' })}><Plus className="h-4 w-4" /> Add variable</Button></div> : null}</aside> : null}
+    <main className="space-y-4 overflow-auto p-4"><RequestBuilder request={selectedRequest} collections={model.collections.data} onChange={setSelectedRequest} onSave={saveCurrentRequest} onSend={sendCurrentRequest} sending={sending} /><div className="flex flex-wrap gap-2"><Button onClick={() => moveSelectedRequest('up')}>Request ↑</Button><Button onClick={() => moveSelectedRequest('down')}>Request ↓</Button></div><ResponseViewer response={model.lastResponse} loading={sending} error={responseError} onSaveSnapshot={saveSnapshot} /></main>
+    {!panels.rightSidebarCollapsed ? <aside className="border-l border-border/80 bg-[hsl(var(--bg-panel-2)/0.95)] p-4"><Panel className="mb-4 p-4"><h3 className="mb-2 flex items-center gap-2 font-medium"><Upload className="h-4 w-4 text-accent" /> Import / Export</h3><TextArea rows={8} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Paste Postman JSON or cURL command" className="w-full font-mono text-xs" /><div className="mt-3 grid grid-cols-2 gap-2"><Button onClick={() => importData('postman')}><Upload className="h-4 w-4" /> Postman</Button><Button onClick={() => importData('curl')}><Braces className="h-4 w-4" /> cURL</Button></div><Button className="mt-2 w-full" onClick={() => navigator.clipboard?.writeText(JSON.stringify(model.collections.data, null, 2))}><Download className="h-4 w-4" /> Export JSON</Button></Panel><Panel className="mb-4 p-4"><h3 className="mb-2 flex items-center gap-2 font-medium"><Wand2 className="h-4 w-4 text-accent" /> cURL Output</h3><TextArea readOnly rows={6} value={requestToCurl(selectedRequest)} className="w-full font-mono text-xs" /><Button className="mt-2 w-full" onClick={() => navigator.clipboard?.writeText(requestToCurl(selectedRequest))}><Copy className="h-4 w-4" /> Copy</Button></Panel><Panel className="mb-4 p-4"><h3 className="mb-3 flex items-center gap-2 font-medium"><KeyRound className="h-4 w-4 text-accent" /> Request Auth</h3><div className="rounded-xl border border-border/80 bg-background/45 p-3 text-sm text-muted"><p>Type: <span className="font-mono text-foreground">{selectedRequest?.authType ?? 'none'}</span></p><p className="mt-2 break-all font-mono text-xs">{formatBody(selectedRequest?.authData ?? {})}</p></div></Panel><Panel className="p-4"><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-medium">Snapshots</h3>{model.responseHistory.status === 'loading' ? <Clock3 className="h-4 w-4 text-muted" /> : null}</div><div className="space-y-2">{model.responseHistory.data.length > 0 ? model.responseHistory.data.map((item) => <div key={item.id} className="rounded-xl border border-border/60 p-2 text-xs"><div className="mb-1 flex items-center justify-between"><span className={cx('rounded px-1.5 py-0.5 font-semibold', methodBadgeStyles[item.method] ?? 'bg-slate-500/15')}>{item.method}</span><button onClick={async () => { await deleteRequestInstance(item.id); setModel((current) => ({ ...current, responseHistory: readyLoadable(current.responseHistory.data.filter((i) => i.id !== item.id)) })); }}>×</button></div><p className="truncate font-mono text-sm">{item.url}</p><p className="text-muted">{statusLabel(item)}</p><Button className="mt-2 w-full" onClick={() => setModel((current) => ({ ...current, lastResponse: { status: item.responseStatus ?? 0, statusText: item.responseStatusText, headers: typeof item.responseHeaders === 'string' ? {} : item.responseHeaders, body: item.responseBody, responseTimeMs: item.responseTimeMs ?? undefined, responseSize: item.responseSize ?? undefined } }))}><Check className="h-4 w-4" /> Load</Button></div>) : <p className="text-sm text-muted">No saved response history for this request.</p>}</div></Panel></aside> : null}
+  </div></div>;
 }
