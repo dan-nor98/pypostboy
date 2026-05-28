@@ -1,5 +1,5 @@
-import EnterpriseApiDashboard from './EnterpriseApiDashboard';
+import PostBoyDashboard from './PostBoyDashboard';
 
 export default function App() {
-  return <EnterpriseApiDashboard />;
+  return <PostBoyDashboard />;
 }
