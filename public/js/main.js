@@ -1048,11 +1048,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadCollections() {
         try {
             await waitForAuth();
-            console.log('Loading collections...');
             saveExpandedState(); // Save current expanded state
 
             var collections = await apiClient.getCollections();
-            console.log('Loaded collections:', collections);
 
             collectionsData = collections;
             renderCollections(collections);
