@@ -132,6 +132,14 @@ def _coerce_allowed_hosts(raw_hosts, debug_enabled):
     if debug_enabled:
         return ['localhost', '127.0.0.1', '[::1]']
     return []
+
+
+def _coerce_origin_list(raw_origins):
+    if isinstance(raw_origins, str):
+        return _split_csv(raw_origins)
+    return list(raw_origins or [])
+
+
 def _apply_django_settings(config_dict):
     """Apply mutable PostBoy settings after Django is configured."""
     settings.DEBUG = bool(config_dict.get('DEBUG', settings.DEBUG))
@@ -163,10 +171,16 @@ def _apply_django_settings(config_dict):
             getattr(settings, 'CORS_ALLOW_ALL_ORIGINS', False),
         )
     )
-    settings.CORS_ALLOWED_ORIGINS = list(
+    settings.CORS_ALLOWED_ORIGINS = _coerce_origin_list(
         config_dict.get(
             'CORS_ALLOWED_ORIGINS',
             getattr(settings, 'CORS_ALLOWED_ORIGINS', []),
+        )
+    )
+    settings.CSRF_TRUSTED_ORIGINS = _coerce_origin_list(
+        config_dict.get(
+            'CSRF_TRUSTED_ORIGINS',
+            getattr(settings, 'CSRF_TRUSTED_ORIGINS', []),
         )
     )
     settings.CORS_ALLOWED_ORIGIN_REGEXES = list(
