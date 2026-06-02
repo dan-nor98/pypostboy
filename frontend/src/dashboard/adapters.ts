@@ -74,7 +74,7 @@ async function requestJson<T>(path: string, options?: RequestInit, allowRawSucce
   const requestOptions: RequestInit = { ...(options ?? {}) };
   const method = requestOptions.method || 'GET';
   if (isUnsafeMethod(method)) {
-    csrfToken = csrfToken || getCsrfTokenFromCookie();
+    csrfToken = getCsrfTokenFromCookie();
     if (!csrfToken && path !== '/api/auth/csrf') {
       try { csrfToken = (await requestJson<{ csrf_token?: string }>('/api/auth/csrf')).csrf_token || getCsrfTokenFromCookie(); } catch (_err) { csrfToken = getCsrfTokenFromCookie(); }
     }
@@ -84,6 +84,9 @@ async function requestJson<T>(path: string, options?: RequestInit, allowRawSucce
   let response: Response;
   try { response = await fetch(path, { credentials: 'include', ...requestOptions }); }
   catch (err) { throw new ApiError(err instanceof Error ? err.message : 'API request failed', 0, null); }
+
+  const cookieCsrfToken = getCsrfTokenFromCookie();
+  if (cookieCsrfToken) csrfToken = cookieCsrfToken;
 
   const rawText = await response.text();
   let json: ApiEnvelope<T> | T | null = null;
