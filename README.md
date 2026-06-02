@@ -30,13 +30,13 @@ PostBoy can execute a request in two ways from the request URL bar:
 For browser-to-PostBoy traffic, CORS can be controlled with environment variables (useful in Docker):
 
 ```yaml
-# docker-compose*.yml
+# docker-compose.yml (PostgreSQL mode, Nginx published on host port 80)
 environment:
-  - CORS_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
+  - CORS_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
   - CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\\.example\\.com$
   - CORS_ALLOW_ALL_ORIGINS=false
   - CORS_ALLOW_CREDENTIALS=true
-  - CSRF_TRUSTED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
+  - CSRF_TRUSTED_ORIGINS=http://localhost,http://127.0.0.1
 ```
 
 `CORS_ALLOW_ALL_ORIGINS` defaults to `true` in `DEBUG` and `false` otherwise. For production, set explicit origins and keep `CORS_ALLOW_ALL_ORIGINS=false`.
@@ -110,16 +110,16 @@ docker compose down -v
 
 
 
-### Docker dev proxy notes
+### Docker proxy notes
 
 - Django/Gunicorn runs only on the Docker network as `app:3001` (`expose`, not host `ports`).
-- Nginx is the local public entrypoint at `http://localhost:8080`.
+- In dev SQLite mode, Nginx is the local public entrypoint at `http://localhost:8080`; in production-like PostgreSQL mode, it is `http://localhost`.
 - Browser proxy calls must target relative `POST /client-proxy`, which Nginx rewrites to Django `POST /api/proxy`.
 - On SELinux hosts, the Nginx config bind mount uses `:ro,Z` so `/etc/nginx/conf.d/default.conf` is readable inside the container.
 
 ### Reverse-proxy and CORS model
 
-CORS is enforced by the browser and cannot be bypassed safely with client-side JavaScript. In Docker deployment, PostBoy uses a same-origin proxy route so the browser always calls `POST /client-proxy` on the Nginx origin (`http://localhost`). Nginx forwards that request to Django `POST /api/proxy`, and Django performs the external API call server-side.
+CORS is enforced by the browser and cannot be bypassed safely with client-side JavaScript. In Docker deployment, PostBoy uses a same-origin proxy route so the browser always calls `POST /client-proxy` on the Nginx origin (`http://localhost` for PostgreSQL mode, or `http://localhost:8080` for dev SQLite mode). Nginx forwards that request to Django `POST /api/proxy`, and Django performs the external API call server-side.
 
 ### Docker environment variables and volumes
 
