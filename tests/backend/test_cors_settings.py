@@ -50,6 +50,12 @@ def test_production_config_defaults_to_non_wildcard_hosts():
     assert settings.ALLOWED_HOSTS == []
 
 
+def test_create_app_applies_csrf_trusted_origins_from_config():
+    create_app({'CSRF_TRUSTED_ORIGINS': ['http://localhost:8080']})
+
+    assert settings.CSRF_TRUSTED_ORIGINS == ['http://localhost:8080']
+
+
 def test_security_headers_enabled_on_api_response(client, user_a_headers):
     response = client.get('/api/collections', headers=user_a_headers)
 
