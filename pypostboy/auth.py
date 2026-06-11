@@ -3,8 +3,9 @@
 from django.conf import settings
 from django.core import signing
 
-from pypostboy.db.connection import get_connection
-from pypostboy.db.migrations import ensure_default_local_user
+from pypostboy.apps.core.models import User
+from pypostboy.db.migrations import DEFAULT_LOCAL_EMAIL, DEFAULT_LOCAL_USERNAME
+from pypostboy.db.serializers import timestamp
 from pypostboy.djangoapp.context import get_current_request
 
 API_TOKEN_SALT = 'pypostboy.api-token'
@@ -16,21 +17,54 @@ class AuthenticationError(Exception):
     """Raised when a request cannot be associated with a valid user."""
 
 
-def _conn():
-    return get_connection()
+def _user_to_mapping(user):
+    """Return a user model as the dict shape expected by repository code."""
+    if user is None:
+        return None
+    return {
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'password_hash': user.password,
+        'auth_provider': user.auth_provider,
+        'auth_subject': user.auth_subject,
+        'recovery_key_hash': user.recovery_key_hash,
+        'recovery_key_created_at': user.recovery_key_created_at,
+        'recovery_key_rotated_at': user.recovery_key_rotated_at,
+        'created_at': user.created_at,
+        'updated_at': user.updated_at,
+        'last_login': user.last_login,
+        'is_superuser': user.is_superuser,
+        'is_staff': user.is_staff,
+        'is_active': user.is_active,
+    }
 
 
 def _user_from_id(user_id):
-    """Return a user row for an integer ID, or ``None`` when absent/invalid."""
+    """Return a user model for an integer ID, or ``None`` when absent/invalid."""
     try:
         normalized_id = int(user_id)
     except (TypeError, ValueError):
         return None
 
-    return _conn().execute(
-        "SELECT * FROM users WHERE id = ?",
-        (normalized_id,)
-    ).fetchone()
+    return User.objects.filter(pk=normalized_id).first()
+
+
+def _default_local_user():
+    """Return the default local user, creating it through Django's ORM if needed."""
+    now = timestamp()
+    user, _created = User.objects.get_or_create(
+        username=DEFAULT_LOCAL_USERNAME,
+        defaults={
+            'email': DEFAULT_LOCAL_EMAIL,
+            'password': None,
+            'auth_provider': 'local',
+            'auth_subject': None,
+            'created_at': now,
+            'updated_at': now,
+        },
+    )
+    return user
 
 
 def api_token_max_age_seconds():
@@ -123,12 +157,8 @@ def get_current_user(request=None):
             return cached
         _identity_source, _identity_name, explicit_user_id = _request_identity(request)
 
-    if explicit_user_id is None:
-        explicit_user_id = ensure_default_local_user(_conn().cursor())
-        _conn().commit()
-
-    user = _user_from_id(explicit_user_id)
-    current_user = dict(user) if user else None
+    user = _default_local_user() if explicit_user_id is None else _user_from_id(explicit_user_id)
+    current_user = _user_to_mapping(user) if user else None
     if request is not None:
         request.current_user = current_user
     return current_user
