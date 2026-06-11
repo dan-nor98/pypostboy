@@ -5,18 +5,15 @@ import secrets
 import sqlite3
 
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
-from django.core.cache import cache
 from django.contrib.auth.hashers import make_password
+from django.core.cache import cache
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
+from pypostboy.apps.core.models import User
 from pypostboy.auth import api_token_max_age_seconds, get_current_user, issue_api_token
-from pypostboy.db.adapter import (
-    execute as db_execute,
-    insert_and_get_id,
-    row_to_mapping,
-)
-from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
 from pypostboy.db.serializers import timestamp
 from pypostboy.djangoapp.request import BadJsonBody, json_body
@@ -28,17 +25,53 @@ RECOVERY_MAX_ATTEMPTS = 5
 RECOVERY_WINDOW_SECONDS = 300
 
 
+def _user_value(user, key):
+    if user is None:
+        return None
+    if isinstance(user, dict):
+        return user.get(key)
+    if key == "password_hash":
+        return user.password
+    return getattr(user, key, None)
+
+
+def _user_to_mapping(user):
+    """Return the user model as the dict shape used by repository callers."""
+    if user is None:
+        return None
+    if isinstance(user, dict):
+        return user
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "password_hash": user.password,
+        "auth_provider": user.auth_provider,
+        "auth_subject": user.auth_subject,
+        "recovery_key_hash": user.recovery_key_hash,
+        "recovery_key_created_at": user.recovery_key_created_at,
+        "recovery_key_rotated_at": user.recovery_key_rotated_at,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "last_login": user.last_login,
+        "is_superuser": user.is_superuser,
+        "is_staff": user.is_staff,
+        "is_active": user.is_active,
+    }
+
+
 def _public_user(user):
     """Return a client-safe user representation."""
     if not user:
         return None
+    username = _user_value(user, "username")
     return {
-        "id": user["id"],
-        "username": user["username"],
-        "email": user["email"],
-        "auth_provider": user["auth_provider"],
-        "is_guest": user["username"] == DEFAULT_LOCAL_USERNAME
-        and not user["password_hash"],
+        "id": _user_value(user, "id"),
+        "username": username,
+        "email": _user_value(user, "email"),
+        "auth_provider": _user_value(user, "auth_provider"),
+        "is_guest": username == DEFAULT_LOCAL_USERNAME
+        and not _user_value(user, "password_hash"),
     }
 
 
@@ -109,7 +142,7 @@ def _is_unique_constraint_error(exc):
     """Return True if the exception represents a uniqueness constraint violation."""
 
     def _matches(candidate):
-        if isinstance(candidate, sqlite3.IntegrityError):
+        if isinstance(candidate, (IntegrityError, sqlite3.IntegrityError)):
             return True
         if getattr(candidate, "sqlstate", None) == "23505":
             return True
@@ -126,11 +159,28 @@ def _is_unique_constraint_error(exc):
         current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
     return False
 
+
 def _registration_conflict_query(username, email):
-    """Return SQL and params for detecting conflicting register identities."""
+    """Return the legacy conflict-query tuple for backwards-compatible tests."""
     if email is None:
         return "SELECT id FROM users WHERE username = ?", (username,)
     return "SELECT id FROM users WHERE username = ? OR email = ?", (username, email)
+
+
+def _registration_conflict_filter(username, email):
+    """Return an ORM filter for conflicting register identities."""
+    if email is None:
+        return Q(username=username)
+    return Q(username=username) | Q(email=email)
+
+
+def insert_and_get_id(**fields):
+    """Create a user through the ORM and return its id.
+
+    The function name is retained for older tests that monkeypatch the user
+    creation step to force database-level uniqueness errors.
+    """
+    return User.objects.create(**fields).id
 
 
 def login(request):
@@ -149,9 +199,8 @@ def login(request):
         return error("Invalid username or password", 401)
 
     django_login(request, user, backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend")
-    row = db_execute(get_connection(), "SELECT * FROM users WHERE id = ?", (user.id,)).fetchone()
-    request.current_user = dict(row_to_mapping(row))
-    return ok(_public_user(row))
+    request.current_user = _user_to_mapping(user)
+    return ok(_public_user(user))
 
 
 def register(request):
@@ -167,50 +216,46 @@ def register(request):
     if not _validate_password_policy(password):
         return error("Password must be at least 8 characters", 400)
 
-    conn = get_connection()
-    conflict_sql, conflict_params = _registration_conflict_query(username, email)
-    existing = db_execute(conn, conflict_sql, conflict_params).fetchone()
-    if existing:
+    if User.objects.filter(_registration_conflict_filter(username, email)).exists():
         return error("Username or email already exists", 409)
 
     now = timestamp()
     recovery_key = _issue_recovery_key()
     recovery_key_hash = _hash_recovery_key(recovery_key)
     try:
-        user_id = insert_and_get_id(
-            conn,
-            """INSERT INTO users (
-                username, email, password_hash, auth_provider, auth_subject,
-                recovery_key_hash, recovery_key_created_at, recovery_key_rotated_at,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, 'local', NULL, ?, ?, NULL, ?, ?)""",
-            (username, email, make_password(password), recovery_key_hash, now, now, now),
-        )
-        conn.commit()
+        with transaction.atomic():
+            user_id = insert_and_get_id(
+                username=username,
+                email=email,
+                password=make_password(password),
+                auth_provider="local",
+                auth_subject=None,
+                recovery_key_hash=recovery_key_hash,
+                recovery_key_created_at=now,
+                recovery_key_rotated_at=None,
+                created_at=now,
+                updated_at=now,
+            )
+            user = User.objects.get(pk=user_id)
     except Exception as exc:
         if _is_unique_constraint_error(exc):
             return error("Username or email already exists", 409)
         raise
 
-    user = db_execute(
-        conn,
-        "SELECT * FROM users WHERE id = ?",
-        (user_id,),
-    ).fetchone()
     django_login(
         request,
         authenticate(request, username=username, password=password),
         backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend",
     )
-    request.current_user = dict(row_to_mapping(user))
+    request.current_user = _user_to_mapping(user)
     return created({"user": _public_user(user), "recovery_key": recovery_key})
 
 
-def _find_user_for_recovery(conn, username, email):
+def _find_user_for_recovery(username, email):
     if username:
-        return db_execute(conn, "SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        return User.objects.filter(username=username).first()
     if email:
-        return db_execute(conn, "SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        return User.objects.filter(email=email).first()
     return None
 
 
@@ -229,11 +274,11 @@ def recover_verify(request):
     if _is_recovery_rate_limited(request, identity):
         return error("Too many recovery attempts, try again later", 429)
 
-    user = _find_user_for_recovery(get_connection(), username, email)
+    user = _find_user_for_recovery(username, email)
     if (
         not user
-        or not user["recovery_key_hash"]
-        or not _constant_time_recovery_match(recovery_key, user["recovery_key_hash"])
+        or not user.recovery_key_hash
+        or not _constant_time_recovery_match(recovery_key, user.recovery_key_hash)
     ):
         return error(GENERIC_RECOVERY_ERROR, 401)
     return ok({"valid": True})
@@ -255,27 +300,27 @@ def recover_reset(request):
     if _is_recovery_rate_limited(request, identity):
         return error("Too many recovery attempts, try again later", 429)
 
-    conn = get_connection()
-    user = _find_user_for_recovery(conn, username, email)
+    user = _find_user_for_recovery(username, email)
     if (
         not user
-        or not user["recovery_key_hash"]
-        or not _constant_time_recovery_match(recovery_key, user["recovery_key_hash"])
+        or not user.recovery_key_hash
+        or not _constant_time_recovery_match(recovery_key, user.recovery_key_hash)
     ):
         return error(GENERIC_RECOVERY_ERROR, 401)
 
     now = timestamp()
     new_recovery_key = _issue_recovery_key()
-    db_execute(
-        conn,
-        """UPDATE users
-           SET password_hash = ?, recovery_key_hash = ?, recovery_key_rotated_at = ?, updated_at = ?
-           WHERE id = ?""",
-        (make_password(new_password), _hash_recovery_key(new_recovery_key), now, now, user["id"]),
-    )
-    conn.commit()
+    user.password = make_password(new_password)
+    user.recovery_key_hash = _hash_recovery_key(new_recovery_key)
+    user.recovery_key_rotated_at = now
+    user.updated_at = now
+    user.save(update_fields=[
+        "password",
+        "recovery_key_hash",
+        "recovery_key_rotated_at",
+        "updated_at",
+    ])
     return ok({"password_reset": True, "recovery_key": new_recovery_key})
-
 
 
 @csrf_exempt
@@ -301,6 +346,7 @@ def token(request):
         "token_type": "Bearer",
         "expires_in": api_token_max_age_seconds(),
     })
+
 
 def logout(request):
     """Clear the current browser session."""
