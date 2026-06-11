@@ -58,7 +58,10 @@ class BaseConfig:
     )
     SECRET_KEY = os.environ.get('POSTBOY_SECRET_KEY', 'postboy-dev-secret-key')
     SESSION_COOKIE_SAMESITE = 'Lax'
-    POSTBOY_ALLOW_USER_ID_HEADER = _bool_from_env('POSTBOY_ALLOW_USER_ID_HEADER', False)
+    POSTBOY_API_TOKEN_MAX_AGE_SECONDS = _int_from_env(
+        'POSTBOY_API_TOKEN_MAX_AGE_SECONDS',
+        15 * 60,
+    )
     TESTING = False
 
 

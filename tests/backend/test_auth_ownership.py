@@ -31,10 +31,10 @@ def create_user(conn, username):
 
 
 def test_api_routes_scope_resources_to_current_user(
-    client, sqlite_connection, collection, request_record, user_a_headers
+    client, sqlite_connection, collection, request_record, user_a_headers, auth_headers
 ):
     other_user_id = create_user(sqlite_connection, "other-user")
-    other_headers = {"X-Postboy-User-Id": str(other_user_id)}
+    other_headers = auth_headers(other_user_id)
 
     assert_success(client.get("/api/collections", headers=user_a_headers))
     assert_success(client.get("/api/collections", headers=other_headers)) == []
@@ -77,13 +77,13 @@ def test_api_routes_scope_resources_to_current_user(
 
 
 def test_request_instances_scope_to_current_user(
-    client, sqlite_connection, request_record, user_a
+    client, sqlite_connection, request_record, user_a, auth_headers
 ):
     other_user_id = create_user(sqlite_connection, "snapshot-user")
     instance = RequestInstances.create(
         request_record["id"], user_a["id"], {"name": "Owned snapshot"}
     )
-    other_headers = {"X-Postboy-User-Id": str(other_user_id)}
+    other_headers = auth_headers(other_user_id)
 
     assert_error(
         client.get(f"/api/request-instances/{instance['id']}", headers=other_headers),
@@ -99,13 +99,10 @@ def test_request_instances_scope_to_current_user(
     )
 
 
-def test_unsigned_user_id_header_is_ignored_by_default(
-    client, monkeypatch, collection, request_record, user_b
+def test_unsigned_user_id_header_is_ignored(
+    client, collection, request_record, user_b
 ):
-    """A forged user-id header cannot switch identity when the dev/test opt-in is off."""
-    from django.conf import settings
-
-    monkeypatch.setattr(settings, "POSTBOY_ALLOW_USER_ID_HEADER", False)
+    """A forged user-id header cannot switch identity."""
     forged_headers = {"X-Postboy-User-Id": str(user_b["id"])}
 
     collections = assert_success(client.get("/api/collections", headers=forged_headers))

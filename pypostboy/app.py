@@ -159,10 +159,10 @@ def _apply_django_settings(config_dict):
     settings.SESSION_COOKIE_SAMESITE = config_dict.get(
         'SESSION_COOKIE_SAMESITE', getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax')
     )
-    settings.POSTBOY_ALLOW_USER_ID_HEADER = bool(
+    settings.POSTBOY_API_TOKEN_MAX_AGE_SECONDS = int(
         config_dict.get(
-            'POSTBOY_ALLOW_USER_ID_HEADER',
-            getattr(settings, 'POSTBOY_ALLOW_USER_ID_HEADER', False),
+            'POSTBOY_API_TOKEN_MAX_AGE_SECONDS',
+            getattr(settings, 'POSTBOY_API_TOKEN_MAX_AGE_SECONDS', 15 * 60),
         )
     )
     settings.CORS_ALLOW_ALL_ORIGINS = bool(

@@ -282,22 +282,7 @@ def _set_cookie(client, name, value):
     client._client.cookies[name] = value
 
 
-def _assert_deletes_legacy_identity_cookies(response):
-    for cookie_name in ("postboy_user_id", "user_id"):
-        assert cookie_name in response.cookies
-        assert response.cookies[cookie_name]["max-age"] == 0
-
-def test_invalid_user_id_cookie_continue_as_guest_clears_cookie(client):
-    _set_cookie(client, "user_id", "999999")
-
-    response = client.get("/api/auth/me")
-    current = assert_success(response)
-
-    assert current["username"] == "local_user"
-    assert current["is_guest"] is True
-    _assert_deletes_legacy_identity_cookies(response)
-
-def test_valid_legacy_user_id_cookie_is_ignored_and_cleared(client, user_b):
+def test_stale_user_id_cookie_is_ignored(client, user_b):
     _set_cookie(client, "user_id", str(user_b["id"]))
 
     response = client.get("/api/auth/me")
@@ -306,6 +291,82 @@ def test_valid_legacy_user_id_cookie_is_ignored_and_cleared(client, user_b):
     assert current["username"] == "local_user"
     assert current["is_guest"] is True
     assert current["id"] != user_b["id"]
+    assert "user_id" not in response.cookies
+
+
+def test_api_token_clients_can_post_without_csrf_token(app, sqlite_connection):
+    from django.contrib.auth.hashers import make_password
+    from django.test import Client as DjangoClient
+
+    from pypostboy.db.serializers import timestamp
+
+    now = timestamp()
+    sqlite_connection.execute(
+        """INSERT INTO users (
+            username, email, password_hash, auth_provider, auth_subject, created_at, updated_at
+        ) VALUES (?, ?, ?, 'local', NULL, ?, ?)""",
+        (
+            "token-csrf-user",
+            "token-csrf-user@example.test",
+            make_password("password123"),
+            now,
+            now,
+        ),
+    )
+    sqlite_connection.commit()
+
+    csrf_client = DjangoClient(enforce_csrf_checks=True)
+    token_response = csrf_client.post(
+        "/api/auth/token",
+        data='{"username": "token-csrf-user", "password": "password123"}',
+        content_type="application/json",
+    )
+    assert token_response.status_code == 200
+    token = token_response.json()["data"]["token"]
+
+    collection_response = csrf_client.post(
+        "/api/collections",
+        data='{"name": "Token collection"}',
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {token}",
+    )
+    assert collection_response.status_code == 201
+    payload = collection_response.json()
+    assert payload["success"] is True
+    assert payload["data"]["name"] == "Token collection"
+
+
+def test_api_token_endpoint_issues_short_lived_bearer_token(client):
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "token-user", "password": "password123"},
+        ),
+        201,
+    )
+    assert_success(client.post("/api/auth/logout"))
+
+    token_payload = assert_success(
+        client.post(
+            "/api/auth/token",
+            json={"username": "token-user", "password": "password123"},
+        )
+    )
+
+    assert token_payload["token_type"] == "Bearer"
+    assert token_payload["expires_in"] == 15 * 60
+    token_headers = {"Authorization": f"Bearer {token_payload['token']}"}
+
+    current = assert_success(client.get("/api/auth/me", headers=token_headers))
+    assert current["id"] == registered["user"]["id"]
+
+
+def test_invalid_api_token_is_rejected(client):
+    assert_error(
+        client.get("/api/auth/me", headers={"Authorization": "Bearer not-a-token"}),
+        401,
+        "Invalid API token",
+    )
 
 
 def test_postboy_auth_backend_authenticate_uses_password_hash_mapping(sqlite_connection):
@@ -358,9 +419,9 @@ def test_invalid_cookie_does_not_override_login(client):
 
     assert logged_in["id"] == registered["user"]["id"]
     assert logged_in["is_guest"] is False
-    _assert_deletes_legacy_identity_cookies(login_response)
+    assert "user_id" not in login_response.cookies
 
-def test_stale_cookie_does_not_override_session_and_logout_clears_it(client, user_b):
+def test_stale_cookie_does_not_override_session(client, user_b):
     session_user = assert_success(
         client.post(
             "/api/auth/register",
@@ -377,26 +438,6 @@ def test_stale_cookie_does_not_override_session_and_logout_clears_it(client, use
     current_after_logout = assert_success(logout_response)
     assert current_after_logout["username"] == "local_user"
     assert current_after_logout["is_guest"] is True
-    _assert_deletes_legacy_identity_cookies(logout_response)
-
-
-def test_legacy_identity_cookies_are_ignored_and_cleared_even_with_valid_session(client, user_b):
-    session_user = assert_success(
-        client.post(
-            "/api/auth/register",
-            json={"username": "legacy-cookie-session-user", "password": "password123"},
-        ),
-        201,
-    )
-    _set_cookie(client, "user_id", str(user_b["id"]))
-    _set_cookie(client, "postboy_user_id", str(user_b["id"]))
-
-    response = client.get("/api/auth/me")
-    current = assert_success(response)
-
-    assert current["id"] == session_user["user"]["id"]
-    assert current["username"] == "legacy-cookie-session-user"
-    _assert_deletes_legacy_identity_cookies(response)
 
 
 def test_registration_conflict_query_omits_nullable_email_parameter_when_absent():
