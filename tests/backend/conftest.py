@@ -43,9 +43,11 @@ def _create_test_user(conn, username):
 
 
 def _auth_headers(user):
-    """Return request headers that authenticate as the supplied user row/dict/id."""
+    """Return bearer-token headers that authenticate as the supplied user row/dict/id."""
+    from pypostboy.auth import issue_api_token
+
     user_id = user["id"] if isinstance(user, dict) else user
-    return {"X-Postboy-User-Id": str(user_id)}
+    return {"Authorization": f"Bearer {issue_api_token(user_id)}"}
 
 
 @pytest.fixture
@@ -87,7 +89,7 @@ def app(sqlite_connection):
             "TESTING": True,
             "DATABASE": sqlite_connection,
             "WTF_CSRF_ENABLED": False,
-            "POSTBOY_ALLOW_USER_ID_HEADER": True,
+            "POSTBOY_API_TOKEN_MAX_AGE_SECONDS": 15 * 60,
             "ALLOWED_HOSTS": ["testserver"],
         }
     )

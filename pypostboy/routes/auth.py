@@ -8,13 +8,9 @@ from django.contrib.auth import authenticate, login as django_login, logout as d
 from django.core.cache import cache
 from django.contrib.auth.hashers import make_password
 from django.middleware.csrf import get_token
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
-from pypostboy.auth import (
-    USER_ID_COOKIE_NAMES,
-    clear_legacy_identity_cookies,
-    get_current_user,
-)
+from pypostboy.auth import api_token_max_age_seconds, get_current_user, issue_api_token
 from pypostboy.db.adapter import (
     execute as db_execute,
     insert_and_get_id,
@@ -155,7 +151,7 @@ def login(request):
     django_login(request, user, backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend")
     row = db_execute(get_connection(), "SELECT * FROM users WHERE id = ?", (user.id,)).fetchone()
     request.current_user = dict(row_to_mapping(row))
-    return clear_legacy_identity_cookies(ok(_public_user(row)))
+    return ok(_public_user(row))
 
 
 def register(request):
@@ -207,9 +203,7 @@ def register(request):
         backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend",
     )
     request.current_user = dict(row_to_mapping(user))
-    return clear_legacy_identity_cookies(
-        created({"user": _public_user(user), "recovery_key": recovery_key})
-    )
+    return created({"user": _public_user(user), "recovery_key": recovery_key})
 
 
 def _find_user_for_recovery(conn, username, email):
@@ -283,11 +277,34 @@ def recover_reset(request):
     return ok({"password_reset": True, "recovery_key": new_recovery_key})
 
 
+
+@csrf_exempt
+def token(request):
+    """Issue a short-lived bearer token for non-browser API clients."""
+    if request.method != "POST":
+        return error("Method not allowed", 405)
+    try:
+        username, password, _email = _normalize_credentials(
+            json_body(request, allow_blank=False)
+        )
+    except BadJsonBody:
+        return error("Invalid JSON request body", 400)
+    if not username or not password:
+        return error("Username and password are required", 400)
+
+    user = authenticate(request, username=username, password=password)
+    if not user:
+        return error("Invalid username or password", 401)
+
+    return ok({
+        "token": issue_api_token(user.id),
+        "token_type": "Bearer",
+        "expires_in": api_token_max_age_seconds(),
+    })
+
 def logout(request):
     """Clear the current browser session."""
     django_logout(request)
-    for cookie_name in USER_ID_COOKIE_NAMES:
-        request.COOKIES.pop(cookie_name, None)
     if hasattr(request, "current_user"):
         delattr(request, "current_user")
-    return clear_legacy_identity_cookies(ok(_public_user(get_current_user(request))))
+    return ok(_public_user(get_current_user(request)))

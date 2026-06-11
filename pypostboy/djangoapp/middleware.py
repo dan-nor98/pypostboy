@@ -4,12 +4,7 @@ import re
 
 from django.conf import settings
 
-from pypostboy.auth import (
-    AuthenticationError,
-    clear_legacy_identity_cookies,
-    get_current_user,
-    legacy_identity_cookies_to_clear,
-)
+from pypostboy.auth import AuthenticationError, get_current_user
 from pypostboy.db.connection import get_connection
 from pypostboy.djangoapp.context import reset_current_request, set_current_request
 from pypostboy.http.responses import error
@@ -75,10 +70,6 @@ class PostBoyMiddleware:
         if is_api_request:
             _safe_rollback_database_transaction()
 
-        clear_legacy_identity_cookies(
-            response,
-            legacy_identity_cookies_to_clear(request),
-        )
         request_origin = request.headers.get('Origin')
         if _cors_allowed_origin(request_origin):
             if getattr(settings, 'CORS_ALLOW_CREDENTIALS', True):
