@@ -1,4 +1,4 @@
-import { apiClient } from '../api/client.js';
+import { apiClient, resetCsrfToken } from '../api/client.js';
 
 const listeners = [];
 const EXPLICIT_GUEST_STORAGE_KEY = 'postboy_explicit_guest';
@@ -121,6 +121,7 @@ export async function loginUser(credentials) {
     setAuthState({ loading: true, error: '' });
     try {
         var user = await apiClient.login(credentials);
+        await resetCsrfToken();
         saveExplicitGuestChoice(false);
         setAuthState({ currentUser: user, loading: false, error: '', initialized: true, explicitGuest: false });
         authReadyPromise = Promise.resolve(user);
@@ -135,6 +136,7 @@ export async function registerUser(credentials) {
     setAuthState({ loading: true, error: '' });
     try {
         var registrationResult = await apiClient.register(credentials);
+        await resetCsrfToken();
         var user = registrationResult.user;
         saveExplicitGuestChoice(false);
         setAuthState({ currentUser: user, loading: false, error: '', initialized: true, explicitGuest: false });
@@ -158,6 +160,7 @@ export async function logoutUser() {
     setAuthState({ loading: true, error: '' });
     try {
         var user = await apiClient.logout();
+        await resetCsrfToken();
         saveExplicitGuestChoice(false);
         setAuthState({ currentUser: user, loading: false, error: '', initialized: true, explicitGuest: false });
         authReadyPromise = Promise.resolve(user);
