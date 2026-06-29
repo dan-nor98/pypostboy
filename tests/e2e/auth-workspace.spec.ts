@@ -19,11 +19,12 @@ async function fillCredentials(page: Page, username: string, password: string) {
 
 async function closeRecoveryModalIfOpen(page: Page) {
   const modal = page.locator('#registerSuccessModal.show');
-  if (await modal.isVisible()) {
-    await page.locator('#registerRecoveryAcknowledge').check();
-    await page.locator('#registerRecoveryCloseBtn').click();
-    await expect(modal).toBeHidden();
-  }
+  await modal.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
+  if (!(await modal.isVisible())) return;
+
+  await page.locator('#registerRecoveryAcknowledge').check();
+  await page.locator('#registerRecoveryCloseBtn').click();
+  await expect(modal).toBeHidden();
 }
 
 async function register(page: Page, username: string, password: string) {

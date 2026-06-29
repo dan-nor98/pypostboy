@@ -25,6 +25,7 @@ export default defineConfig({
       PORT: String(port),
       POSTBOY_DB_PATH: e2eDbPath,
       POSTBOY_DJANGO_DB_PATH: e2eDbPath,
+      POSTBOY_TEST_DB_PATH: e2eDbPath,
       POSTBOY_CONFIG: 'testing',
       ALLOWED_HOSTS: 'localhost,127.0.0.1,[::1]',
       CSRF_TRUSTED_ORIGINS: `http://127.0.0.1:${port},http://localhost:${port}`,

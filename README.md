@@ -155,7 +155,7 @@ npx playwright install --with-deps chromium
 npm run test:e2e
 ```
 
-If you prefer to start the server yourself, run `PORT=3001 POSTBOY_CONFIG=testing POSTBOY_DB_PATH=.tmp/postboy-e2e.sqlite3 POSTBOY_DJANGO_DB_PATH=.tmp/postboy-e2e.sqlite3 python app.py` before invoking Playwright. The tests expect the app at `http://127.0.0.1:3001` unless `PORT` is overridden.
+If you prefer to start the server yourself, run `PORT=3001 POSTBOY_CONFIG=testing POSTBOY_DB_PATH=.tmp/postboy-e2e.sqlite3 POSTBOY_DJANGO_DB_PATH=.tmp/postboy-e2e.sqlite3 POSTBOY_TEST_DB_PATH=.tmp/postboy-e2e.sqlite3 python app.py` before invoking Playwright. The tests expect the app at `http://127.0.0.1:3001` unless `PORT` is overridden.
 
 ## Configuration
 
