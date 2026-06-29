@@ -18,6 +18,10 @@ USER_RECOVERY_COLUMN_MIGRATIONS = {
     'recovery_key_created_at': 'TEXT',
     'recovery_key_rotated_at': 'TEXT',
 }
+USER_CREDENTIAL_COLUMN_MIGRATIONS = {
+    'credentials_updated_at': 'TEXT',
+}
+
 USER_AUTH_COLUMN_MIGRATIONS = {
     'last_login': {
         'sqlite': 'TEXT',
@@ -84,6 +88,17 @@ def migrate_user_recovery_fields(cursor):
             cursor.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
 
 
+def migrate_user_credential_fields(cursor):
+    """Add and backfill credential freshness columns for token invalidation."""
+    existing_columns = table_columns(cursor, 'users')
+    for column, definition in USER_CREDENTIAL_COLUMN_MIGRATIONS.items():
+        if column not in existing_columns:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
+            cursor.execute(
+                f"UPDATE users SET {column} = COALESCE(updated_at, created_at) WHERE {column} IS NULL"
+            )
+
+
 def migrate_user_auth_fields(cursor):
     """Add auth-status columns introduced after initial user-table releases."""
     existing_columns = table_columns(cursor, 'users')
@@ -129,6 +144,7 @@ def create_users_table(cursor):
             recovery_key_hash TEXT,
             recovery_key_created_at TEXT,
             recovery_key_rotated_at TEXT,
+            credentials_updated_at TEXT,
             last_login TEXT,
             is_superuser {is_superuser_definition},
             is_staff {is_staff_definition},
@@ -149,12 +165,21 @@ def ensure_default_local_user(cursor):
         return existing['id']
 
     now = timestamp()
-    cursor.execute(
-        """INSERT INTO users (
-            username, email, password_hash, auth_provider, auth_subject, created_at, updated_at
-        ) VALUES (?, ?, NULL, 'local', NULL, ?, ?)""",
-        (DEFAULT_LOCAL_USERNAME, DEFAULT_LOCAL_EMAIL, now, now)
-    )
+    columns = table_columns(cursor, 'users')
+    if 'credentials_updated_at' in columns:
+        cursor.execute(
+            """INSERT INTO users (
+                username, email, password_hash, auth_provider, auth_subject, credentials_updated_at, created_at, updated_at
+            ) VALUES (?, ?, NULL, 'local', NULL, ?, ?, ?)""",
+            (DEFAULT_LOCAL_USERNAME, DEFAULT_LOCAL_EMAIL, now, now, now)
+        )
+    else:
+        cursor.execute(
+            """INSERT INTO users (
+                username, email, password_hash, auth_provider, auth_subject, created_at, updated_at
+            ) VALUES (?, ?, NULL, 'local', NULL, ?, ?)""",
+            (DEFAULT_LOCAL_USERNAME, DEFAULT_LOCAL_EMAIL, now, now)
+        )
     return cursor.lastrowid
 
 
