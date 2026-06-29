@@ -11,3 +11,5 @@ Use this checklist when changing authentication, request tabs, snapshots, collec
 5. Confirm the login screen appears only after the app UI has been cleared: no user A tabs, active request IDs, selected snapshots, collection rows, request editor content, response content, history entries, or environment-variable values should remain visible or remain in hidden DOM/UI state.
 6. Sign in as user B, or choose guest mode.
 7. Confirm user B/guest sees a clean workspace initialization and does not see user A's tabs, selected snapshots, collections, request editor data, response data, history, or environment variables even briefly during startup.
+
+Automated coverage: `tests/frontend/test_react_auth_isolation_e2e_contract.py` now asserts that the React E2E surface has stable selectors for request tabs, editor/auth/body/response fields, collections/history/environment/snapshot panels, and that user-scoped state is synchronously cleared before logout, guest startup, or user switching reloads workspace data.
