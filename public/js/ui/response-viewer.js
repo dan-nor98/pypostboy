@@ -50,16 +50,16 @@ function isJsonTreeLineHidden(line, root) {
     return false;
 }
 
-function getVisibleJsonTreeLineCount(codeElement) {
-    if (!codeElement.querySelectorAll) return 0;
+function getVisibleJsonTreeLineNumbers(codeElement) {
+    if (!codeElement.querySelectorAll) return [];
     var lines = codeElement.querySelectorAll('.json-tree-line');
-    if (!lines.length) return 0;
+    if (!lines.length) return [];
 
-    var count = 0;
+    var visibleLineNumbers = [];
     for (var i = 0; i < lines.length; i++) {
-        if (!isJsonTreeLineHidden(lines[i], codeElement)) count += 1;
+        if (!isJsonTreeLineHidden(lines[i], codeElement)) visibleLineNumbers.push(i + 1);
     }
-    return count || 1;
+    return visibleLineNumbers;
 }
 
 function updateResponseLineNumbers(element) {
@@ -71,12 +71,19 @@ function updateResponseLineNumbers(element) {
         (codeElement.classList && codeElement.classList.contains && codeElement.classList.contains('json-tree'))
         || (typeof codeElement.innerHTML === 'string' && codeElement.innerHTML.indexOf('json-tree-line') > -1)
     );
-    var lineCount = isJsonTree
-        ? (getVisibleJsonTreeLineCount(codeElement) || getLineCount(getRawBody(codeElement) || codeElement.textContent || ''))
-        : getLineCount(codeElement.textContent || '');
+    var lineNumbers = isJsonTree ? getVisibleJsonTreeLineNumbers(codeElement) : [];
+    if (!lineNumbers.length) {
+        var lineCount = isJsonTree
+            ? getLineCount(getRawBody(codeElement) || codeElement.textContent || '')
+            : getLineCount(codeElement.textContent || '');
+        for (var i = 1; i <= lineCount; i++) {
+            lineNumbers.push(i);
+        }
+    }
+
     var lines = [];
-    for (var i = 1; i <= lineCount; i++) {
-        lines.push('<span>' + i + '</span>');
+    for (var j = 0; j < lineNumbers.length; j++) {
+        lines.push('<span>' + lineNumbers[j] + '</span>');
     }
     lineNumbersElement.innerHTML = lines.join('\n');
 }
