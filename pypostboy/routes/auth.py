@@ -24,6 +24,9 @@ RECOVERY_KEY_BYTES = 32
 GENERIC_RECOVERY_ERROR = "Invalid recovery credentials"
 RECOVERY_MAX_ATTEMPTS = 5
 RECOVERY_WINDOW_SECONDS = 300
+AUTH_MAX_FAILED_ATTEMPTS = 5
+AUTH_WINDOW_SECONDS = 300
+GENERIC_AUTH_RATE_LIMIT_ERROR = "Too many authentication attempts, try again later"
 
 
 def _user_value(user, key):
@@ -107,9 +110,13 @@ def _constant_time_recovery_match(recovery_key, expected_hash):
     return hmac.compare_digest(candidate_hash, expected_hash or "")
 
 
-def _hashed_recovery_identity(identity):
+def _hashed_identity(identity):
     normalized = (identity or "unknown").strip().lower()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _hashed_recovery_identity(identity):
+    return _hashed_identity(identity)
 
 
 def _hashed_remote_addr(request):
@@ -127,6 +134,28 @@ def _is_recovery_rate_limited(request, identity):
         return True
     cache.incr(key)
     return False
+
+
+def _auth_rate_limit_key(request, username):
+    return f"auth_rate_limit::{_hashed_remote_addr(request)}::{_hashed_identity(username)}"
+
+
+def _is_auth_rate_limited(request, username):
+    current = cache.get(_auth_rate_limit_key(request, username))
+    return current is not None and current >= AUTH_MAX_FAILED_ATTEMPTS
+
+
+def _record_auth_failure(request, username):
+    key = _auth_rate_limit_key(request, username)
+    current = cache.get(key)
+    if current is None:
+        cache.add(key, 1, timeout=AUTH_WINDOW_SECONDS)
+        return
+    cache.incr(key)
+
+
+def _reset_auth_failures(request, username):
+    cache.delete(_auth_rate_limit_key(request, username))
 
 
 def current_user(request):
@@ -198,11 +227,15 @@ def login(request):
         return error("Invalid JSON request body", 400)
     if not username or not password:
         return error("Username and password are required", 400)
+    if _is_auth_rate_limited(request, username):
+        return error(GENERIC_AUTH_RATE_LIMIT_ERROR, 429)
 
     user = authenticate(request, username=username, password=password)
     if not user:
+        _record_auth_failure(request, username)
         return error("Invalid username or password", 401)
 
+    _reset_auth_failures(request, username)
     django_login(request, user, backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend")
     request.current_user = _user_to_mapping(user)
     return ok(_public_user(user))
@@ -355,11 +388,15 @@ def token(request):
         return error("Invalid JSON request body", 400)
     if not username or not password:
         return error("Username and password are required", 400)
+    if _is_auth_rate_limited(request, username):
+        return error(GENERIC_AUTH_RATE_LIMIT_ERROR, 429)
 
     user = authenticate(request, username=username, password=password)
     if not user:
+        _record_auth_failure(request, username)
         return error("Invalid username or password", 401)
 
+    _reset_auth_failures(request, username)
     return ok({
         "token": issue_api_token(user.id),
         "token_type": "Bearer",

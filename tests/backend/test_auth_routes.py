@@ -149,6 +149,66 @@ def test_register_login_logout_session_scopes_collections(client):
     assert len(assert_success(client.get("/api/collections"))) == 1
 
 
+def test_login_rate_limit_enforces_failed_attempt_threshold(client):
+    assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "login-rate-limit-user", "password": "password123"},
+        ),
+        201,
+    )
+    assert_success(client.post("/api/auth/logout"))
+
+    for _ in range(5):
+        assert_error(
+            client.post(
+                "/api/auth/login",
+                json={"username": "login-rate-limit-user", "password": "wrong-password"},
+            ),
+            401,
+            "Invalid username or password",
+        )
+
+    assert_error(
+        client.post(
+            "/api/auth/login",
+            json={"username": "login-rate-limit-user", "password": "password123"},
+        ),
+        429,
+        "Too many authentication attempts, try again later",
+    )
+
+
+def test_token_rate_limit_enforces_failed_attempt_threshold(client):
+    assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "token-rate-limit-user", "password": "password123"},
+        ),
+        201,
+    )
+    assert_success(client.post("/api/auth/logout"))
+
+    for _ in range(5):
+        assert_error(
+            client.post(
+                "/api/auth/token",
+                json={"username": "token-rate-limit-user", "password": "wrong-password"},
+            ),
+            401,
+            "Invalid username or password",
+        )
+
+    assert_error(
+        client.post(
+            "/api/auth/token",
+            json={"username": "token-rate-limit-user", "password": "password123"},
+        ),
+        429,
+        "Too many authentication attempts, try again later",
+    )
+
+
 def test_protected_api_routes_require_session_or_bearer_token(client):
     protected_requests = [
         client.get("/api/collections"),
