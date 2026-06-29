@@ -231,10 +231,19 @@ export async function loadResponseHistory(requestId: number): Promise<RequestIns
 export async function createRequestInstance(requestId: number, payload: Partial<RequestInstance>): Promise<RequestInstance> { return normalizeInstance(await request(`/api/requests/${requestId}/instances`, buildJsonOptions('POST', payload))); }
 export async function deleteRequestInstance(id: number): Promise<void> { await request(`/api/request-instances/${id}`, { method: 'DELETE' }); }
 
+function shouldUseServerProxyPath() {
+  try {
+    return window.sessionStorage.getItem('postboy_proxy_mode') === 'server';
+  } catch (_err) {
+    return false;
+  }
+}
+
 export async function sendProxyRequest(payload: ProxyRequestPayload): Promise<ProxyResponse> {
   const desktopApi = (window as Window & { postboyDesktop?: { executeRequest?: (payload: ProxyRequestPayload) => Promise<unknown> } }).postboyDesktop;
   if (desktopApi && typeof desktopApi.executeRequest === 'function') return normalizeProxyResponse(await desktopApi.executeRequest(payload));
-  return normalizeProxyResponse(await requestJson('/client-proxy', buildJsonOptions('POST', payload), true));
+  const proxyPath = shouldUseServerProxyPath() ? '/api/proxy' : '/client-proxy';
+  return normalizeProxyResponse(await requestJson(proxyPath, buildJsonOptions('POST', payload), true));
 }
 export async function importWorkspaceData(payload: ImportPayload): Promise<ImportOutcome> { return normalizeImportOutcome(payload.type, await request('/api/import', buildJsonOptions('POST', payload))); }
 
