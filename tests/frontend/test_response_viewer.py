@@ -75,7 +75,9 @@ def test_render_response_body_populates_matching_line_numbers_without_copy_text(
 
         renderResponseBody(responseBody, { ok: true, items: [1, 2] }, { 'content-type': 'application/json' });
 
-        assert.equal(lineNumbers.textContent, '1\n2\n3\n4\n5\n6\n7');
+        const lineNumberSpans = Array.from(lineNumbers.innerHTML.matchAll(/<span>(\d+)<\/span>/g), (match) => match[1]);
+        assert.deepEqual(lineNumberSpans, ['1', '2', '3', '4', '5', '6', '7']);
+        assert.doesNotMatch(lineNumbers.innerHTML, /<\/span>\n<span>/, 'line number spans must not be separated by literal newlines');
         assert.match(responseBodyCode.innerHTML, /json-key/);
         assert.equal(responseBody.textContent, responseBodyCode.textContent, 'copy source pre must expose only code text');
         assert.doesNotMatch(responseBodyCode.textContent, /^1\n2\n3/m, 'copy source code text must not include line numbers');
