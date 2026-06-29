@@ -128,7 +128,7 @@ CORS is enforced by the browser and cannot be bypassed safely with client-side J
 | `POSTBOY_CONFIG` | Set to `development` in `docker-compose.dev.yml` and `production` in `docker-compose.yml`. |
 | `POSTBOY_DATABASE_URL` | Required for PostgreSQL mode; the default compose file points at the `db` service. Leave unset for SQLite mode. |
 | `POSTBOY_DB_PATH` | SQLite database path for dev mode; `docker-compose.dev.yml` sets it to `/data/postboy-data.db`. |
-| `POSTBOY_SECRET_KEY` | Required for signed sessions. Override the local defaults with a strong random value before sharing or deploying. |
+| `POSTBOY_SECRET_KEY` | Required for Django security features, including signing server-side session references. Override the local defaults with a strong random value before sharing or deploying. |
 | `PORT` | App listen port in non-Docker runs; Docker compose keeps internal app port fixed at `3001` for the Nginx upstream. |
 
 | Volume | Used by | Purpose |

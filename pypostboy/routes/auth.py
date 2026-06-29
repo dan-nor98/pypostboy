@@ -6,6 +6,7 @@ import sqlite3
 
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
 from django.contrib.auth.hashers import make_password
+from django.contrib.sessions.models import Session
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -254,6 +255,14 @@ def register(request):
     return created({"user": _public_user(user), "recovery_key": recovery_key})
 
 
+def _delete_sessions_for_user(user_id):
+    """Delete every server-side browser session authenticated as the user."""
+    user_id = str(user_id)
+    for session in Session.objects.all():
+        if str(session.get_decoded().get("_auth_user_id")) == user_id:
+            session.delete()
+
+
 def _find_user_for_recovery(username, email):
     if username:
         return User.objects.filter(username=username).first()
@@ -323,6 +332,9 @@ def recover_reset(request):
         "recovery_key_rotated_at",
         "updated_at",
     ])
+    _delete_sessions_for_user(user.id)
+    if hasattr(request, "current_user"):
+        delattr(request, "current_user")
     return ok({"password_reset": True, "recovery_key": new_recovery_key})
 
 

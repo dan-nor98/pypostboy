@@ -62,6 +62,13 @@ SQLITE_TABLE_SCHEMAS = {
             updated_at TEXT NOT NULL
         )
     """,
+    'django_session': """
+        CREATE TABLE IF NOT EXISTS django_session (
+            session_key VARCHAR(40) NOT NULL PRIMARY KEY,
+            session_data TEXT NOT NULL,
+            expire_date TEXT NOT NULL
+        )
+    """,
     'request_instances': f"""
         CREATE TABLE IF NOT EXISTS request_instances (
             id {SQLITE_IDENTITY},
@@ -93,6 +100,13 @@ POSTGRES_TABLE_SCHEMAS = {
     table_name: schema.replace(SQLITE_IDENTITY, POSTGRES_IDENTITY)
     for table_name, schema in SQLITE_TABLE_SCHEMAS.items()
 }
+POSTGRES_TABLE_SCHEMAS['django_session'] = """
+        CREATE TABLE IF NOT EXISTS django_session (
+            session_key VARCHAR(40) NOT NULL PRIMARY KEY,
+            session_data TEXT NOT NULL,
+            expire_date TIMESTAMP WITH TIME ZONE NOT NULL
+        )
+    """
 POSTGRES_TABLE_SCHEMAS['users'] = f"""
         CREATE TABLE IF NOT EXISTS users (
             id {POSTGRES_IDENTITY},
@@ -125,7 +139,7 @@ def create_tables(cursor, backend='sqlite'):
     if schemas is None:
         raise ValueError(f'Unsupported database backend: {backend}')
 
-    for table_name in ('users', 'collections', 'requests', 'request_instances'):
+    for table_name in ('users', 'collections', 'requests', 'request_instances', 'django_session'):
         cursor.execute(schemas[table_name])
 
 
@@ -145,6 +159,7 @@ def create_indexes(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_instances_updated_at ON request_instances(updated_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_sort_order ON collections(sort_order)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_sort_order ON requests(sort_order)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS django_session_expire_date_idx ON django_session(expire_date)")
 
 
 def initialize_schema(cursor, backend='sqlite'):

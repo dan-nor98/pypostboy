@@ -66,15 +66,16 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 # PostBoy owns its application schema through pypostboy.db migrations. Django's
-# database setting is still required for framework internals, but sessions use
-# signed cookies so no Django-managed tables are needed at runtime.
+# database setting is still required for framework internals. Browser sessions
+# are stored server-side so individual session rows can be invalidated for
+# logout, password resets, and account changes.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': _django_db_name(),
     }
 }
-SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = 'sessionid'
 SESSION_COOKIE_PATH = '/'
 SESSION_COOKIE_SAMESITE = 'Lax'
