@@ -148,17 +148,24 @@ def test_proxy_route_returns_proxy_payload_and_validation_errors(client, monkeyp
     assert invalid.get_json() == {"error": "URL is required"}
 
 
-def test_proxy_route_rejects_unauthenticated_requests(client):
+def test_proxy_route_allows_guest_requests(client, monkeypatch):
+    import pypostboy.routes.proxy as proxy_route
+
+    monkeypatch.setattr(
+        proxy_route,
+        "proxy_http_request",
+        lambda body: {"status": 200, "statusText": "OK", "headers": {}, "body": {"guest": True}, "time": 1},
+    )
+
     response = client.post("/api/proxy", json={"url": "https://api.example.test", "method": "GET"})
 
-    assert response.status_code == 401
-    assert response.get_json() == {"success": False, "error": "Authentication required"}
+    assert response.status_code == 200
+    assert response.get_json()["body"] == {"guest": True}
 
 
 def test_proxy_route_allows_authenticated_requests(client, monkeypatch, user_a_headers):
     import pypostboy.routes.proxy as proxy_route
 
-    monkeypatch.setattr(proxy_route, "require_current_user", lambda _request: {"id": 99})
     monkeypatch.setattr(
         proxy_route,
         "proxy_http_request",
@@ -175,7 +182,6 @@ def test_proxy_route_is_csrf_exempt_for_post_requests(app, monkeypatch, user_a_h
     from django.test import Client as DjangoClient
     import pypostboy.routes.proxy as proxy_route
 
-    monkeypatch.setattr(proxy_route, "require_current_user", lambda _request: {"id": 99})
     monkeypatch.setattr(
         proxy_route,
         "proxy_http_request",

@@ -5,9 +5,7 @@ import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from pypostboy.auth import AuthenticationError, require_current_user
 from pypostboy.djangoapp.request import json_body
-from pypostboy.http.responses import error
 from pypostboy.services.proxy_service import ProxyError, proxy_http_request
 
 
@@ -25,10 +23,7 @@ def _log_user_id(request):
 def proxy_request(request):
     """Proxy an HTTP request."""
     try:
-        require_current_user(request)
         return JsonResponse(proxy_http_request(json_body(request)))
-    except AuthenticationError as err:
-        return error(err, 401)
     except ValueError as err:
         return JsonResponse({'error': str(err)}, status=400)
     except ProxyError as err:

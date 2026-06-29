@@ -219,7 +219,6 @@ def test_protected_api_routes_require_session_or_bearer_token(client):
         client.post("/api/requests/1/instances", json={"name": "No auth"}),
         client.get("/api/request-instances/1"),
         client.post("/api/import", json={"type": "curl", "data": "curl https://api.example.test"}),
-        client.post("/api/proxy", json={"url": "https://api.example.test", "method": "GET"}),
     ]
 
     for response in protected_requests:
