@@ -141,6 +141,34 @@ def _request_user_id(request):
     return value
 
 
+def get_authenticated_user(request=None):
+    """Return the explicitly authenticated request user or raise.
+
+    Unlike :func:`get_current_user`, this strict resolver never falls back to
+    the default local user. Protected API routes should call this path so each
+    request is backed by either an authenticated Django session or a valid
+    bearer token.
+    """
+    request = request or get_current_request()
+    if request is None:
+        raise AuthenticationError('Authentication required')
+
+    cached = getattr(request, 'current_user', None)
+    if cached is not None:
+        return cached
+
+    _identity_source, _identity_name, explicit_user_id = _request_identity(request)
+    if explicit_user_id is None:
+        raise AuthenticationError('Authentication required')
+
+    user = _user_from_id(explicit_user_id)
+    if user is None:
+        raise AuthenticationError('Authentication required')
+
+    current_user = _user_to_mapping(user)
+    request.current_user = current_user
+    return current_user
+
 def get_current_user(request=None):
     """Return the current user from request state, falling back to local user.
 
@@ -165,8 +193,5 @@ def get_current_user(request=None):
 
 
 def require_current_user(request=None):
-    """Return the current user or raise when request identity is invalid."""
-    user = get_current_user(request)
-    if not user:
-        raise AuthenticationError('Authentication required')
-    return user
+    """Return the explicitly authenticated user or raise."""
+    return get_authenticated_user(request)

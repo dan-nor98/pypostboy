@@ -4,10 +4,31 @@ import re
 
 from django.conf import settings
 
-from pypostboy.auth import AuthenticationError, get_current_user
+from pypostboy.auth import AuthenticationError, get_authenticated_user
 from pypostboy.db.connection import get_connection
 from pypostboy.djangoapp.context import reset_current_request, set_current_request
 from pypostboy.http.responses import error
+
+
+PUBLIC_API_PATHS = {
+    '/api/auth/me',
+    '/api/auth/csrf',
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/token',
+    '/api/auth/recover/verify',
+    '/api/auth/recover/reset',
+}
+
+
+def _normalize_path(path):
+    if path != '/' and path.endswith('/'):
+        return path.rstrip('/')
+    return path
+
+
+def _is_public_api_path(path):
+    return _normalize_path(path) in PUBLIC_API_PATHS
 
 
 def _rollback_database_transaction():
@@ -53,12 +74,15 @@ class PostBoyMiddleware:
         try:
             if is_api_request:
                 _safe_rollback_database_transaction()
-                try:
-                    get_current_user()
-                except AuthenticationError as err:
-                    response = error(err, 401)
-                else:
+                if _is_public_api_path(request.path):
                     response = self.get_response(request)
+                else:
+                    try:
+                        get_authenticated_user(request)
+                    except AuthenticationError as err:
+                        response = error(err, 401)
+                    else:
+                        response = self.get_response(request)
             else:
                 response = self.get_response(request)
         except Exception:

@@ -105,17 +105,20 @@ def test_unsigned_user_id_header_is_ignored(
     """A forged user-id header cannot switch identity."""
     forged_headers = {"X-Postboy-User-Id": str(user_b["id"])}
 
-    collections = assert_success(client.get("/api/collections", headers=forged_headers))
-    assert collections == []
+    assert_error(
+        client.get("/api/collections", headers=forged_headers),
+        401,
+        "Authentication required",
+    )
     assert_error(
         client.get(f"/api/collections/{collection['id']}", headers=forged_headers),
-        404,
-        "Collection not found",
+        401,
+        "Authentication required",
     )
     assert_error(
         client.get(f"/api/requests/{request_record['id']}", headers=forged_headers),
-        404,
-        "Request not found",
+        401,
+        "Authentication required",
     )
 
 

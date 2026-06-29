@@ -127,7 +127,7 @@ def test_register_login_logout_session_scopes_collections(client):
     current_after_logout = assert_success(client.post("/api/auth/logout"))
     assert current_after_logout["username"] == "local_user"
     assert current_after_logout["is_guest"] is True
-    assert_success(client.get("/api/collections")) == []
+    assert_error(client.get("/api/collections"), 401, "Authentication required")
 
     assert_error(
         client.post(
@@ -147,6 +147,23 @@ def test_register_login_logout_session_scopes_collections(client):
     assert logged_in["id"] == user["id"]
     assert logged_in["is_guest"] is False
     assert len(assert_success(client.get("/api/collections"))) == 1
+
+
+def test_protected_api_routes_require_session_or_bearer_token(client):
+    protected_requests = [
+        client.get("/api/collections"),
+        client.post("/api/collections", json={"name": "No auth"}),
+        client.get("/api/collections/1/requests"),
+        client.post("/api/collections/1/requests", json={"name": "No auth"}),
+        client.get("/api/requests/1"),
+        client.post("/api/requests/1/instances", json={"name": "No auth"}),
+        client.get("/api/request-instances/1"),
+        client.post("/api/import", json={"type": "curl", "data": "curl https://api.example.test"}),
+        client.post("/api/proxy", json={"url": "https://api.example.test", "method": "GET"}),
+    ]
+
+    for response in protected_requests:
+        assert_error(response, 401, "Authentication required")
 
 def test_auth_me_uses_default_local_user_for_legacy_local_mode(client):
     current = assert_success(client.get("/api/auth/me"))
