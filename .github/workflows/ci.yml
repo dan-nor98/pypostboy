@@ -39,3 +39,9 @@ jobs:
 
       - name: Run IAM browser auth session tests
         run: npm run test:iam-browser
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright dashboard E2E tests
+        run: npm run test:e2e:playwright
