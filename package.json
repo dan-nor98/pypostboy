@@ -16,7 +16,8 @@
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
     "frontend:check": "python scripts/check_dashboard_build.py",
-    "frontend:install": "npm --prefix frontend install"
+    "frontend:install": "npm --prefix frontend install",
+    "test:iam-browser": "node --test tests/e2e/iam-browser-auth-session.test.mjs"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.6.1",
