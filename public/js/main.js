@@ -3167,6 +3167,14 @@ document.addEventListener('DOMContentLoaded', () => {
     //  PARAMS – AUTO DETECT & BIDIRECTIONAL SYNC
     // ═══════════════════════════════════════════════════════
 
+    function safeDecodeURIComponent(value) {
+        try {
+            return decodeURIComponent(value);
+        } catch (err) {
+            return value;
+        }
+    }
+
     function syncParamsFromUrl() {
         if (updatingUrlFromParams) return;
         updatingParamsFromUrl = true;
@@ -3186,11 +3194,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!part) return;
             var eqIdx = part.indexOf('=');
             if (eqIdx === -1) {
-                pairs.push({ key: decodeURIComponent(part), value: '', desc: '' });
+                pairs.push({ key: safeDecodeURIComponent(part), value: '', desc: '' });
             } else {
                 pairs.push({
-                    key: decodeURIComponent(part.substring(0, eqIdx)),
-                    value: decodeURIComponent(part.substring(eqIdx + 1)),
+                    key: safeDecodeURIComponent(part.substring(0, eqIdx)),
+                    value: safeDecodeURIComponent(part.substring(eqIdx + 1)),
                     desc: ''
                 });
             }
