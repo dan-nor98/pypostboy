@@ -3588,6 +3588,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    var checkedBodyTypeInput = document.querySelector('input[name="bodyType"]:checked');
+    updateBodyEditorsVisibility(checkedBodyTypeInput ? checkedBodyTypeInput.value : 'none');
+
     addFormDataBtn.addEventListener('click', function() { addFormDataRow(); markActiveTabUnsaved(); });
     formDataRows.addEventListener('input', markActiveTabUnsaved);
 
