@@ -140,6 +140,18 @@ def _coerce_origin_list(raw_origins):
     return list(raw_origins or [])
 
 
+def _as_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _bool_from_env(name, default=False):
+    return _as_bool(os.environ.get(name), default=default)
+
+
 def _apply_django_settings(config_dict):
     """Apply mutable PostBoy settings after Django is configured."""
     settings.DEBUG = bool(config_dict.get('DEBUG', settings.DEBUG))
@@ -158,6 +170,22 @@ def _apply_django_settings(config_dict):
     )
     settings.SESSION_COOKIE_SAMESITE = config_dict.get(
         'SESSION_COOKIE_SAMESITE', getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax')
+    )
+    settings.SESSION_COOKIE_SECURE = _as_bool(
+        config_dict.get('SESSION_COOKIE_SECURE'),
+        default=_bool_from_env('SESSION_COOKIE_SECURE', default=not settings.DEBUG),
+    )
+    settings.SESSION_COOKIE_HTTPONLY = _as_bool(
+        config_dict.get('SESSION_COOKIE_HTTPONLY'),
+        default=getattr(settings, 'SESSION_COOKIE_HTTPONLY', True),
+    )
+    settings.CSRF_COOKIE_SECURE = _as_bool(
+        config_dict.get('CSRF_COOKIE_SECURE'),
+        default=_bool_from_env('CSRF_COOKIE_SECURE', default=not settings.DEBUG),
+    )
+    settings.CSRF_COOKIE_HTTPONLY = _as_bool(
+        config_dict.get('CSRF_COOKIE_HTTPONLY'),
+        default=getattr(settings, 'CSRF_COOKIE_HTTPONLY', False),
     )
     settings.POSTBOY_API_TOKEN_MAX_AGE_SECONDS = int(
         config_dict.get(
