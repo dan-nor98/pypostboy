@@ -4,6 +4,7 @@ from .migrations import (
     migrate_ownership,
     migrate_request_instances,
     migrate_user_auth_fields,
+    migrate_user_credential_fields,
     migrate_user_recovery_fields,
 )
 
@@ -22,6 +23,7 @@ SQLITE_TABLE_SCHEMAS = {
             recovery_key_hash TEXT,
             recovery_key_created_at TEXT,
             recovery_key_rotated_at TEXT,
+            credentials_updated_at TEXT,
             last_login TEXT,
             is_superuser INTEGER NOT NULL DEFAULT 0,
             is_staff INTEGER NOT NULL DEFAULT 0,
@@ -118,6 +120,7 @@ POSTGRES_TABLE_SCHEMAS['users'] = f"""
             recovery_key_hash TEXT,
             recovery_key_created_at TEXT,
             recovery_key_rotated_at TEXT,
+            credentials_updated_at TEXT,
             last_login TEXT,
             is_superuser BOOLEAN NOT NULL DEFAULT FALSE,
             is_staff BOOLEAN NOT NULL DEFAULT FALSE,
@@ -168,5 +171,6 @@ def initialize_schema(cursor, backend='sqlite'):
     migrate_request_instances(cursor)
     migrate_ownership(cursor)
     migrate_user_recovery_fields(cursor)
+    migrate_user_credential_fields(cursor)
     migrate_user_auth_fields(cursor)
     create_indexes(cursor)

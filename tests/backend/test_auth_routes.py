@@ -439,6 +439,54 @@ def test_api_token_endpoint_issues_short_lived_bearer_token(client):
     current = assert_success(client.get("/api/auth/me", headers=token_headers))
     assert current["id"] == registered["user"]["id"]
 
+def test_password_reset_invalidates_existing_api_tokens(client):
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "token-reset-user", "password": "password123"},
+        ),
+        201,
+    )
+    recovery_key = registered["recovery_key"]
+    assert_success(client.post("/api/auth/logout"))
+
+    old_token_payload = assert_success(
+        client.post(
+            "/api/auth/token",
+            json={"username": "token-reset-user", "password": "password123"},
+        )
+    )
+    old_token_headers = {"Authorization": f"Bearer {old_token_payload['token']}"}
+    assert_success(client.get("/api/auth/me", headers=old_token_headers))
+
+    reset_payload = assert_success(
+        client.post(
+            "/api/auth/recover/reset",
+            json={
+                "username": "token-reset-user",
+                "recovery_key": recovery_key,
+                "new_password": "password456",
+            },
+        )
+    )
+    assert reset_payload["password_reset"] is True
+
+    assert_error(
+        client.get("/api/auth/me", headers=old_token_headers),
+        401,
+        "Invalid API token",
+    )
+
+    new_token_payload = assert_success(
+        client.post(
+            "/api/auth/token",
+            json={"username": "token-reset-user", "password": "password456"},
+        )
+    )
+    new_token_headers = {"Authorization": f"Bearer {new_token_payload['token']}"}
+    current = assert_success(client.get("/api/auth/me", headers=new_token_headers))
+    assert current["id"] == registered["user"]["id"]
+
 
 def test_invalid_api_token_is_rejected(client):
     assert_error(

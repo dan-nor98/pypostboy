@@ -12,6 +12,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     recovery_key_hash = models.TextField(null=True)
     recovery_key_created_at = models.TextField(null=True)
     recovery_key_rotated_at = models.TextField(null=True)
+    credentials_updated_at = models.TextField(null=True)
     created_at = models.TextField()
     updated_at = models.TextField()
 

@@ -42,6 +42,7 @@ def test_initialize_schema_creates_user_auth_columns_on_fresh_sqlite_schema(sqli
     }
 
     assert user_columns["last_login"]["notnull"] == 0
+    assert user_columns["credentials_updated_at"]["notnull"] == 0
     assert user_columns["is_superuser"]["notnull"] == 1
     assert user_columns["is_superuser"]["dflt_value"] == "0"
     assert user_columns["is_staff"]["notnull"] == 1
@@ -229,6 +230,7 @@ def test_initialize_schema_adds_missing_auth_columns_on_postgres_path():
     initialize_schema(postgres_cursor, backend='postgresql')
     postgres_sql = '\n'.join(sql for sql, _params in postgres_cursor.statements)
 
+    assert 'ALTER TABLE users ADD COLUMN credentials_updated_at TEXT' in postgres_sql
     assert 'ALTER TABLE users ADD COLUMN last_login TIMESTAMP NULL' in postgres_sql
     assert 'ALTER TABLE users ADD COLUMN is_superuser BOOLEAN NOT NULL DEFAULT FALSE' in postgres_sql
     assert 'ALTER TABLE users ADD COLUMN is_staff BOOLEAN NOT NULL DEFAULT FALSE' in postgres_sql
@@ -265,6 +267,7 @@ def test_initialize_schema_migrates_legacy_user_auth_columns_and_is_idempotent(t
         for row in conn.execute("PRAGMA table_info(users)").fetchall()
     }
     assert user_columns["last_login"]["notnull"] == 0
+    assert user_columns["credentials_updated_at"]["notnull"] == 0
     assert user_columns["is_superuser"]["notnull"] == 1
     assert user_columns["is_superuser"]["dflt_value"] == "0"
     assert user_columns["is_staff"]["notnull"] == 1
@@ -272,6 +275,7 @@ def test_initialize_schema_migrates_legacy_user_auth_columns_and_is_idempotent(t
     assert user_columns["is_active"]["notnull"] == 1
     assert user_columns["is_active"]["dflt_value"] == "1"
     assert list(user_columns).count("last_login") == 1
+    assert list(user_columns).count("credentials_updated_at") == 1
     assert list(user_columns).count("is_superuser") == 1
     assert list(user_columns).count("is_staff") == 1
     assert list(user_columns).count("is_active") == 1

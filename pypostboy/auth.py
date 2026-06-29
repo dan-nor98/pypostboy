@@ -31,6 +31,7 @@ def _user_to_mapping(user):
         'recovery_key_hash': user.recovery_key_hash,
         'recovery_key_created_at': user.recovery_key_created_at,
         'recovery_key_rotated_at': user.recovery_key_rotated_at,
+        'credentials_updated_at': user.credentials_updated_at,
         'created_at': user.created_at,
         'updated_at': user.updated_at,
         'last_login': user.last_login,
@@ -62,6 +63,7 @@ def _default_local_user():
             'auth_subject': None,
             'created_at': now,
             'updated_at': now,
+            'credentials_updated_at': now,
         },
     )
     return user
@@ -78,10 +80,22 @@ def api_token_max_age_seconds():
     )
 
 
+def _token_credentials_updated_at(user):
+    """Return the credential freshness marker embedded in API tokens."""
+    return user.credentials_updated_at or user.updated_at or ''
+
+
 def issue_api_token(user_id):
     """Issue a short-lived signed bearer token for non-browser API clients."""
+    user = _user_from_id(user_id)
+    if user is None:
+        raise AuthenticationError('Authentication required')
     return signing.dumps(
-        {'type': API_TOKEN_TYPE, 'user_id': int(user_id)},
+        {
+            'type': API_TOKEN_TYPE,
+            'user_id': int(user_id),
+            'credentials_updated_at': _token_credentials_updated_at(user),
+        },
         salt=API_TOKEN_SALT,
     )
 
@@ -105,7 +119,10 @@ def resolve_api_token(token, max_age=None):
         raise AuthenticationError('Invalid API token')
 
     user_id = payload.get('user_id')
-    if _user_from_id(user_id) is None:
+    user = _user_from_id(user_id)
+    if user is None:
+        raise AuthenticationError('Invalid API token')
+    if payload.get('credentials_updated_at') != _token_credentials_updated_at(user):
         raise AuthenticationError('Invalid API token')
     return user_id
 

@@ -52,6 +52,7 @@ def _user_to_mapping(user):
         "recovery_key_hash": user.recovery_key_hash,
         "recovery_key_created_at": user.recovery_key_created_at,
         "recovery_key_rotated_at": user.recovery_key_rotated_at,
+        "credentials_updated_at": user.credentials_updated_at,
         "created_at": user.created_at,
         "updated_at": user.updated_at,
         "last_login": user.last_login,
@@ -237,6 +238,7 @@ def register(request):
                 recovery_key_hash=recovery_key_hash,
                 recovery_key_created_at=now,
                 recovery_key_rotated_at=None,
+                credentials_updated_at=now,
                 created_at=now,
                 updated_at=now,
             )
@@ -325,11 +327,13 @@ def recover_reset(request):
     user.password = make_password(new_password)
     user.recovery_key_hash = _hash_recovery_key(new_recovery_key)
     user.recovery_key_rotated_at = now
+    user.credentials_updated_at = now
     user.updated_at = now
     user.save(update_fields=[
         "password",
         "recovery_key_hash",
         "recovery_key_rotated_at",
+        "credentials_updated_at",
         "updated_at",
     ])
     _delete_sessions_for_user(user.id)
