@@ -13,7 +13,7 @@ from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
 from pypostboy.apps.core.models import User
-from pypostboy.auth import api_token_max_age_seconds, get_current_user, issue_api_token
+from pypostboy.auth import AuthenticationError, api_token_max_age_seconds, get_current_user, issue_api_token
 from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
 from pypostboy.db.serializers import timestamp
 from pypostboy.djangoapp.request import BadJsonBody, json_body
@@ -129,7 +129,10 @@ def _is_recovery_rate_limited(request, identity):
 
 def current_user(request):
     """Return the current session/header/cookie resolved user."""
-    return ok(_public_user(get_current_user(request)))
+    try:
+        return ok(_public_user(get_current_user(request)))
+    except AuthenticationError as err:
+        return error(err, 401)
 
 
 @ensure_csrf_cookie

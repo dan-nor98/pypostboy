@@ -3,7 +3,6 @@
 import pytest
 import requests
 
-from pypostboy.auth import AuthenticationError
 from pypostboy.services import proxy_service
 from pypostboy.services.proxy_service import (
     ProxyConnectionError,
@@ -126,7 +125,7 @@ def test_proxy_http_request_maps_ssl_errors_to_tls_error(monkeypatch):
         proxy_http_request({"url": "https://api.example.test", "method": "GET"})
 
 
-def test_proxy_route_returns_proxy_payload_and_validation_errors(client, monkeypatch):
+def test_proxy_route_returns_proxy_payload_and_validation_errors(client, monkeypatch, user_a_headers):
     # The route imports proxy_http_request directly, so patch that route symbol.
     import pypostboy.routes.proxy as proxy_route
 
@@ -136,7 +135,7 @@ def test_proxy_route_returns_proxy_payload_and_validation_errors(client, monkeyp
         lambda body: {"status": 204, "statusText": "No Content", "headers": {}, "body": "", "time": 1},
     )
 
-    response = client.post("/api/proxy", json={"url": "https://api.example.test", "method": "GET"})
+    response = client.post("/api/proxy", headers=user_a_headers, json={"url": "https://api.example.test", "method": "GET"})
     assert response.status_code == 200
     assert response.get_json()["status"] == 204
 
@@ -144,27 +143,19 @@ def test_proxy_route_returns_proxy_payload_and_validation_errors(client, monkeyp
         raise ValueError("URL is required")
 
     monkeypatch.setattr(proxy_route, "proxy_http_request", raise_value_error)
-    invalid = client.post("/api/proxy", json={})
+    invalid = client.post("/api/proxy", headers=user_a_headers, json={})
     assert invalid.status_code == 400
     assert invalid.get_json() == {"error": "URL is required"}
 
 
-def test_proxy_route_rejects_unauthenticated_requests(client, monkeypatch):
-    import pypostboy.routes.proxy as proxy_route
-
-    monkeypatch.setattr(
-        proxy_route,
-        "require_current_user",
-        lambda _request: (_ for _ in ()).throw(AuthenticationError("Authentication required")),
-    )
-
+def test_proxy_route_rejects_unauthenticated_requests(client):
     response = client.post("/api/proxy", json={"url": "https://api.example.test", "method": "GET"})
 
     assert response.status_code == 401
     assert response.get_json() == {"success": False, "error": "Authentication required"}
 
 
-def test_proxy_route_allows_authenticated_requests(client, monkeypatch):
+def test_proxy_route_allows_authenticated_requests(client, monkeypatch, user_a_headers):
     import pypostboy.routes.proxy as proxy_route
 
     monkeypatch.setattr(proxy_route, "require_current_user", lambda _request: {"id": 99})
@@ -174,13 +165,13 @@ def test_proxy_route_allows_authenticated_requests(client, monkeypatch):
         lambda body: {"status": 200, "statusText": "OK", "headers": {}, "body": {"ok": True}, "time": 1},
     )
 
-    response = client.post("/api/proxy", json={"url": "https://api.example.test", "method": "GET"})
+    response = client.post("/api/proxy", headers=user_a_headers, json={"url": "https://api.example.test", "method": "GET"})
 
     assert response.status_code == 200
     assert response.get_json()["body"] == {"ok": True}
 
 
-def test_proxy_route_is_csrf_exempt_for_post_requests(app, monkeypatch):
+def test_proxy_route_is_csrf_exempt_for_post_requests(app, monkeypatch, user_a_headers):
     from django.test import Client as DjangoClient
     import pypostboy.routes.proxy as proxy_route
 
@@ -196,6 +187,7 @@ def test_proxy_route_is_csrf_exempt_for_post_requests(app, monkeypatch):
         "/api/proxy",
         data='{"url": "https://api.example.test", "method": "GET"}',
         content_type="application/json",
+        HTTP_AUTHORIZATION=user_a_headers["Authorization"],
     )
 
     assert response.status_code == 200
@@ -226,7 +218,7 @@ def test_proxy_http_request_serializes_form_data_as_multipart(monkeypatch):
     assert calls[0]["files"] == [("name", (None, "Ada"))]
 
 
-def test_proxy_route_sends_imported_curl_form_data_to_echo_endpoint_as_multipart(client):
+def test_proxy_route_sends_imported_curl_form_data_to_echo_endpoint_as_multipart(client, user_a_headers):
     import json
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -262,6 +254,7 @@ def test_proxy_route_sends_imported_curl_form_data_to_echo_endpoint_as_multipart
     try:
         response = client.post(
             "/api/proxy",
+            headers=user_a_headers,
             json={
                 "url": f"http://127.0.0.1:{server.server_port}/echo",
                 "method": "POST",

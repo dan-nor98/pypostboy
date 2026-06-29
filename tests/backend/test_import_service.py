@@ -69,8 +69,8 @@ def test_serialization_helpers_handle_json_text_and_fallbacks():
     assert parse_json_or_text("plain text", {}) == "plain text"
 
 
-def test_import_route_rejects_malformed_json(client):
-    response = client.post("/api/import", data='{', content_type="application/json")
+def test_import_route_rejects_malformed_json(client, user_a_headers):
+    response = client.post("/api/import", headers=user_a_headers, data='{', content_type="application/json")
 
     assert response.status_code == 400
     assert response.get_json() == {
@@ -78,9 +78,10 @@ def test_import_route_rejects_malformed_json(client):
         "error": "Invalid JSON request body",
     }
 
-def test_import_route_supports_curl_postman_and_unknown_type(client):
+def test_import_route_supports_curl_postman_and_unknown_type(client, user_a_headers):
     curl_payload = client.post(
         "/api/import",
+        headers=user_a_headers,
         json={"type": "curl", "data": "curl -H 'Accept: application/json' https://api.example.test"},
     )
     assert curl_payload.status_code == 200
@@ -88,22 +89,24 @@ def test_import_route_supports_curl_postman_and_unknown_type(client):
 
     postman_payload = client.post(
         "/api/import",
+        headers=user_a_headers,
         json={"type": "postman", "data": {"info": {"name": "Imported"}, "item": []}},
     )
     assert postman_payload.status_code == 200
     assert postman_payload.get_json()["data"]["name"] == "Imported"
 
-    missing_data = client.post("/api/import", json={"type": "curl"})
+    missing_data = client.post("/api/import", headers=user_a_headers, json={"type": "curl"})
     assert missing_data.status_code == 400
     assert missing_data.get_json() == {"success": False, "error": "No data provided"}
 
-    unknown_type = client.post("/api/import", json={"type": "har", "data": {"ok": True}})
+    unknown_type = client.post("/api/import", headers=user_a_headers, json={"type": "har", "data": {"ok": True}})
     assert unknown_type.status_code == 400
     assert 'Unknown import type' in unknown_type.get_json()["error"]
 
-def test_import_route_curl_response_shape_documents_editor_contract(client):
+def test_import_route_curl_response_shape_documents_editor_contract(client, user_a_headers):
     response = client.post(
         "/api/import",
+        headers=user_a_headers,
         json={
             "type": "curl",
             "data": (
@@ -138,9 +141,10 @@ def test_import_route_curl_response_shape_documents_editor_contract(client):
         "form_data": [],
     }
 
-def test_import_route_curl_form_data_response_shape_documents_editor_contract(client):
+def test_import_route_curl_form_data_response_shape_documents_editor_contract(client, user_a_headers):
     response = client.post(
         "/api/import",
+        headers=user_a_headers,
         json={
             "type": "curl",
             "data": "curl https://api.example.test/upload -F 'name=Ada' --form 'avatar=@/tmp/a.png'",
@@ -160,9 +164,10 @@ def test_import_route_curl_form_data_response_shape_documents_editor_contract(cl
         ],
     }
 
-def test_import_route_returns_structured_curl_errors(client):
+def test_import_route_returns_structured_curl_errors(client, user_a_headers):
     response = client.post(
         "/api/import",
+        headers=user_a_headers,
         json={"type": "curl", "data": "curl https://api.example.test --data-raw"},
     )
 
