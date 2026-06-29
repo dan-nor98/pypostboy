@@ -299,6 +299,68 @@ def _set_cookie(client, name, value):
     client._client.cookies[name] = value
 
 
+def _session_cookie_value(client):
+    return client._client.cookies["sessionid"].value
+
+
+def test_logout_invalidates_reused_server_side_session_cookie(app):
+    client = app.test_client()
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "logout-invalidate-user", "password": "password123"},
+        ),
+        201,
+    )
+    assert_success(client.post("/api/collections", json={"name": "Private"}), 201)
+
+    reused_cookie_client = app.test_client()
+    _set_cookie(reused_cookie_client, "sessionid", _session_cookie_value(client))
+    before_logout = assert_success(reused_cookie_client.get("/api/auth/me"))
+    assert before_logout["id"] == registered["user"]["id"]
+
+    assert_success(client.post("/api/auth/logout"))
+
+    after_logout = assert_success(reused_cookie_client.get("/api/auth/me"))
+    assert after_logout["username"] == "local_user"
+    assert after_logout["is_guest"] is True
+    assert_error(reused_cookie_client.get("/api/collections"), 401, "Authentication required")
+
+
+def test_password_reset_invalidates_reused_server_side_session_cookie(app):
+    client = app.test_client()
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "reset-invalidate-user", "password": "password123"},
+        ),
+        201,
+    )
+    assert_success(client.post("/api/collections", json={"name": "Before reset"}), 201)
+
+    reused_cookie_client = app.test_client()
+    _set_cookie(reused_cookie_client, "sessionid", _session_cookie_value(client))
+    before_reset = assert_success(reused_cookie_client.get("/api/auth/me"))
+    assert before_reset["id"] == registration["user"]["id"]
+
+    reset = assert_success(
+        client.post(
+            "/api/auth/recover/reset",
+            json={
+                "username": "reset-invalidate-user",
+                "recovery_key": registration["recovery_key"],
+                "new_password": "newpassword123",
+            },
+        )
+    )
+    assert reset["password_reset"] is True
+
+    after_reset = assert_success(reused_cookie_client.get("/api/auth/me"))
+    assert after_reset["username"] == "local_user"
+    assert after_reset["is_guest"] is True
+    assert_error(reused_cookie_client.get("/api/collections"), 401, "Authentication required")
+
+
 def test_stale_user_id_cookie_is_ignored(client, user_b):
     _set_cookie(client, "user_id", str(user_b["id"]))
 
