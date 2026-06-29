@@ -160,6 +160,8 @@ PostBoy works out of the box for local development. Useful environment variables
 | `CORS_ALLOW_ALL_ORIGINS` | `true` in debug, else `false` | Allow any origin when enabled. Prefer disabling in production. |
 | `CORS_ALLOW_CREDENTIALS` | `true` | Include `Access-Control-Allow-Credentials: true` for allowed origins. |
 | `CSRF_TRUSTED_ORIGINS` | empty | Comma-separated trusted origins for Django CSRF origin checks (must include scheme and port). |
+| `SESSION_COOKIE_SECURE` | `false` in debug, else `true` | Send the session cookie only over HTTPS. Override only for local HTTP development. |
+| `CSRF_COOKIE_SECURE` | `false` in debug, else `true` | Send the CSRF cookie only over HTTPS. Override only for local HTTP development. |
 | `POSTBOY_MAX_CONTENT_LENGTH` | `10485760` | Maximum request/import payload size. |
 
 Example:

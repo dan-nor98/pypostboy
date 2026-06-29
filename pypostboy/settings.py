@@ -79,8 +79,18 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = 'sessionid'
 SESSION_COOKIE_PATH = '/'
 SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = _as_bool(
+    os.environ.get('SESSION_COOKIE_SECURE'),
+    default=not DEBUG,
+)
+SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = _as_bool(
+    os.environ.get('CSRF_COOKIE_SECURE'),
+    default=not DEBUG,
+)
+# The frontend reads csrftoken from document.cookie for API requests.
+CSRF_COOKIE_HTTPONLY = False
 CSRF_TRUSTED_ORIGINS = _split_csv(os.environ.get('CSRF_TRUSTED_ORIGINS'))
 POSTBOY_API_TOKEN_MAX_AGE_SECONDS = BaseConfig.POSTBOY_API_TOKEN_MAX_AGE_SECONDS
 PUBLIC_DIR = os.path.abspath(os.environ.get('POSTBOY_STATIC_FOLDER', DEFAULT_STATIC_FOLDER))
