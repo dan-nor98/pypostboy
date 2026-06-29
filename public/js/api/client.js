@@ -40,6 +40,11 @@ async function bootstrapCsrfToken() {
     return csrfToken;
 }
 
+export function resetCsrfToken() {
+    csrfToken = null;
+    return bootstrapCsrfToken();
+}
+
 function createApiError(message, status, payload) {
     var err = new Error(message || 'API request failed');
     err.name = 'ApiError';
@@ -143,5 +148,6 @@ export const apiClient = {
     sendProxyRequest(payload) { return requestJson('/client-proxy', buildJsonOptions('POST', payload), true); },
     sendProxy(payload) { return this.sendProxyRequest(payload); },
     importData(payload) { return request('/api/import', buildJsonOptions('POST', payload)); },
-    bootstrapCsrfToken() { return bootstrapCsrfToken(); }
+    bootstrapCsrfToken() { return bootstrapCsrfToken(); },
+    resetCsrfToken() { return resetCsrfToken(); }
 };
