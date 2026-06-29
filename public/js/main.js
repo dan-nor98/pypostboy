@@ -3557,7 +3557,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setEditorBodyType(bodyType) {
-        var value = bodyType || 'none';
+        var supportedBodyTypes = new Set(['none', 'json', 'text', 'xml', 'form-urlencoded', 'form-data']);
+        var value = supportedBodyTypes.has(bodyType) ? bodyType : 'none';
         var bodyRadio = document.querySelector('input[name="bodyType"][value="' + value + '"]');
         if (!bodyRadio) {
             value = 'none';
