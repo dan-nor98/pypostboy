@@ -16,7 +16,8 @@
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
     "frontend:check": "python scripts/check_dashboard_build.py",
-    "frontend:install": "npm --prefix frontend install"
+    "frontend:install": "npm --prefix frontend install",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.6.1",
@@ -26,7 +27,8 @@
     "@electron-forge/maker-zip": "^7.6.1",
     "concurrently": "^9.1.2",
     "electron": "^34.5.4",
-    "wait-on": "^8.0.3"
+    "wait-on": "^8.0.3",
+    "@playwright/test": "^1.55.0"
   },
   "dependencies": {
     "undici": "^6.21.2"
