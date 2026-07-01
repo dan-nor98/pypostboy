@@ -2878,6 +2878,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return !!findRequestById(tab.requestId);
     }
 
+    function canUsePersistentSnapshots() {
+        var user = userState.currentUser;
+        return !!(user && !user.is_guest);
+    }
+
 
     function highlightSnapshotRow(snapshotId) {
         if (!snapshotList || !snapshotId) return;
@@ -3006,6 +3011,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function refreshInstancesForActiveTab() {
+        if (!canUsePersistentSnapshots()) {
+            renderInstancesBar([]);
+            return;
+        }
+
         var tab = getActiveSavedTab();
         if (!tab) {
             renderInstancesBar([]);
@@ -3022,6 +3032,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function saveCurrentInstance() {
+        if (!canUsePersistentSnapshots()) {
+            showToast('Log in to save response snapshots.', 'error');
+            return;
+        }
+
         var activeTab = openTabs.find(function(t) { return t.id === activeTabId; }) || null;
         if (!activeTab || !activeTab.requestId) {
             showToast('Save the request before creating snapshots', 'error');
