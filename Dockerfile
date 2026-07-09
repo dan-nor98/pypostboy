@@ -1,4 +1,8 @@
-FROM python:3.12-slim
+FROM docker.devneeds.ir/python:3.12-slim
+
+ENV PIP_INDEX_URL=https://pypi.devneeds.ir/simple/
+
+RUN pip install --upgrade pip
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
