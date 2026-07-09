@@ -145,6 +145,18 @@ pip install -r requirements.txt
 pytest
 ```
 
+### End-to-end browser tests
+
+The Playwright suite under `tests/e2e/` starts the Django/PostBoy server automatically through Playwright's `webServer` configuration, using an isolated SQLite database at `.tmp/postboy-e2e.sqlite3`. Install Node dependencies and browser binaries before running it locally:
+
+```bash
+npm install
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
+
+If you prefer to start the server yourself, run `PORT=3001 POSTBOY_CONFIG=testing POSTBOY_DB_PATH=.tmp/postboy-e2e.sqlite3 POSTBOY_DJANGO_DB_PATH=.tmp/postboy-e2e.sqlite3 POSTBOY_TEST_DB_PATH=.tmp/postboy-e2e.sqlite3 python app.py` before invoking Playwright. The tests expect the app at `http://127.0.0.1:3001` unless `PORT` is overridden.
+
 ## Configuration
 
 PostBoy works out of the box for local development. Useful environment variables:
