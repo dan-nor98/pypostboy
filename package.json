@@ -17,7 +17,9 @@
     "frontend:build": "npm --prefix frontend run build",
     "frontend:check": "python scripts/check_dashboard_build.py",
     "frontend:install": "npm --prefix frontend install",
-    "test:e2e": "playwright test"
+    "test:iam-browser": "node --test tests/e2e/iam-browser-auth-session.test.mjs",
+    "test:e2e:playwright": "playwright test",
+    "test:e2e:playwright:headed": "playwright test --headed"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.6.1",
@@ -28,7 +30,7 @@
     "concurrently": "^9.1.2",
     "electron": "^34.5.4",
     "wait-on": "^8.0.3",
-    "@playwright/test": "^1.55.0"
+    "@playwright/test": "^1.45.0"
   },
   "dependencies": {
     "undici": "^6.21.2"

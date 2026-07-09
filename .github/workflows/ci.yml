@@ -12,6 +12,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run backend tests
+        run: pytest tests/backend
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -26,31 +37,11 @@ jobs:
       - name: Verify dashboard artifact exists when linked
         run: npm run frontend:check
 
-  e2e:
-    name: E2E browser tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - name: Run IAM browser auth session tests
+        run: npm run test:iam-browser
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install Node dependencies
-        run: npm install
-
-      - name: Install Playwright browser
+      - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests
-        run: npm run test:e2e
+      - name: Run Playwright dashboard E2E tests
+        run: npm run test:e2e:playwright
