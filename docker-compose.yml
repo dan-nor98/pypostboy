@@ -1,6 +1,8 @@
 services:
   app:
     build: .
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
@@ -10,6 +12,7 @@ services:
       POSTBOY_CONFIG: production
       POSTBOY_DATABASE_URL: postgresql://postboy:postboy@db:5432/postboy
       POSTBOY_SECRET_KEY: ${POSTBOY_SECRET_KEY:-change-me-for-local-compose-only}
+      POSTBOY_PROXY_LOCALHOST_HOST: host.docker.internal
       PORT: 3001
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}

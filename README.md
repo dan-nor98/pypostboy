@@ -117,6 +117,18 @@ docker compose down -v
 - Browser proxy calls must target relative `POST /client-proxy`, which Nginx rewrites to Django `POST /api/proxy`.
 - On SELinux hosts, the Nginx config bind mount uses `:ro,Z` so `/etc/nginx/conf.d/default.conf` is readable inside the container.
 
+### Calling a local Node.js server from Docker
+
+When PostBoy runs in Docker, **Server proxy** requests originate from the `app` container. PostBoy automatically maps loopback request URLs such as `http://localhost:3000/sign` to the client machine through Docker's host gateway, so you can enter the same URL you would use in Postman:
+
+```text
+http://localhost:3000/sign
+```
+
+Both Compose files map Docker's `host.docker.internal` hostname to the Docker host, which works on Docker Desktop and on current Linux Docker engines. Make sure the Node.js server is running before sending the request. On Linux, bind the server to a non-loopback interface when needed, for example `server.listen(3000, '0.0.0.0')`.
+
+If PostBoy and the Node.js server run in the same Compose project, use the Node service name instead, such as `http://signer:3000/sign`.
+
 ### Reverse-proxy and CORS model
 
 CORS is enforced by the browser and cannot be bypassed safely with client-side JavaScript. In Docker deployment, PostBoy uses a same-origin proxy route so the browser always calls `POST /client-proxy` on the Nginx origin (`http://localhost` for PostgreSQL mode, or `http://localhost:8080` for dev SQLite mode). Nginx forwards that request to Django `POST /api/proxy`, and Django performs the external API call server-side.

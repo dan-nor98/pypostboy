@@ -88,6 +88,37 @@ def test_proxy_http_request_requires_url():
         proxy_http_request({"method": "GET"})
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost:3000/sign",
+        "http://127.0.0.1:3000/sign",
+        "http://[::1]:3000/sign",
+    ],
+)
+def test_proxy_http_request_routes_loopback_urls_to_configured_host(monkeypatch, url):
+    calls = []
+
+    def fake_request(**kwargs):
+        calls.append(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setenv("POSTBOY_PROXY_LOCALHOST_HOST", "host.docker.internal")
+    monkeypatch.setattr(proxy_service.http_requests, "request", fake_request)
+
+    proxy_http_request({"url": url, "method": "GET"})
+
+    assert calls[0]["url"] == "http://host.docker.internal:3000/sign"
+
+
+def test_proxy_http_request_leaves_non_loopback_url_unchanged(monkeypatch):
+    monkeypatch.setenv("POSTBOY_PROXY_LOCALHOST_HOST", "host.docker.internal")
+
+    assert proxy_service._rewrite_loopback_url_for_host(
+        "https://api.example.test/widgets"
+    ) == "https://api.example.test/widgets"
+
+
 
 
 def test_proxy_http_request_rejects_invalid_url_scheme(monkeypatch):

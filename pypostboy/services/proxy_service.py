@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import requests as http_requests
 from django.conf import settings
@@ -31,6 +31,8 @@ REQUEST_CONTROLLED_HEADERS = HOP_BY_HOP_HEADERS | {
     'content-length',
     'host',
 }
+
+LOOPBACK_HOSTNAMES = {'localhost', '127.0.0.1', '::1'}
 
 
 class ProxyError(Exception):
@@ -84,6 +86,30 @@ def _safe_url_parts(url):
     return parsed.hostname or '', parsed.path or '/'
 
 
+def _rewrite_loopback_url_for_host(url):
+    """Map loopback URLs to the Docker host when explicitly configured."""
+    host_gateway = os.environ.get('POSTBOY_PROXY_LOCALHOST_HOST', '').strip()
+    if not host_gateway:
+        return url
+
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return url
+
+    if parsed.hostname not in LOOPBACK_HOSTNAMES:
+        return url
+
+    user_info, separator, _ = parsed.netloc.rpartition('@')
+    authority = f'{user_info}@' if separator else ''
+    authority += host_gateway
+    if port is not None:
+        authority += f':{port}'
+
+    return urlunsplit((parsed.scheme, authority, parsed.path, parsed.query, parsed.fragment))
+
+
 def get_proxy_timeout():
     """Return the configured outbound proxy timeout."""
     if not settings.configured:
@@ -105,6 +131,8 @@ def proxy_http_request(body):
 
     if not url:
         raise ValueError('URL is required')
+
+    url = _rewrite_loopback_url_for_host(url)
 
     fetch_headers = {}
     skipped_headers_count = 0

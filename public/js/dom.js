@@ -3,7 +3,6 @@ export function getDomElements() {
         methodSelect: document.getElementById('methodSelect'),
         urlInput: document.getElementById('urlInput'),
         executionModeSelect: document.getElementById('executionModeSelect'),
-        requestAdvancedToggle: document.getElementById('requestAdvancedToggle'),
         requestBarSecondary: document.getElementById('requestBarSecondary'),
         clientCredentialsSelect: document.getElementById('clientCredentialsSelect'),
         sendBtn: document.getElementById('sendBtn'),

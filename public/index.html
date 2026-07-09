@@ -260,7 +260,7 @@
                     <input type="text" id="urlInput" placeholder="Enter request URL or paste cURL command...">
                     <button class="btn-send btn btn-primary" id="sendBtn">Send</button>
                 </div>
-                <div class="request-bar-secondary" id="requestBarSecondary" hidden>
+                <div class="request-bar-secondary" id="requestBarSecondary">
                     <label class="execution-mode-control" for="executionModeSelect">
                         <span>Run via</span>
                         <select id="executionModeSelect" title="Choose how this request is executed">
@@ -280,7 +280,6 @@
                     <button class="btn-loop btn btn-tertiary" id="loopBtn" title="Loop Request" aria-label="Loop request">🔁</button>
                     <button class="btn btn-tertiary" id="openEnvVarsModalBtn" type="button" title="Edit environment variables">🧪 Environment</button>
                 </div>
-                <button class="request-bar-advanced-toggle btn btn-tertiary" id="requestAdvancedToggle" type="button" aria-controls="requestBarSecondary" aria-expanded="false" title="Advanced request controls (Alt+.)">Advanced options</button>
             </div>
 
             <!-- Loop Controls -->
