@@ -122,8 +122,8 @@ test('IAM session auth works only after browser register/login and is cleared by
     const username = `iam_e2e_${Date.now()}`;
     const password = 'correct horse battery staple';
 
-    const dashboard = await browser.fetch('/dashboard/');
-    await assertStatus(dashboard, 200, 'served frontend should be reachable from Django');
+    const appShell = await browser.fetch('/');
+    await assertStatus(appShell, 200, 'served app should be reachable from Django');
 
     const csrf = await browser.json('/api/auth/csrf');
     await assertStatus(csrf, 200, 'browser can obtain a CSRF cookie for session auth');
