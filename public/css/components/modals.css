@@ -147,7 +147,7 @@
 }
 
 .context-menu-item:hover {
-  background: var(--color-accent-hover-soft);
+  background: var(--color-surface-soft);
 }
 
 .context-menu-item.danger {
@@ -155,7 +155,7 @@
 }
 
 .context-menu-item.danger:hover {
-  background: var(--color-accent-soft);
+  background: var(--color-danger-soft);
 }
 
 .context-menu-separator {

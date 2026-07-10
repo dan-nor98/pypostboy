@@ -122,9 +122,9 @@
 }
 
 .login-actions .btn-secondary {
-  background: var(--color-border);
-  color: var(--color-text);
-  border-color: var(--color-border-light);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  border-color: var(--color-hairline);
 }
 
 .login-actions .btn-ghost {
