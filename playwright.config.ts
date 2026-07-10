@@ -16,7 +16,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'mkdir -p .tmp && rm -f .tmp/postboy-e2e.sqlite3 && python app.py',
+    command: 'node -e "const fs=require(\'node:fs\'); fs.mkdirSync(\'.tmp\',{recursive:true}); fs.rmSync(\'.tmp/postboy-e2e.sqlite3\',{force:true});" && python app.py',
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
     timeout: 60_000,
@@ -27,6 +27,7 @@ export default defineConfig({
       POSTBOY_DJANGO_DB_PATH: e2eDbPath,
       POSTBOY_TEST_DB_PATH: e2eDbPath,
       POSTBOY_CONFIG: 'testing',
+      PYTHONIOENCODING: 'utf-8',
       ALLOWED_HOSTS: 'localhost,127.0.0.1,[::1]',
       CSRF_TRUSTED_ORIGINS: `http://127.0.0.1:${port},http://localhost:${port}`,
     },

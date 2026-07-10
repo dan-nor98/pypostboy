@@ -243,7 +243,7 @@ Browsers enforce CORS and other browser-only policies for direct client requests
 - `electron/preload/index.js`: secure bridge via `contextBridge` only
 - `electron/request-executor/validation.js`: IPC payload validation and normalization
 - `electron/request-executor/index.js`: HTTP execution logic (Node/undici)
-- `public/js/desktop/bridge.js`: frontend adapter for desktop-native execution mode
+- `frontend/src/services/desktopBridge.js`: Vite frontend adapter for desktop-native execution mode
 
 Security defaults used:
 

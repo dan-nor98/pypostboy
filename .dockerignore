@@ -41,4 +41,5 @@ dist/
 # Node dependencies and generated frontend output
 node_modules/
 frontend/node_modules/
+public/assets/
 public/dashboard/

@@ -1,48 +1,79 @@
-from pathlib import Path
+import subprocess
+import textwrap
 
 
-MAIN_JS = Path("public/js/main.js")
-
-
-def read_main_js():
-    return MAIN_JS.read_text(encoding="utf-8")
+def run_node(script: str) -> None:
+    subprocess.run(
+        ["node", "--input-type=module", "-e", textwrap.dedent(script)],
+        check=True,
+        cwd=".",
+    )
 
 
 def test_form_data_send_request_builds_real_form_data_and_server_contract():
-    source = read_main_js()
-    form_data_start = source.index("} else if (bodyType === 'form-data')")
-    form_data_end = source.index("}\n        }\n\n        var payload", form_data_start)
-    form_data_block = source[form_data_start:form_data_end]
+    run_node(
+        """
+        import assert from 'node:assert/strict';
+        import {
+          buildClientFetchOptions,
+          buildServerProxyPayload,
+        } from './frontend/src/features/requests/requestPayload.js';
 
-    assert "var fd = new FormData();" in form_data_block
-    assert "fd.append(k, v);" in form_data_block
-    assert "body = fd;" in form_data_block
-    assert "JSON.stringify(fd)" not in form_data_block
-    assert "formData.push({ key: k, value: v });" in form_data_block
+        const state = {
+          method: 'POST',
+          url: 'https://api.example.test/upload',
+          params: [],
+          headers: [],
+          body_type: 'form-data',
+          body_content: '',
+          form_data: [{ key: 'file', value: '@avatar.png' }],
+          auth_type: 'none',
+          auth_config: {},
+        };
 
-    proxy_start = source.index("function buildServerProxyPayload")
-    proxy_end = source.index("async function executeRequest", proxy_start)
-    proxy_block = source[proxy_start:proxy_end]
+        const client = buildClientFetchOptions(state, 'omit');
+        assert.equal(client.options.body instanceof FormData, true);
+        assert.equal(client.options.headers['Content-Type'], undefined);
 
-    assert "delete proxyPayload.body;" in proxy_block
-    assert "proxyPayload.formData" in proxy_block
+        const proxy = buildServerProxyPayload(state);
+        assert.equal(Object.hasOwn(proxy, 'body'), false);
+        assert.equal(proxy.contentType, 'multipart/form-data');
+        assert.deepEqual(proxy.formData, [{ key: 'file', value: '@avatar.png' }]);
+      """
+    )
 
 
-def test_client_mode_does_not_set_content_type_for_form_data():
-    source = read_main_js()
-    headers_start = source.index("function buildClientFetchHeaders")
-    headers_end = source.index("function headersToObject", headers_start)
-    headers_block = source[headers_start:headers_end]
+def test_client_mode_sets_content_type_for_urlencoded_but_not_multipart():
+    run_node(
+        """
+        import assert from 'node:assert/strict';
+        import { buildClientFetchOptions } from './frontend/src/features/requests/requestPayload.js';
 
-    assert "var isMultipartFormData = contentType === 'multipart/form-data';" in headers_block
-    assert "normalizedName === 'content-type'" in headers_block
-    assert "if (contentType && !isMultipartFormData" in headers_block
+        const base = {
+          method: 'POST',
+          url: 'https://api.example.test/search',
+          params: [],
+          headers: [],
+          body_content: '',
+          form_data: [{ key: 'q', value: 'postboy' }],
+          auth_type: 'none',
+          auth_config: {},
+        };
+
+        const urlencoded = buildClientFetchOptions({ ...base, body_type: 'form-urlencoded' }, 'omit');
+        assert.equal(urlencoded.options.headers['Content-Type'], 'application/x-www-form-urlencoded');
+        assert.equal(urlencoded.options.body instanceof URLSearchParams, true);
+
+        const multipart = buildClientFetchOptions({ ...base, body_type: 'form-data' }, 'omit');
+        assert.equal(multipart.options.headers['Content-Type'], undefined);
+        assert.equal(multipart.options.body instanceof FormData, true);
+      """
+    )
 
 
 def test_form_body_editor_is_visible_for_urlencoded_and_multipart_bodies():
-    source = read_main_js()
-    visibility_start = source.index("function updateBodyEditorsVisibility")
-    visibility_end = source.index("// ─── Mobile Response Bottom Sheet", visibility_start)
-    visibility_block = source[visibility_start:visibility_end]
+    const_source = "const showForm = ['form-urlencoded', 'form-data'].includes(bodyType);"
+    source = open("frontend/src/pages/workspaceController.js", encoding="utf-8").read()
 
-    assert "formDataContainer.style.display = isForm ? '' : 'none';" in visibility_block
+    assert const_source in source
+    assert "$('#formDataContainer').hidden = !showForm;" in source

@@ -1,8 +1,16 @@
-FROM docker.devneeds.ir/python:3.12-slim
+FROM node:20-alpine AS frontend-builder
 
-ENV PIP_INDEX_URL=https://pypi.devneeds.ir/simple/
+WORKDIR /app
 
-RUN pip install --upgrade pip
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY frontend ./frontend
+COPY public ./public
+RUN rm -rf public/assets && npm run build:frontend
+
+
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -15,6 +23,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+COPY --from=frontend-builder /app/public ./public
 RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 3001

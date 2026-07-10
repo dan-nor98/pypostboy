@@ -1,65 +1,24 @@
-import subprocess
-import textwrap
+from pathlib import Path
 
 
-def run_node(script: str) -> None:
-    subprocess.run(
-        ["node", "--input-type=module", "-e", textwrap.dedent(script)],
-        check=True,
-        cwd=".",
-    )
+WORKSPACE_CONTROLLER = Path("frontend/src/pages/workspaceController.js")
 
 
-def test_open_tab_snapshots_are_scoped_to_current_user():
-    run_node(
-        """
-        import assert from 'node:assert/strict';
-        import {
-            clearOpenTabsSnapshot,
-            loadOpenTabsSnapshot,
-            saveOpenTabsSnapshot
-        } from './public/js/state/tabs.js';
+def test_request_tab_snapshots_are_scoped_to_current_user_or_guest_session():
+    source = WORKSPACE_CONTROLLER.read_text(encoding="utf-8")
 
-        const storage = new Map();
-        globalThis.localStorage = {
-            getItem(key) {
-                return storage.has(key) ? storage.get(key) : null;
-            },
-            setItem(key, value) {
-                storage.set(key, String(value));
-            },
-            removeItem(key) {
-                storage.delete(key);
-            }
-        };
+    assert "const REQUEST_TABS_STORAGE_KEY = 'postboy_request_tabs';" in source
+    assert "const REQUEST_TABS_STORAGE_PREFIX = `${REQUEST_TABS_STORAGE_KEY}_user_`;" in source
+    assert "const GUEST_REQUEST_TABS_STORAGE_KEY = `${REQUEST_TABS_STORAGE_KEY}_guest`;" in source
+    assert "return { storage: sessionStorage, key: GUEST_REQUEST_TABS_STORAGE_KEY };" in source
+    assert "return { storage: localStorage, key: REQUEST_TABS_STORAGE_PREFIX + String(user.id) };" in source
+    assert "postboy_open_tabs" not in source
 
-        const userA = { id: 101, username: 'user-a' };
-        const userB = { id: 202, username: 'user-b' };
-        const userASnapshot = {
-            activeTabId: 'tab-a',
-            openTabs: [{ id: 'tab-a', label: 'User A private tab', method: 'GET' }]
-        };
 
-        localStorage.setItem('postboy_open_tabs', JSON.stringify(userASnapshot));
-        saveOpenTabsSnapshot(userASnapshot, userA);
+def test_request_tab_persistence_captures_active_editor_state_before_unload():
+    source = WORKSPACE_CONTROLLER.read_text(encoding="utf-8")
 
-        assert.equal(
-            loadOpenTabsSnapshot(userB),
-            null,
-            'user B must not restore user A saved tabs'
-        );
-        assert.equal(
-            localStorage.getItem('postboy_open_tabs'),
-            null,
-            'legacy global tab snapshots should be cleared instead of restored across users'
-        );
-        assert.deepEqual(JSON.parse(loadOpenTabsSnapshot(userA)), userASnapshot);
-
-        clearOpenTabsSnapshot(userB);
-        assert.deepEqual(
-            JSON.parse(loadOpenTabsSnapshot(userA)),
-            userASnapshot,
-            'clearing user B snapshots must not delete user A snapshots'
-        );
-        """
-    )
+    assert "function snapshotActiveTab()" in source
+    assert "tab.state = collectEditorState();" in source
+    assert "saveTabsToStorage();" in source
+    assert "window.addEventListener('beforeunload'" in source

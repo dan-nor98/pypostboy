@@ -19,7 +19,7 @@ def test_guest_storage_uses_session_storage_and_redacts_request_secrets():
         import { join } from 'node:path';
         import { pathToFileURL } from 'node:url';
 
-        const source = readFileSync('./public/js/api/guest-storage.js', 'utf8');
+        const source = readFileSync('./frontend/src/services/guest/storage.js', 'utf8');
         const tempDir = mkdtempSync(join(tmpdir(), 'guest-storage-'));
         const modulePath = join(tempDir, 'guest-storage.mjs');
         writeFileSync(modulePath, source);

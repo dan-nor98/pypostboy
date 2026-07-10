@@ -72,8 +72,8 @@ def test_login_refreshes_csrf_before_unsafe_collection_mutation():
           };
         }
 
-        const userModuleUrl = pathToFileURL(process.cwd() + '/public/js/state/user.js').href;
-        const clientModuleUrl = pathToFileURL(process.cwd() + '/public/js/api/client.js').href;
+        const userModuleUrl = pathToFileURL(process.cwd() + '/frontend/src/state/user.js').href;
+        const clientModuleUrl = pathToFileURL(process.cwd() + '/frontend/src/services/apiClient.js').href;
         const { loginUser } = await import(userModuleUrl);
         const { apiClient } = await import(clientModuleUrl);
 

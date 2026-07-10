@@ -14,7 +14,7 @@ def test_render_response_body_populates_matching_line_numbers_without_copy_text(
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { renderResponseBody } from './public/js/ui/response-viewer.js';
+        import { renderResponseBody } from './frontend/src/ui/responseViewer.js';
 
         function stripHtml(html) {
             return String(html)
@@ -89,7 +89,7 @@ def test_json_tree_collapsed_child_preserves_original_gutter_line_numbers():
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { renderResponseBody, toggleJsonTreeNode } from './public/js/ui/response-viewer.js';
+        import { renderResponseBody, toggleJsonTreeNode } from './frontend/src/ui/responseViewer.js';
 
         function stripHtml(html) {
             return String(html)

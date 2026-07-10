@@ -1,13 +1,14 @@
 """Tests for static asset routing."""
 
 
-def test_legacy_script_path_serves_compatibility_loader(client):
-    response = client.get("/script.js")
+def test_index_serves_vite_application_entry(client):
+    response = client.get("/")
 
     assert response.status_code == 200
-    assert response.mimetype == "text/javascript"
-    assert b"import('/js/main.js')" in response.data
-    assert not response.data.lstrip().startswith(b"<")
+    assert response.mimetype == "text/html"
+    assert b'<div id="root"></div>' in response.data
+    assert b'/assets/index-' in response.data
+    assert b'/js/main.js' not in response.data
 
 
 def test_missing_asset_does_not_fall_back_to_index_html(client):

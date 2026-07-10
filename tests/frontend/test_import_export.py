@@ -14,7 +14,7 @@ def test_parse_curl_fallback_handles_ansi_c_quoted_header_value():
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { parseCurlFallback, tokenize } from './public/js/features/import-export.js';
+        import { parseCurlFallback, tokenize } from './frontend/src/utils/importExport.js';
 
         const cmd = String.raw`curl 'https://apib-prod.daricgold.com/api/plan/' -H $'access: H~C` + "`" + String.raw`''Xj{qccjLHEmA@4(' -H $'escaped: \'quoted\' \\ slash'`;
         const tokens = tokenize(cmd);
@@ -35,7 +35,7 @@ def test_parse_curl_fallback_handles_json_flag_with_space_separated_value():
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { parseCurlFallback } from './public/js/features/import-export.js';
+        import { parseCurlFallback } from './frontend/src/utils/importExport.js';
 
         const parsed = parseCurlFallback(`curl https://api.example.test/widgets --json '{"name":"Ada"}'`);
 
@@ -55,7 +55,7 @@ def test_parse_curl_fallback_handles_json_flag_with_equals_and_existing_headers(
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { parseCurlFallback } from './public/js/features/import-export.js';
+        import { parseCurlFallback } from './frontend/src/utils/importExport.js';
 
         const parsed = parseCurlFallback(`curl --request PATCH https://api.example.test/widgets/1 -H 'accept: application/vnd.api+json' -H 'content-type: application/merge-patch+json' --json={"name":"Ada"}`);
 
@@ -74,7 +74,7 @@ def test_apply_parsed_import_payload_preserves_json_body_in_editor_state():
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { applyParsedImportPayload } from './public/js/features/import-export.js';
+        import { applyParsedImportPayload } from './frontend/src/utils/importExport.js';
 
         const payload = {
             method: 'POST',
@@ -144,7 +144,7 @@ def test_form_urlencoded_body_content_normalizes_to_form_rows_for_preview_and_ap
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { applyParsedImportPayload, normalizeParsedImportPayload } from './public/js/features/import-export.js';
+        import { applyParsedImportPayload, normalizeParsedImportPayload } from './frontend/src/utils/importExport.js';
 
         const payload = {
             method: 'POST',
@@ -192,7 +192,7 @@ def test_parse_curl_fallback_data_flags_populate_form_urlencoded_rows():
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { parseCurlFallback } from './public/js/features/import-export.js';
+        import { parseCurlFallback } from './frontend/src/utils/importExport.js';
 
         const dataParsed = parseCurlFallback(`curl https://api.example.test/search -d 'q=postboy&page=2'`);
         assert.equal(dataParsed.method, 'POST');
@@ -220,7 +220,7 @@ def test_form_urlencoded_body_content_decodes_percent_encoding_and_plus_spaces()
     run_node(
         r"""
         import assert from 'node:assert/strict';
-        import { normalizeParsedImportPayload } from './public/js/features/import-export.js';
+        import { normalizeParsedImportPayload } from './frontend/src/utils/importExport.js';
 
         const parsed = normalizeParsedImportPayload({
             body_type: 'form-urlencoded',

@@ -1,22 +1,15 @@
 from pathlib import Path
 
 
-def test_guest_snapshot_refresh_is_silent_until_save_attempt():
-    source = Path("public/js/main.js").read_text()
+WORKSPACE_CONTROLLER = Path("frontend/src/pages/workspaceController.js")
 
-    assert "function canUsePersistentSnapshots()" in source
-    assert "return !!(user && !user.is_guest);" in source
-    assert (
-        "async function refreshInstancesForActiveTab() {\n"
-        "        if (!canUsePersistentSnapshots()) {\n"
-        "            renderInstancesBar([]);\n"
-        "            return;\n"
-        "        }"
-    ) in source
-    assert (
-        "async function saveCurrentInstance() {\n"
-        "        if (!canUsePersistentSnapshots()) {\n"
-        "            showToast('Log in to save response snapshots.', 'error');\n"
-        "            return;\n"
-        "        }"
-    ) in source
+
+def test_response_snapshots_are_local_ui_state_without_guest_network_requirement():
+    source = WORKSPACE_CONTROLLER.read_text(encoding="utf-8")
+    snapshot_start = source.index("function saveCurrentSnapshot()")
+    snapshot_block = source[snapshot_start:source.index("function initModalCloseHandlers", snapshot_start)]
+
+    assert "if (!latestResponse)" in snapshot_block
+    assert "$('#snapshotList').prepend(item);" in snapshot_block
+    assert "item.addEventListener('click', () => renderResponse(latestResponse));" in snapshot_block
+    assert "apiClient.createRequestInstance" not in snapshot_block

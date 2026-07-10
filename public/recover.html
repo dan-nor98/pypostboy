@@ -1,34 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PostBoy - Password Recovery</title>
-    <link rel="icon" type="image/png" href="/favicon.ico">
-    <link rel="stylesheet" href="/css/tokens.css">
-    <link rel="stylesheet" href="/css/base.css">
-    <link rel="stylesheet" href="/css/components/forms.css">
-    <link rel="stylesheet" href="/css/features/login.css">
-</head>
-<body>
-    <main class="login-screen" aria-labelledby="recoveryTitle">
-        <section class="login-card">
-            <p class="login-kicker">Account recovery</p>
-            <h1 id="recoveryTitle">Reset password</h1>
-            <p class="login-subtitle">Verify your recovery key, then set a new password.</p>
-            <div class="account-status login-status" id="recoveryStatus" role="status"></div>
-            <div class="recovery-panel recovery-panel-visible">
-                <input type="text" id="recoverIdentity" class="form-input recovery-input" placeholder="Username or email">
-                <input type="password" id="recoverKey" class="form-input recovery-input" placeholder="Recovery key">
-                <input type="password" id="recoverNewPassword" class="form-input recovery-input" placeholder="New password (min 8 chars)">
-                <div class="login-actions">
-                    <button class="btn-secondary" id="recoverVerifyBtn" type="button">Verify key</button>
-                    <button class="btn-primary" id="recoverResetBtn" type="button">Reset password</button>
-                    <a class="btn-ghost login-link-button" href="/">Back to login</a>
-                </div>
-            </div>
-        </section>
-    </main>
-    <script type="module" src="js/recover.js"></script>
-</body>
+    <link rel="icon" type="image/png" href="/favicon.ico" />
+    <script type="module" crossorigin src="/assets/recover-DcLx8sj3.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/user-BKk0W6RG.js">
+    <link rel="stylesheet" crossorigin href="/assets/user-CiCAW50w.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

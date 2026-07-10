@@ -6,7 +6,7 @@ integration.
 """
 
 import os
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from pypostboy.config import BaseConfig, DEFAULT_DATABASE_PATH, DEFAULT_STATIC_FOLDER
 
@@ -21,13 +21,12 @@ def _as_bool(value, default=False):
     return value.strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-def _django_db_name():
-    """Resolve Django DB path to the same SQLite database used by repository writes."""
+def _django_sqlite_name(database_url=None):
+    """Resolve Django's SQLite path to the same SQLite DB used by repositories."""
     explicit = os.environ.get('POSTBOY_DJANGO_DB_PATH')
     if explicit:
         return explicit
 
-    database_url = os.environ.get('POSTBOY_DATABASE_URL')
     if database_url and database_url.startswith('sqlite://'):
         parsed = urlparse(database_url)
         if database_url == 'sqlite:///:memory:' or parsed.path == '/:memory:':
@@ -37,6 +36,37 @@ def _django_db_name():
         return os.path.abspath(unquote(parsed.path or DEFAULT_DATABASE_PATH))
 
     return os.path.abspath(os.environ.get('POSTBOY_DB_PATH', DEFAULT_DATABASE_PATH))
+
+
+def _django_database_config():
+    """Return Django's database config aligned with PostBoy's repository DB."""
+    database_url = (
+        os.environ.get('POSTBOY_DJANGO_DATABASE_URL')
+        or os.environ.get('POSTBOY_DATABASE_URL')
+    )
+    if database_url and database_url.startswith(('postgres://', 'postgresql://')):
+        parsed = urlparse(database_url)
+        query = parse_qs(parsed.query)
+        options = {}
+        if query.get('sslmode'):
+            options['sslmode'] = query['sslmode'][-1]
+
+        config = {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': unquote(parsed.path.lstrip('/')),
+            'USER': unquote(parsed.username or ''),
+            'PASSWORD': unquote(parsed.password or ''),
+            'HOST': parsed.hostname or '',
+            'PORT': str(parsed.port or ''),
+        }
+        if options:
+            config['OPTIONS'] = options
+        return config
+
+    return {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': _django_sqlite_name(database_url),
+    }
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,12 +99,7 @@ MIDDLEWARE = [
 # database setting is still required for framework internals. Browser sessions
 # are stored server-side so individual session rows can be invalidated for
 # logout, password resets, and account changes.
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': _django_db_name(),
-    }
-}
+DATABASES = {'default': _django_database_config()}
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = 'sessionid'
 SESSION_COOKIE_PATH = '/'
