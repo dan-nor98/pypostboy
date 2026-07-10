@@ -2,10 +2,11 @@
 .response-section {
   min-width: 0;
   overflow-x: hidden;
-  background: var(--color-surface-raised);
+  background: var(--color-canvas);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   height: min(32vh, 360px);
   flex: 0 0 auto;
   display: flex;
@@ -30,9 +31,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-sm);
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-xs);
 }
 
 .response-header h3 {
@@ -42,7 +43,7 @@
 .response-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-sm);
   font-size: 0.85em;
   flex-wrap: wrap;
   min-width: 0;
@@ -52,7 +53,7 @@
 .response-summary {
   display: flex;
   align-items: stretch;
-  gap: 8px;
+  gap: var(--space-xs);
   min-width: 0;
   flex-wrap: wrap;
 }
@@ -60,8 +61,8 @@
 .summary-field {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  gap: var(--space-xs);
+  padding: var(--space-xxs) var(--space-xs);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
@@ -83,7 +84,7 @@
 
 .response-actions {
   display: inline-flex;
-  gap: 8px;
+  gap: var(--space-xs);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -100,13 +101,13 @@
 }
 
 .status-badge {
-  padding: 3px 10px;
+  padding: var(--space-xxs) var(--space-sm);
   border-radius: var(--radius-sm);
   font-weight: bold;
   font-size: 0.9em;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-xs);
   background: var(--color-border-light);
   color: var(--color-text-muted);
 }
@@ -118,7 +119,7 @@
 
 .btn-copy-response {
   flex: 0 0 auto;
-  padding: 4px 10px;
+  padding: var(--space-xxs) var(--space-sm);
   background: var(--color-border);
   color: var(--color-text);
   border: 1px solid var(--color-border);
@@ -253,7 +254,7 @@
 
 .response-issue-header {
   display: flex;
-  gap: 8px;
+  gap: var(--space-xs);
   align-items: center;
   margin-bottom: 8px;
 }
@@ -343,7 +344,7 @@ body.response-viewer-fullscreen-active {
 @media (max-width: 860px) {
   .response-meta {
     width: 100%;
-    gap: 8px;
+    gap: var(--space-xs);
   }
 
   .response-summary {
