@@ -1,5 +1,135 @@
 /* ===== RESPONSIVE ===== */
-@media (max-width: 1024px) {
+@media (min-width: 1280px) {
+  .main-content {
+    max-width: 1280px;
+  }
+}
+
+/* Tablet: keep the multi-panel workspace visible, tighten spacing, and wrap controls. */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .app-container {
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: clamp(220px, 24vw, 280px);
+    min-width: 220px;
+    max-width: 280px;
+    margin: var(--space-md) 0 var(--space-md) var(--space-md);
+  }
+
+  .right-sidebar {
+    width: clamp(240px, 28vw, 300px);
+    min-width: 240px;
+    max-width: 300px;
+    margin: var(--space-md) var(--space-md) var(--space-md) 0;
+  }
+
+  .main-content {
+    padding: var(--space-md);
+    gap: var(--space-md);
+  }
+
+  .request-section {
+    padding: var(--space-md);
+    min-height: 0;
+  }
+
+  .request-tabs-bar,
+  .request-section,
+  .response-section,
+  .request-bar,
+  .url-bar,
+  .response-header,
+  .response-meta {
+    max-width: 100%;
+  }
+
+  .request-tabs-bar {
+    align-items: flex-start;
+  }
+
+  .request-tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    overflow-y: visible;
+    padding-bottom: 0;
+  }
+
+  .request-tabs-bar::before,
+  .request-tabs-bar::after {
+    display: none;
+  }
+
+  .request-tab-item {
+    min-height: 40px;
+    max-width: 220px;
+  }
+
+  .btn-new-tab {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  .tab-bar,
+  .response-tabs,
+  .sidebar-tabs,
+  .right-sidebar-tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab,
+  .response-tab,
+  .sidebar-tab,
+  .right-sidebar-tab,
+  .btn-send,
+  .btn-loop,
+  .btn-import,
+  .btn-export,
+  .btn-add-row,
+  .btn-copy-response {
+    min-height: 40px;
+  }
+
+  .url-bar,
+  .request-bar-secondary,
+  .loop-controls,
+  .action-buttons,
+  .response-meta {
+    flex-wrap: wrap;
+  }
+
+  #methodSelect {
+    flex: 0 1 130px;
+    min-height: 40px;
+  }
+
+  #urlInput {
+    flex: 1 1 320px;
+    min-width: 220px;
+    min-height: 40px;
+  }
+
+  .url-bar .btn-send,
+  .request-bar-secondary .btn-loop,
+  .request-bar-secondary .execution-mode-control {
+    flex: 0 1 auto;
+  }
+
+  .header-row,
+  .form-data-row {
+    flex-wrap: wrap;
+  }
+
+  .header-row input,
+  .form-data-row input {
+    flex: 1 1 180px;
+  }
+}
+
+/* Mobile: switch sidebars to drawers and keep the response as a bottom sheet. */
+@media (max-width: 767px) {
   .app-container {
     overflow: auto;
   }
@@ -41,19 +171,22 @@
     bottom: 0;
     width: min(82vw, 300px);
     max-width: 100%;
+    margin: 0;
+    border-radius: 0;
     transition: transform 0.2s ease;
     z-index: 100;
   }
 
   .sidebar {
     left: 0;
+    min-width: 0;
     transform: translateX(-100%);
     box-shadow: 12px 0 30px var(--color-shadow-soft);
   }
 
   .right-sidebar {
     right: 0;
-    min-width: min(82vw, 300px);
+    min-width: 0;
     transform: translateX(100%);
     box-shadow: -12px 0 30px var(--color-shadow-soft);
   }
@@ -77,8 +210,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     font-size: 1.4em;
   }
@@ -198,8 +331,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     background: var(--color-border);
     color: var(--color-text);
@@ -438,7 +571,7 @@
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 767px) {
   .response-section.is-fullscreen {
     top: max(8px, env(safe-area-inset-top));
     right: max(8px, env(safe-area-inset-right));
