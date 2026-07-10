@@ -129,8 +129,9 @@
 }
 
 .btn-copy-response:hover {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  background: var(--color-surface-soft);
+  border-color: var(--color-border-strong);
+  color: var(--color-ink);
 }
 
 .response-sheet-handle,

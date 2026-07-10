@@ -166,13 +166,13 @@
 
 .btn-remove {
   padding: 6px 10px;
-  background: var(--color-accent-soft);
-  color: var(--color-text);
-  border: none;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 1em;
-  transition: background 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 .params-table .param-remove {
   opacity: 0;
@@ -189,20 +189,20 @@
 }
 
 .params-table .param-remove:hover {
-  color: var(--color-text);
-  border-color: var(--color-border);
-  background: var(--color-accent-soft);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
 }
 
 .btn-remove:hover {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  background: var(--color-danger);
+  color: var(--color-danger-contrast);
 }
 
 .btn-add-row {
   padding: 6px 14px;
-  background: none;
-  color: var(--color-accent);
+  background: var(--color-canvas);
+  color: var(--color-ink);
   border: 1px dashed var(--color-text);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -211,7 +211,8 @@
 }
 
 .btn-add-row:hover {
-  background: var(--color-accent-softer);
+  background: var(--color-surface-soft);
+  border-color: var(--color-border-strong);
 }
 
 .btn-add-inline {

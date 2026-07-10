@@ -191,9 +191,9 @@
 }
 
 .btn-new-tab:hover {
-  color: var(--color-accent);
+  color: var(--color-ink);
   border-color: var(--color-border-light);
-  background: var(--color-accent-softer);
+  background: var(--color-surface-soft);
 }
 /* ===== TAB BAR (PARAMS / HEADERS / BODY / AUTH) ===== */
 .tab-bar {

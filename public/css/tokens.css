@@ -156,8 +156,8 @@
   --color-shadow: rgba(0, 0, 0, 0.4);
   --color-shadow-soft: rgba(0, 0, 0, 0.35);
   --color-shadow-strong: rgba(0, 0, 0, 0.45);
-  --color-danger: #f93e3e;
-  --color-danger-soft: rgba(249, 62, 62, 0.2);
+  --color-danger: var(--color-error);
+  --color-danger-soft: rgba(239, 68, 68, 0.2);
   --color-danger-muted: #ff8a80;
   --color-warning: #fca130;
   --color-success: #49cc90;
