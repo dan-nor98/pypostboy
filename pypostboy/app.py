@@ -160,7 +160,6 @@ def _apply_django_settings(config_dict):
         config_dict.get('ALLOWED_HOSTS'),
         settings.DEBUG,
     )
-    settings.PUBLIC_DIR = config_dict.get('PUBLIC_DIR', settings.PUBLIC_DIR)
     settings.PROXY_TIMEOUT = config_dict.get('PROXY_TIMEOUT', settings.PROXY_TIMEOUT)
     settings.DATA_UPLOAD_MAX_MEMORY_SIZE = config_dict.get(
         'MAX_CONTENT_LENGTH', settings.DATA_UPLOAD_MAX_MEMORY_SIZE

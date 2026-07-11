@@ -2,7 +2,6 @@
 
 from django.urls import include, path
 
-from pypostboy.routes import static
 
 urlpatterns = [
     path('api/auth/', include('pypostboy.apps.auth.urls')),
@@ -13,7 +12,4 @@ urlpatterns = [
     path('api/requests/', include('pypostboy.apps.requests.urls')),
     path('api/import', include('pypostboy.apps.imports.urls')),
     path('api/proxy', include('pypostboy.apps.proxy.urls')),
-    path('favicon.ico', static.favicon),
-    path('', static.index),
-    path('<path:path>', static.serve_static),
 ]
