@@ -1,0 +1,22 @@
+import React from 'react';
+function Icon({size=24, className='', ...props}) { return React.createElement('svg', {width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', 'stroke-width':'2', 'stroke-linecap':'round', 'stroke-linejoin':'round', className, ...props}, React.createElement('circle', {cx:'12', cy:'12', r:'9'})); }
+export const Archive = Icon;
+export const Clock = Icon;
+export const Braces = Icon;
+export const Zap = Icon;
+export const Settings = Icon;
+export const Search = Icon;
+export const Plus = Icon;
+export const MoreHorizontal = Icon;
+export const X = Icon;
+export const Play = Icon;
+export const Save = Icon;
+export const ChevronDown = Icon;
+export const Folder = Icon;
+export const FileCode = Icon;
+export const Shield = Icon;
+export const Terminal = Icon;
+export const Copy = Icon;
+export const AlertTriangle = Icon;
+export const CheckCircle2 = Icon;
+export const Circle = Icon;

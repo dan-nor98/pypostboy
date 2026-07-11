@@ -1,9 +1,14 @@
 {
   "scripts": {
-    "frontend:dev": "python -m http.server 5173",
-    "frontend:build": "node -e \"for (const f of ['index.html','frontend/src/main.jsx','frontend/src/styles.css']) require('fs').accessSync(f)\"",
-    "frontend:preview": "python -m http.server 4173"
+    "frontend:dev": "vite --host 0.0.0.0 frontend",
+    "frontend:build": "vite build frontend --base=/frontend/",
+    "frontend:preview": "vite preview --host 0.0.0.0 frontend"
   },
-  "dependencies": {},
+  "dependencies": {
+    "lucide-react": "file:frontend/vendor/lucide-react",
+    "react": "file:frontend/vendor/react",
+    "react-dom": "file:frontend/vendor/react-dom",
+    "vite": "^5.4.21"
+  },
   "devDependencies": {}
 }
