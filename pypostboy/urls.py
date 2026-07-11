@@ -2,8 +2,12 @@
 
 from django.urls import include, path
 
+from pypostboy import frontend
+
 
 urlpatterns = [
+    path('', frontend.index),
+    path('frontend/<path:path>', frontend.asset),
     path('api/auth/', include('pypostboy.apps.auth.urls')),
     path('api/collections', include('pypostboy.apps.collections.urls')),
     path('api/collections/', include('pypostboy.apps.collections.urls')),

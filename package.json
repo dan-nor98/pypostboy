@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "frontend:dev": "python -m http.server 5173",
+    "frontend:build": "node -e \"for (const f of ['index.html','frontend/src/main.jsx','frontend/src/styles.css']) require('fs').accessSync(f)\"",
+    "frontend:preview": "python -m http.server 4173"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
