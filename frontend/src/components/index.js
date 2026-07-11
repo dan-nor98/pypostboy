@@ -1,6 +1,7 @@
 export {ActivityBar} from './ActivityBar';
 export {Button} from './Button';
 export {CodeBlock} from './CodeBlock';
+export {CodeEditor} from './CodeEditor';
 export {CommandPalette} from './CommandPalette';
 export {EditableGrid} from './EditableGrid';
 export {IconButton} from './IconButton';
