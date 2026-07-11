@@ -1,14 +1,14 @@
 """Django settings for PostBoy.
 
 The project keeps PostBoy's existing lightweight SQLite repository layer while
-using Django for HTTP routing, middleware, sessions, static serving, and WSGI
+using Django for HTTP routing, middleware, sessions, and WSGI
 integration.
 """
 
 import os
 from urllib.parse import parse_qs, unquote, urlparse
 
-from pypostboy.config import BaseConfig, DEFAULT_DATABASE_PATH, DEFAULT_STATIC_FOLDER
+from pypostboy.config import BaseConfig, DEFAULT_DATABASE_PATH
 
 
 def _split_csv(value):
@@ -114,11 +114,9 @@ CSRF_COOKIE_SECURE = _as_bool(
     os.environ.get('CSRF_COOKIE_SECURE'),
     default=not DEBUG,
 )
-# The frontend reads csrftoken from document.cookie for API requests.
 CSRF_COOKIE_HTTPONLY = False
 CSRF_TRUSTED_ORIGINS = _split_csv(os.environ.get('CSRF_TRUSTED_ORIGINS'))
 POSTBOY_API_TOKEN_MAX_AGE_SECONDS = BaseConfig.POSTBOY_API_TOKEN_MAX_AGE_SECONDS
-PUBLIC_DIR = os.path.abspath(os.environ.get('POSTBOY_STATIC_FOLDER', DEFAULT_STATIC_FOLDER))
 PROXY_TIMEOUT = BaseConfig.PROXY_TIMEOUT
 DATA_UPLOAD_MAX_MEMORY_SIZE = BaseConfig.MAX_CONTENT_LENGTH
 
@@ -132,7 +130,7 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = _as_bool(
 )
 SECURE_HSTS_PRELOAD = _as_bool(os.environ.get('SECURE_HSTS_PRELOAD'), default=False)
 
-# CORS controls for browser clients (especially containerized local development).
+# CORS controls for external clients (especially containerized local development).
 # Use comma-separated env vars:
 # - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 # - CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\\.example\\.com$

@@ -6,7 +6,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DATABASE_PATH = os.path.abspath(
     os.path.join(BASE_DIR, 'postboy-data.db')
 )
-DEFAULT_STATIC_FOLDER = os.path.join(BASE_DIR, 'public')
 DEFAULT_DATABASE_URL = os.environ.get('POSTBOY_DATABASE_URL')
 
 
@@ -53,9 +52,6 @@ class BaseConfig:
     DEBUG = False
     MAX_CONTENT_LENGTH = _int_from_env('POSTBOY_MAX_CONTENT_LENGTH', 10 * 1024 * 1024)
     PROXY_TIMEOUT = _int_from_env('POSTBOY_PROXY_TIMEOUT', 30)
-    PUBLIC_DIR = os.path.abspath(
-        os.environ.get('POSTBOY_STATIC_FOLDER', DEFAULT_STATIC_FOLDER)
-    )
     SECRET_KEY = os.environ.get('POSTBOY_SECRET_KEY', 'postboy-dev-secret-key')
     SESSION_COOKIE_SAMESITE = 'Lax'
     POSTBOY_API_TOKEN_MAX_AGE_SECONDS = _int_from_env(
