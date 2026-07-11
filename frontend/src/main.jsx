@@ -4,7 +4,7 @@ import {ChevronDown, Search, Settings} from 'lucide-react';
 import {
   ActivityBar,
   Button,
-  CodeBlock,
+  CodeEditor,
   CommandPalette,
   EditableGrid,
   IconButton,
@@ -44,12 +44,6 @@ function headersArrayToObject(headers = []) {
     if (header?.enabled !== false && header?.key) result[header.key] = header.value || '';
     return result;
   }, {});
-}
-
-function bodyLines(body) {
-  if (!body) return [''];
-  if (typeof body !== 'string') return JSON.stringify(body, null, 2).split('\n');
-  return body.split('\n');
 }
 
 function App() {
@@ -170,7 +164,7 @@ function App() {
             <section>
               <div className="section-head"><span>Query Parameters</span><button>Bulk Edit</button></div>
               {requests.length ? <EditableGrid rows={params} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
-              <CodeBlock lines={bodyLines(requestBody)} />
+              <CodeEditor value={requestBody} wordWrap label="Request JSON body editor" />
             </section>
             <aside className="inspector">
               <h3>Request</h3>
