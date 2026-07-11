@@ -46,7 +46,7 @@ function headersArrayToObject(headers = []) {
   }, {});
 }
 
-function App() {
+export function App() {
   const [palette, setPalette] = useState(false);
   const [theme, setTheme] = useState('dark');
   const [sending, setSending] = useState(false);
@@ -186,4 +186,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+const rootElement = document.getElementById('root');
+
+if (rootElement) {
+  createRoot(rootElement).render(<App />);
+}
