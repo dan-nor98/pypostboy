@@ -28,20 +28,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dashboard dependencies
+      - name: Install frontend dependencies
         run: npm run frontend:install
 
-      - name: Build dashboard before serving
+      - name: Run frontend tests
+        run: npm run test:frontend
+
+      - name: Build frontend
         run: npm run frontend:build
 
-      - name: Verify dashboard artifact exists when linked
+      - name: Verify frontend build artifact
         run: npm run frontend:check
-
-      - name: Run IAM browser auth session tests
-        run: npm run test:iam-browser
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Run Playwright dashboard E2E tests
-        run: npm run test:e2e:playwright

@@ -59,6 +59,15 @@ Run the Python test suite:
 pytest
 ```
 
+Before opening a PR that touches the frontend, install the local frontend dependencies, run the Vitest smoke suite, build the Vite app, and verify the generated artifact:
+
+```bash
+npm run frontend:install
+npm run test:frontend
+npm run frontend:build
+npm run frontend:check
+```
+
 ## Project layout
 
 ```text
