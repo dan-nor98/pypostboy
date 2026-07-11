@@ -1,9 +1,8 @@
 import {AlertTriangle, MoreHorizontal, Plus, Search} from 'lucide-react';
-import {tree} from '../data/demoWorkspace';
 import {IconButton} from './IconButton';
 import {TreeNode} from './TreeNode';
 
-export function Sidebar() {
+export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest}) {
   return (
     <aside className="sidebar">
       <div className="side-title">
@@ -12,9 +11,14 @@ export function Sidebar() {
         <IconButton label="Collection actions"><MoreHorizontal size={15} /></IconButton>
       </div>
       <div className="filter"><Search size={14} /><input placeholder="Filter collections" /></div>
-      <div className="banner"><AlertTriangle size={14} /> SSL verification disabled for Staging</div>
+      {error && <div className="banner error"><AlertTriangle size={14} /> {error}</div>}
+      {!error && <div className="banner"><AlertTriangle size={14} /> Data synced from local API</div>}
       <div role="tree" className="tree">
-        {tree.map((node, index) => <TreeNode node={node} key={index} />)}
+        {loading && <div className="empty-state">Loading collections…</div>}
+        {!loading && !error && collections.length === 0 && <div className="empty-state">No collections yet.</div>}
+        {!loading && collections.map((node) => (
+          <TreeNode node={node} key={node.id} activeRequestId={activeRequestId} onSelectRequest={onSelectRequest} />
+        ))}
       </div>
     </aside>
   );

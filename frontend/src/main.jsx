@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ChevronDown, Search, Settings} from 'lucide-react';
 import {
@@ -14,13 +14,79 @@ import {
   Sidebar,
   StatusBar,
 } from './components';
+import {apiClient} from './api/client';
 import {params} from './data/demoWorkspace';
 import './styles.css';
+
+const defaultRequest = {
+  method: 'GET',
+  url: '',
+  name: 'Untitled Request',
+  headers: [],
+  body_content: '',
+  body_raw_type: 'application/json',
+};
+
+function flattenRequests(collections) {
+  return collections.flatMap((collection) => [
+    ...(collection.requests || []),
+    ...flattenRequests(collection.children || []),
+  ]);
+}
+
+function headersArrayToObject(headers = []) {
+  return headers.reduce((result, header) => {
+    if (Array.isArray(header)) {
+      const [enabled, key, value] = header.length > 2 ? header : ['✓', header[0], header[1]];
+      if (enabled && key) result[key] = value;
+      return result;
+    }
+    if (header?.enabled !== false && header?.key) result[header.key] = header.value || '';
+    return result;
+  }, {});
+}
+
+function bodyLines(body) {
+  if (!body) return [''];
+  if (typeof body !== 'string') return JSON.stringify(body, null, 2).split('\n');
+  return body.split('\n');
+}
 
 function App() {
   const [palette, setPalette] = useState(false);
   const [theme, setTheme] = useState('dark');
   const [sending, setSending] = useState(false);
+  const [collections, setCollections] = useState([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(true);
+  const [collectionsError, setCollectionsError] = useState('');
+  const [activeRequestId, setActiveRequestId] = useState(null);
+  const [proxyResult, setProxyResult] = useState(null);
+  const [proxyError, setProxyError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCollections() {
+      setCollectionsLoading(true);
+      setCollectionsError('');
+      try {
+        const data = await apiClient.listCollections();
+        if (!cancelled) {
+          setCollections(data);
+          setActiveRequestId((current) => current || flattenRequests(data)[0]?.id || null);
+        }
+      } catch (error) {
+        if (!cancelled) setCollectionsError(error.message);
+      } finally {
+        if (!cancelled) setCollectionsLoading(false);
+      }
+    }
+    loadCollections();
+    return () => { cancelled = true; };
+  }, []);
+
+  const requests = useMemo(() => flattenRequests(collections), [collections]);
+  const activeRequest = requests.find((request) => request.id === activeRequestId) || requests[0] || defaultRequest;
+  const requestBody = activeRequest.body_content || activeRequest.body_raw || '';
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -30,8 +96,7 @@ function App() {
 
       if (meta && event.key === 'Enter') {
         event.preventDefault();
-        setSending(true);
-        setTimeout(() => setSending(false), 900);
+        sendRequest();
       }
 
       if (meta && event.shiftKey && event.key.toLowerCase() === 'p') {
@@ -47,19 +112,39 @@ function App() {
 
     addEventListener('keydown', handleKeyDown);
     return () => removeEventListener('keydown', handleKeyDown);
-  }, [theme]);
+  }, [theme, activeRequest]);
 
-  const sendRequest = () => {
+  const sendRequest = async () => {
+    if (!activeRequest.url) {
+      setProxyError('Select a request with a URL before sending.');
+      return;
+    }
+
     setSending(true);
-    setTimeout(() => setSending(false), 900);
+    setProxyError('');
+    setProxyResult(null);
+    try {
+      const result = await apiClient.proxyRequest({
+        method: activeRequest.method || 'GET',
+        url: activeRequest.url,
+        headers: headersArrayToObject(activeRequest.headers),
+        body: requestBody,
+        contentType: activeRequest.body_raw_type || 'application/json',
+      });
+      setProxyResult(result);
+    } catch (error) {
+      setProxyError(error.message);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <div className="app-shell">
       <header className="header">
         <strong className="brand">PostBoy</strong>
-        <button className="selector">Workspace: Payments API <ChevronDown size={13} /></button>
-        <button className="selector">Environment: Staging <ChevronDown size={13} /></button>
+        <button className="selector">Workspace: Local API <ChevronDown size={13} /></button>
+        <button className="selector">Environment: Local <ChevronDown size={13} /></button>
         <div className="global-search"><Search size={14} /><input placeholder="Search requests, URLs, headers (Ctrl+Shift+F)" /></div>
         <Button kind="ghost" onClick={() => setPalette(true)}>Command Palette <kbd>Ctrl⇧P</kbd></Button>
         <IconButton label="Toggle theme Ctrl+,"><Settings size={16} /></IconButton>
@@ -67,39 +152,42 @@ function App() {
 
       <main className="workspace">
         <ActivityBar />
-        <Sidebar />
+        <Sidebar
+          collections={collections}
+          loading={collectionsLoading}
+          error={collectionsError}
+          activeRequestId={activeRequest.id}
+          onSelectRequest={setActiveRequestId}
+        />
         <section className="main">
-          <RequestTabs />
-          <RequestToolbar sending={sending} onSend={sendRequest} />
+          <RequestTabs requests={requests} activeRequestId={activeRequest.id} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
+          <RequestToolbar sending={sending} onSend={sendRequest} request={activeRequest} disabled={!activeRequest.url} />
           <div className="panel-tabs">
             <button className="active">Params</button><button>Authorization</button><button>Headers</button><button>Body</button><button>Scripts</button><button>Tests</button>
-            <span className="inline-error">Invalid variable: {'{{callbackUrl}}'}</span>
+            {collectionsError && <span className="inline-error">{collectionsError}</span>}
           </div>
           <div className="request-grid">
             <section>
               <div className="section-head"><span>Query Parameters</span><button>Bulk Edit</button></div>
-              <EditableGrid rows={params} type="parameter" />
-              <CodeBlock />
+              {requests.length ? <EditableGrid rows={params} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
+              <CodeBlock lines={bodyLines(requestBody)} />
             </section>
             <aside className="inspector">
-              <h3>Authorization</h3>
-              <label>Type<select><option>Bearer Token</option></select></label>
-              <label>Token<input type="password" value="stg_••••••••••••••" readOnly /></label>
-              <p className="hint">Inherited from Collection → Payments API</p>
-              <h3>Variable Inspector</h3>
-              <p className="mono variable">{'{{baseUrl}}'}</p>
-              <p>Resolved value: https://staging.example.com</p>
-              <p>Source: Environment → Staging</p>
+              <h3>Request</h3>
+              <p className="mono variable">{activeRequest.name}</p>
+              <p>{activeRequest.method} {activeRequest.url || 'No URL configured'}</p>
+              <h3>Headers</h3>
+              {(activeRequest.headers || []).length ? <p>{activeRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
             </aside>
           </div>
           <div className="divider" />
-          <ResponseViewer />
+          <ResponseViewer response={proxyResult} loading={sending} error={proxyError} />
         </section>
       </main>
 
       <StatusBar />
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
-      <div className="toast" role="status">Request saved locally · 3 unsaved changes</div>
+      {proxyError && <div className="toast error" role="status">{proxyError}</div>}
     </div>
   );
 }
