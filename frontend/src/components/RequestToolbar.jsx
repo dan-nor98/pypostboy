@@ -1,3 +1,4 @@
+import React from 'react';
 import {Circle, MoreHorizontal, Play, Save} from 'lucide-react';
 import {Button} from './Button';
 import {IconButton} from './IconButton';

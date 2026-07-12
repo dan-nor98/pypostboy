@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {AlertTriangle, MoreHorizontal, Plus, Search} from 'lucide-react';
 import {IconButton} from './IconButton';
 import {TreeNode} from './TreeNode';

@@ -1,5 +1,7 @@
 """Tests for serving the built React frontend through Django."""
 
+from pathlib import Path
+
 
 def _write_dist_asset(dist_root, relative_path, content):
     asset_path = dist_root / relative_path
@@ -65,3 +67,16 @@ def test_frontend_asset_rejects_path_traversal(client, monkeypatch, tmp_path):
     response = client.get('/frontend/../outside.js')
 
     assert response.status_code == 404
+
+
+def test_jsx_components_import_react_for_classic_runtime():
+    """Ensure built JSX has a React binding when transformed by Vite."""
+    src_root = Path(__file__).resolve().parents[2] / 'frontend' / 'src'
+    missing_imports = [
+        str(path.relative_to(src_root.parent))
+        for path in sorted(src_root.rglob('*.jsx'))
+        if '<' in path.read_text(encoding='utf-8')
+        and 'import React' not in path.read_text(encoding='utf-8')
+    ]
+
+    assert missing_imports == []
