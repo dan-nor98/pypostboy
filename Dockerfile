@@ -3,9 +3,10 @@ FROM node:20-slim AS frontend-builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
-
 COPY frontend ./frontend
+RUN npm ci --include=optional \
+    && npm install --no-save --include=optional vite@5.4.21
+
 RUN npm run frontend:build
 
 
