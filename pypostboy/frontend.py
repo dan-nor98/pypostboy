@@ -1,4 +1,10 @@
-"""Static React frontend views for the PostBoy workspace."""
+"""Static React frontend views for the PostBoy workspace.
+
+Django serves the built Vite output directly so the Python backend can run as a
+single local/container process after ``npm run frontend:build``. Deployments that
+front the app with nginx may still serve these files from container static
+configuration, but this module remains the backend fallback/source of truth.
+"""
 
 from pathlib import Path
 
@@ -7,34 +13,56 @@ from django.http import FileResponse, Http404
 ROOT_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_ROOT = ROOT_DIR / 'frontend'
 DIST_ROOT = FRONTEND_ROOT / 'dist'
-SOURCE_ROOT = FRONTEND_ROOT / 'src'
 
 CONTENT_TYPES = {
+    '.avif': 'image/avif',
     '.css': 'text/css',
+    '.gif': 'image/gif',
     '.html': 'text/html',
+    '.ico': 'image/x-icon',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
     '.js': 'text/javascript',
+    '.json': 'application/json',
+    '.map': 'application/json',
     '.mjs': 'text/javascript',
+    '.otf': 'font/otf',
+    '.png': 'image/png',
     '.svg': 'image/svg+xml',
+    '.ttf': 'font/ttf',
+    '.webp': 'image/webp',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
 }
 
 
+def _resolve_dist_path(path):
+    """Resolve a frontend dist path while rejecting traversal attempts."""
+    dist_root = DIST_ROOT.resolve()
+    target = (dist_root / path).resolve()
+    try:
+        target.relative_to(dist_root)
+    except ValueError as exc:
+        raise Http404('Asset not found') from exc
+    return target
+
+
+def _file_response(path):
+    content_type = CONTENT_TYPES.get(path.suffix.lower(), 'application/octet-stream')
+    return FileResponse(path.open('rb'), content_type=content_type)
+
+
 def index(request):
-    """Serve the React application shell."""
-    index_path = DIST_ROOT / 'index.html'
+    """Serve the built React application shell."""
+    index_path = _resolve_dist_path('index.html')
     if not index_path.is_file():
-        index_path = FRONTEND_ROOT / 'index.html'
-    return FileResponse(index_path.open('rb'), content_type='text/html')
+        raise Http404('Frontend build not found')
+    return _file_response(index_path)
 
 
 def asset(request, path):
-    """Serve built frontend assets, falling back to source files for local development."""
-    asset_root = DIST_ROOT if DIST_ROOT.is_dir() else SOURCE_ROOT
-    target = (asset_root / path).resolve()
-    try:
-        target.relative_to(asset_root.resolve())
-    except ValueError as exc:
-        raise Http404('Asset not found') from exc
+    """Serve built frontend assets from ``frontend/dist``."""
+    target = _resolve_dist_path(path)
     if not target.is_file():
         raise Http404('Asset not found')
-    content_type = CONTENT_TYPES.get(target.suffix, 'application/octet-stream')
-    return FileResponse(target.open('rb'), content_type=content_type)
+    return _file_response(target)
