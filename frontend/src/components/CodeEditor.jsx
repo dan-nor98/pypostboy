@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting} from '@codemirror/language';
 import {json} from '@codemirror/lang-json';
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands';

@@ -12,12 +12,20 @@ PyPostBoy is a local-first API backend and lightweight HTTP proxy built with Pyt
 
 ## Local development
 
-Create an environment and install dependencies:
+Create a Python environment and install backend dependencies:
 
 ```bash
 python -m venv venv
 . venv/bin/activate
 pip install -r requirements.txt
+```
+
+Install frontend dependencies and build the React app before starting the
+backend-served UI:
+
+```bash
+npm install
+npm run frontend:build
 ```
 
 Run validation and migrations:

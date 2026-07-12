@@ -1,3 +1,4 @@
+import React from 'react';
 import {ChevronDown, Folder} from 'lucide-react';
 import {Method} from './Method';
 

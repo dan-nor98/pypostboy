@@ -1,3 +1,4 @@
+import React from 'react';
 import {AlertTriangle, CheckCircle2, Copy} from 'lucide-react';
 import {CodeBlock} from './CodeBlock';
 import {IconButton} from './IconButton';

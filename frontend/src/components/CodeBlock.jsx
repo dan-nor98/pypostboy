@@ -1,3 +1,4 @@
+import React from 'react';
 import {requestBodyLines, responseBodyLines} from '../data/demoWorkspace';
 
 export function CodeBlock({response = false, lines}) {

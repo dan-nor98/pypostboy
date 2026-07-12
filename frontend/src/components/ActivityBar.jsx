@@ -1,3 +1,4 @@
+import React from 'react';
 import {Archive, Braces, Clock, Settings, Zap} from 'lucide-react';
 import {IconButton} from './IconButton';
 
