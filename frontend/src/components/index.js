@@ -6,7 +6,7 @@ export {CommandPalette} from './CommandPalette';
 export {EditableGrid} from './EditableGrid';
 export {IconButton} from './IconButton';
 export {Method} from './Method';
-export {RequestTabs} from './RequestTabs';
+export {RequestTabs, requestPanelId, requestTabId} from './RequestTabs';
 export {RequestToolbar} from './RequestToolbar';
 export {ResponseViewer} from './ResponseViewer';
 export {Sidebar} from './Sidebar';

@@ -27,7 +27,24 @@ const testCollections = [
         body_raw_type: 'application/json',
       },
     ],
-    children: [],
+    children: [
+      {
+        id: 'collection-2',
+        name: 'Nested',
+        requests: [
+          {
+            id: 'request-2',
+            name: 'Create Widget',
+            method: 'POST',
+            url: 'https://example.test/widgets',
+            headers: [],
+            body_content: '{\"name\":\"demo\"}',
+            body_raw_type: 'application/json',
+          },
+        ],
+        children: [],
+      },
+    ],
   },
 ];
 
@@ -72,6 +89,74 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', {name: /command palette/i}));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/type a command or search/i)).toBeInTheDocument();
+  });
+
+
+
+  test('exposes request and response tabs with tablist, tab, tabpanel, selection, and control relationships', async () => {
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /health check/i})).toBeInTheDocument());
+
+    const requestTab = screen.getByRole('tab', {name: /health check/i});
+    expect(screen.getByRole('tablist', {name: /open requests/i})).toContainElement(requestTab);
+    expect(requestTab).toHaveAttribute('aria-selected', 'true');
+    expect(requestTab).toHaveAttribute('aria-controls', 'request-panel-request-1');
+    expect(screen.getByRole('tabpanel', {name: /health check/i})).toHaveAttribute('id', 'request-panel-request-1');
+
+    const paramsTab = screen.getByRole('tab', {name: 'Params'});
+    expect(screen.getByRole('tablist', {name: /request configuration tabs/i})).toContainElement(paramsTab);
+    expect(paramsTab).toHaveAttribute('aria-selected', 'true');
+    expect(paramsTab).toHaveAttribute('aria-controls', 'request-config-panel-params');
+
+    const responseBodyTab = screen.getByRole('tab', {name: 'Body'});
+    expect(screen.getByRole('tablist', {name: /response tabs/i})).toContainElement(responseBodyTab);
+    expect(responseBodyTab).toHaveAttribute('aria-selected', 'true');
+    expect(responseBodyTab).toHaveAttribute('aria-controls', 'response-panel-body');
+    expect(screen.getByRole('tabpanel', {name: 'Body'})).toHaveAttribute('id', 'response-panel-body');
+  });
+
+  test('supports keyboard-only collections tree navigation', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('tree', {name: /collections/i})).toBeInTheDocument());
+    const root = screen.getByRole('treeitem', {name: /smoke tests/i});
+    root.focus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('treeitem', {name: /health check/i})).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('treeitem', {name: /nested/i})).toHaveFocus();
+
+    await user.keyboard('{ArrowLeft}');
+    expect(screen.getByRole('treeitem', {name: /smoke tests/i})).toHaveFocus();
+
+    await user.keyboard('{Space}');
+    expect(root).toHaveAttribute('aria-expanded', 'false');
+
+    await user.keyboard('{Enter}');
+    expect(root).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  test('traps command palette focus, closes on Escape, and restores focus to the trigger', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const trigger = screen.getByRole('button', {name: /command palette/i});
+    await user.click(trigger);
+
+    const dialog = screen.getByRole('dialog', {name: /command palette/i});
+    const search = screen.getByPlaceholderText(/type a command or search/i);
+    await waitFor(() => expect(search).toHaveFocus());
+
+    await user.tab({shift: true});
+    expect(dialog).toContainElement(document.activeElement);
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', {name: /command palette/i})).not.toBeInTheDocument());
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   test('supports keyboard shortcuts for sending and toggling the command palette', async () => {

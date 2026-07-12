@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ChevronDown, Search, Settings} from 'lucide-react';
 import {
@@ -9,6 +9,8 @@ import {
   EditableGrid,
   IconButton,
   RequestTabs,
+  requestPanelId,
+  requestTabId,
   RequestToolbar,
   ResponseViewer,
   Sidebar,
@@ -56,6 +58,26 @@ export function App() {
   const [activeRequestId, setActiveRequestId] = useState(null);
   const [proxyResult, setProxyResult] = useState(null);
   const [proxyError, setProxyError] = useState('');
+  const paletteTriggerRef = useRef(null);
+
+
+  const closePalette = useCallback(() => {
+    setPalette(false);
+    requestAnimationFrame(() => paletteTriggerRef.current?.focus());
+  }, []);
+
+  const openPalette = useCallback(() => {
+    paletteTriggerRef.current = document.activeElement;
+    setPalette(true);
+  }, []);
+
+  const togglePalette = useCallback(() => {
+    if (palette) {
+      closePalette();
+    } else {
+      openPalette();
+    }
+  }, [closePalette, openPalette, palette]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +117,7 @@ export function App() {
 
       if (meta && event.shiftKey && event.key.toLowerCase() === 'p') {
         event.preventDefault();
-        setPalette((open) => !open);
+        togglePalette();
       }
 
       if (meta && event.key === ',') {
@@ -106,7 +128,7 @@ export function App() {
 
     addEventListener('keydown', handleKeyDown);
     return () => removeEventListener('keydown', handleKeyDown);
-  }, [theme, activeRequest]);
+  }, [theme, activeRequest, togglePalette]);
 
   const sendRequest = async () => {
     if (!activeRequest.url) {
@@ -140,7 +162,7 @@ export function App() {
         <button className="selector">Workspace: Local API <ChevronDown size={13} /></button>
         <button className="selector">Environment: Local <ChevronDown size={13} /></button>
         <div className="global-search"><Search size={14} /><input placeholder="Search requests, URLs, headers (Ctrl+Shift+F)" /></div>
-        <Button kind="ghost" onClick={() => setPalette(true)}>Command Palette <kbd>Ctrl⇧P</kbd></Button>
+        <Button kind="ghost" onClick={openPalette}>Command Palette <kbd>Ctrl⇧P</kbd></Button>
         <IconButton label="Toggle theme Ctrl+,"><Settings size={16} /></IconButton>
       </header>
 
@@ -155,12 +177,18 @@ export function App() {
         />
         <section className="main">
           <RequestTabs requests={requests} activeRequestId={activeRequest.id} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
-          <RequestToolbar sending={sending} onSend={sendRequest} request={activeRequest} disabled={!activeRequest.url} />
-          <div className="panel-tabs">
-            <button className="active">Params</button><button>Authorization</button><button>Headers</button><button>Body</button><button>Scripts</button><button>Tests</button>
-            {collectionsError && <span className="inline-error">{collectionsError}</span>}
-          </div>
-          <div className="request-grid">
+          <div
+            id={requestPanelId(activeRequest.id)}
+            role="tabpanel"
+            aria-labelledby={requestTabId(activeRequest.id)}
+            className="request-panel"
+          >
+            <RequestToolbar sending={sending} onSend={sendRequest} request={activeRequest} disabled={!activeRequest.url} />
+            <div className="panel-tabs" role="tablist" aria-label="Request configuration tabs">
+              <button id="request-config-tab-params" role="tab" type="button" aria-selected="true" aria-controls="request-config-panel-params" className="active">Params</button><button id="request-config-tab-authorization" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-authorization" tabIndex={-1}>Authorization</button><button id="request-config-tab-headers" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-headers" tabIndex={-1}>Headers</button><button id="request-config-tab-body" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-body" tabIndex={-1}>Body</button><button id="request-config-tab-scripts" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-scripts" tabIndex={-1}>Scripts</button><button id="request-config-tab-tests" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-tests" tabIndex={-1}>Tests</button>
+              {collectionsError && <span className="inline-error">{collectionsError}</span>}
+            </div>
+          <div className="request-grid" id="request-config-panel-params" role="tabpanel" aria-labelledby="request-config-tab-params">
             <section>
               <div className="section-head"><span>Query Parameters</span><button>Bulk Edit</button></div>
               {requests.length ? <EditableGrid rows={params} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
@@ -174,13 +202,17 @@ export function App() {
               {(activeRequest.headers || []).length ? <p>{activeRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
             </aside>
           </div>
+            {['authorization', 'headers', 'body', 'scripts', 'tests'].map((tab) => (
+              <div key={tab} id={`request-config-panel-${tab}`} role="tabpanel" aria-labelledby={`request-config-tab-${tab}`} hidden />
+            ))}
+          </div>
           <div className="divider" />
           <ResponseViewer response={proxyResult} loading={sending} error={proxyError} />
         </section>
       </main>
 
       <StatusBar />
-      {palette && <CommandPalette onClose={() => setPalette(false)} />}
+      {palette && <CommandPalette onClose={closePalette} />}
       {proxyError && <div className="toast error" role="status">{proxyError}</div>}
     </div>
   );
