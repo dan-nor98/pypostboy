@@ -3,12 +3,10 @@ FROM node:20-slim AS frontend-builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --include=optional \
-    && npm install --no-save --include=optional \
-        vite@5.4.21 \
-        react@19.1.1 \
-        react-dom@19.1.1 \
-        lucide-react@0.468.0
+# npm/cli optional dependency resolution can omit Rollup native packages when
+# optional dependencies are excluded (see npm/cli#4828). Use the lockfile with
+# --include=optional instead of adding ad-hoc package installs.
+RUN npm ci --include=optional
 
 COPY frontend ./frontend
 RUN npm run frontend:build
