@@ -90,6 +90,10 @@ export function App() {
     }
   }, [closePalette, openPalette, palette]);
 
+  const toggleTheme = useCallback(() => {
+    setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     async function loadCollections() {
@@ -205,13 +209,13 @@ export function App() {
 
       if (meta && event.key === ',') {
         event.preventDefault();
-        setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
+        toggleTheme();
       }
     };
 
     addEventListener('keydown', handleKeyDown);
     return () => removeEventListener('keydown', handleKeyDown);
-  }, [sendRequest, theme, togglePalette]);
+  }, [sendRequest, togglePalette, toggleTheme]);
 
 
   return (
@@ -222,7 +226,13 @@ export function App() {
         <button className="selector">Environment: Local <ChevronDown size={13} /></button>
         <div className="global-search"><Search size={14} /><input placeholder="Search requests, URLs, headers (Ctrl+Shift+F)" /></div>
         <Button kind="ghost" onClick={openPalette}>Command Palette <kbd>Ctrl⇧P</kbd></Button>
-        <IconButton label="Toggle theme Ctrl+,"><Settings size={16} /></IconButton>
+        <IconButton
+          label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme Ctrl+,`}
+          aria-pressed={theme === 'light'}
+          onClick={toggleTheme}
+        >
+          <Settings size={16} />
+        </IconButton>
       </header>
 
       <main className="workspace">

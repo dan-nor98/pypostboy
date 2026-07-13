@@ -231,6 +231,22 @@ describe('App shell', () => {
     }));
   });
 
+
+  test('toggles the document theme from the header icon', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
+
+    const themeButton = screen.getByRole('button', {name: /switch to light theme/i});
+    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(themeButton);
+
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'));
+    expect(screen.getByRole('button', {name: /switch to dark theme/i})).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('supports keyboard shortcuts for sending and toggling the command palette', async () => {
     renderApp();
 
