@@ -3,7 +3,7 @@ import {bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlightin
 import {json} from '@codemirror/lang-json';
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands';
 import {highlightSelectionMatches, openSearchPanel, searchKeymap, search} from '@codemirror/search';
-import {EditorState} from '@codemirror/state';
+import {Compartment, EditorState} from '@codemirror/state';
 import {EditorView, drawSelection, dropCursor, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers} from '@codemirror/view';
 import {Search} from 'lucide-react';
 
@@ -22,6 +22,15 @@ export function CodeEditor({
   const hostRef = useRef(null);
   const viewRef = useRef(null);
   const onChangeRef = useRef(onChange);
+  const compartmentsRef = useRef(null);
+  if (!compartmentsRef.current) {
+    compartmentsRef.current = {
+      editable: new Compartment(),
+      label: new Compartment(),
+      readOnly: new Compartment(),
+      wrap: new Compartment(),
+    };
+  }
   const [wrap, setWrap] = useState(wordWrap);
   const [formatError, setFormatError] = useState('');
 
@@ -73,14 +82,14 @@ export function CodeEditor({
       highlightSelectionMatches(),
       highlightActiveLine(),
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
-      EditorView.editable.of(!readOnly),
-      EditorState.readOnly.of(readOnly),
+      compartmentsRef.current.editable.of(EditorView.editable.of(!readOnly)),
+      compartmentsRef.current.readOnly.of(EditorState.readOnly.of(readOnly)),
       theme,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChangeRef.current?.(update.state.doc.toString());
       }),
-      EditorView.editorAttributes.of({'aria-label': label}),
-      wrap ? EditorView.lineWrapping : [],
+      compartmentsRef.current.label.of(EditorView.editorAttributes.of({'aria-label': label})),
+      compartmentsRef.current.wrap.of(wrap ? EditorView.lineWrapping : []),
     ];
 
     const view = new EditorView({
@@ -93,7 +102,49 @@ export function CodeEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, [label, readOnly, theme, value, wrap]);
+  }, [theme]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    const currentValue = view.state.doc.toString();
+    if (currentValue !== value) {
+      view.dispatch({
+        changes: {from: 0, to: view.state.doc.length, insert: value},
+      });
+    }
+  }, [value]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    view.dispatch({
+      effects: compartmentsRef.current.wrap.reconfigure(wrap ? EditorView.lineWrapping : []),
+    });
+  }, [wrap]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    view.dispatch({
+      effects: [
+        compartmentsRef.current.editable.reconfigure(EditorView.editable.of(!readOnly)),
+        compartmentsRef.current.readOnly.reconfigure(EditorState.readOnly.of(readOnly)),
+      ],
+    });
+  }, [readOnly]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    view.dispatch({
+      effects: compartmentsRef.current.label.reconfigure(EditorView.editorAttributes.of({'aria-label': label})),
+    });
+  }, [label]);
 
   const handleFormat = () => {
     const view = viewRef.current;
