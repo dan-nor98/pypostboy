@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {App} from '../main.jsx';
@@ -133,9 +133,10 @@ describe('App shell', () => {
     const paramsTab = screen.getByRole('tab', {name: 'Params'});
     expect(screen.getByRole('tablist', {name: /request configuration tabs/i})).toContainElement(paramsTab);
     expect(paramsTab).toHaveAttribute('aria-selected', 'true');
+    expect(paramsTab).toHaveAttribute('tabIndex', '0');
     expect(paramsTab).toHaveAttribute('aria-controls', 'request-config-panel-params');
 
-    const responseBodyTab = screen.getByRole('tab', {name: 'Body'});
+    const responseBodyTab = within(screen.getByRole('tablist', {name: /response tabs/i})).getByRole('tab', {name: 'Body'});
     expect(screen.getByRole('tablist', {name: /response tabs/i})).toContainElement(responseBodyTab);
     expect(responseBodyTab).toHaveAttribute('aria-selected', 'true');
     expect(responseBodyTab).toHaveAttribute('aria-controls', 'response-panel-body');
@@ -209,11 +210,50 @@ describe('App shell', () => {
     expect(screen.getByText('PUT https://example.test/health/updated')).toBeInTheDocument();
   });
 
+  test('switches request configuration tabs by click and updates tab/panel state', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const paramsTab = await screen.findByRole('tab', {name: 'Params'});
+    const bodyTab = within(screen.getByRole('tablist', {name: /request configuration tabs/i})).getByRole('tab', {name: 'Body'});
+
+    expect(paramsTab).toHaveAttribute('aria-selected', 'true');
+    expect(document.getElementById('request-config-panel-params')).not.toHaveAttribute('hidden');
+    expect(screen.queryByRole('textbox', {name: /request json body editor/i})).not.toBeInTheDocument();
+
+    await user.click(bodyTab);
+
+    expect(bodyTab).toHaveAttribute('aria-selected', 'true');
+    expect(bodyTab).toHaveAttribute('tabIndex', '0');
+    expect(paramsTab).toHaveAttribute('aria-selected', 'false');
+    expect(paramsTab).toHaveAttribute('tabIndex', '-1');
+    expect(document.getElementById('request-config-panel-body')).not.toHaveAttribute('hidden');
+    expect(screen.getByRole('textbox', {name: /request json body editor/i})).toBeInTheDocument();
+  });
+
+  test('switches request configuration tabs with left and right arrow keys', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const paramsTab = await screen.findByRole('tab', {name: 'Params'});
+    paramsTab.focus();
+
+    await user.keyboard('{ArrowRight}');
+    const authorizationTab = screen.getByRole('tab', {name: 'Authorization'});
+    expect(authorizationTab).toHaveAttribute('aria-selected', 'true');
+    expect(authorizationTab).toHaveFocus();
+
+    await user.keyboard('{ArrowLeft}');
+    expect(paramsTab).toHaveAttribute('aria-selected', 'true');
+    expect(paramsTab).toHaveFocus();
+  });
+
   test('sends edited JSON body draft in proxy payload', async () => {
     const user = userEvent.setup();
     renderApp();
 
     await user.click(await screen.findByRole('tab', {name: /create widget/i}));
+    await user.click(within(screen.getByRole('tablist', {name: /request configuration tabs/i})).getByRole('tab', {name: 'Body'}));
 
     const editor = screen.getByRole('textbox', {name: /request json body editor/i});
     await user.click(editor);

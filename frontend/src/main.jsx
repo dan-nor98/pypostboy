@@ -69,6 +69,8 @@ export function App() {
   const [draftBodies, setDraftBodies] = useState({});
   const [requestDrafts, setRequestDrafts] = useState({});
   const [savingRequest, setSavingRequest] = useState(false);
+  const [activeConfigTab, setActiveConfigTab] = useState('params');
+  const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
 
 
@@ -120,6 +122,31 @@ export function App() {
     url: activeRequestDraft.url ?? activeRequest.url ?? '',
   };
   const requestBody = draftBodies[activeRequest.id] ?? activeRequest.body_content ?? activeRequest.body_raw ?? '';
+  const requestConfigTabs = useMemo(() => [
+    {id: 'params', label: 'Params'},
+    {id: 'authorization', label: 'Authorization'},
+    {id: 'headers', label: 'Headers'},
+    {id: 'body', label: 'Body'},
+    {id: 'scripts', label: 'Scripts'},
+    {id: 'tests', label: 'Tests'},
+  ], []);
+
+  const selectConfigTab = useCallback((tabId, shouldFocus = false) => {
+    setActiveConfigTab(tabId);
+    if (shouldFocus) {
+      requestAnimationFrame(() => configTabRefs.current[tabId]?.focus());
+    }
+  }, []);
+
+  const handleConfigTabKeyDown = useCallback((event) => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+
+    event.preventDefault();
+    const currentIndex = requestConfigTabs.findIndex((tab) => tab.id === activeConfigTab);
+    const offset = event.key === 'ArrowRight' ? 1 : -1;
+    const nextIndex = (currentIndex + offset + requestConfigTabs.length) % requestConfigTabs.length;
+    selectConfigTab(requestConfigTabs[nextIndex].id, true);
+  }, [activeConfigTab, requestConfigTabs, selectConfigTab]);
 
   const sendRequest = useCallback(async () => {
     if (!editableRequest.url) {
@@ -253,32 +280,79 @@ export function App() {
               saving={savingRequest}
               saveDisabled={!activeRequest.id || !editableRequest.url}
             />
-            <div className="panel-tabs" role="tablist" aria-label="Request configuration tabs">
-              <button id="request-config-tab-params" role="tab" type="button" aria-selected="true" aria-controls="request-config-panel-params" className="active">Params</button><button id="request-config-tab-authorization" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-authorization" tabIndex={-1}>Authorization</button><button id="request-config-tab-headers" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-headers" tabIndex={-1}>Headers</button><button id="request-config-tab-body" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-body" tabIndex={-1}>Body</button><button id="request-config-tab-scripts" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-scripts" tabIndex={-1}>Scripts</button><button id="request-config-tab-tests" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-tests" tabIndex={-1}>Tests</button>
+            <div className="panel-tabs" role="tablist" aria-label="Request configuration tabs" onKeyDown={handleConfigTabKeyDown}>
+              {requestConfigTabs.map((tab) => {
+                const selected = activeConfigTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    id={`request-config-tab-${tab.id}`}
+                    ref={(element) => { configTabRefs.current[tab.id] = element; }}
+                    role="tab"
+                    type="button"
+                    aria-selected={selected}
+                    aria-controls={`request-config-panel-${tab.id}`}
+                    tabIndex={selected ? 0 : -1}
+                    className={selected ? 'active' : undefined}
+                    onClick={() => selectConfigTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
               {collectionsError && <span className="inline-error">{collectionsError}</span>}
             </div>
-          <div className="request-grid" id="request-config-panel-params" role="tabpanel" aria-labelledby="request-config-tab-params">
-            <section>
-              <div className="section-head"><span>Query Parameters</span><button>Bulk Edit</button></div>
-              {requests.length ? <EditableGrid rows={params} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
-              <CodeEditor
-                value={requestBody}
-                onChange={(nextBody) => setDraftBodies((drafts) => ({...drafts, [activeRequest.id]: nextBody}))}
-                wordWrap
-                label="Request JSON body editor"
-              />
-            </section>
-            <aside className="inspector">
-              <h3>Request</h3>
-              <p className="mono variable">{activeRequest.name}</p>
-              <p>{editableRequest.method} {editableRequest.url || 'No URL configured'}</p>
-              <h3>Headers</h3>
-              {(activeRequest.headers || []).length ? <p>{activeRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
-            </aside>
-          </div>
-            {['authorization', 'headers', 'body', 'scripts', 'tests'].map((tab) => (
-              <div key={tab} id={`request-config-panel-${tab}`} role="tabpanel" aria-labelledby={`request-config-tab-${tab}`} hidden />
-            ))}
+            <div
+              className="request-grid"
+              id="request-config-panel-params"
+              role="tabpanel"
+              aria-labelledby="request-config-tab-params"
+              hidden={activeConfigTab !== 'params'}
+            >
+              <section>
+                <div className="section-head"><span>Query Parameters</span><button>Bulk Edit</button></div>
+                {requests.length ? <EditableGrid rows={params} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
+              </section>
+              <aside className="inspector">
+                <h3>Request</h3>
+                <p className="mono variable">{activeRequest.name}</p>
+                <p>{editableRequest.method} {editableRequest.url || 'No URL configured'}</p>
+                <h3>Headers</h3>
+                {(activeRequest.headers || []).length ? <p>{activeRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
+              </aside>
+            </div>
+            <div
+              className="request-grid"
+              id="request-config-panel-body"
+              role="tabpanel"
+              aria-labelledby="request-config-tab-body"
+              hidden={activeConfigTab !== 'body'}
+            >
+              <section>
+                <div className="section-head"><span>Request Body</span></div>
+                <CodeEditor
+                  value={requestBody}
+                  onChange={(nextBody) => setDraftBodies((drafts) => ({...drafts, [activeRequest.id]: nextBody}))}
+                  wordWrap
+                  label="Request JSON body editor"
+                />
+              </section>
+              <aside className="inspector">
+                <h3>Body</h3>
+                <p className="hint">Editing {activeRequest.body_raw_type || 'application/json'} content for this request.</p>
+              </aside>
+            </div>
+            {requestConfigTabs
+              .filter((tab) => !['params', 'body'].includes(tab.id))
+              .map((tab) => (
+                <div
+                  key={tab.id}
+                  id={`request-config-panel-${tab.id}`}
+                  role="tabpanel"
+                  aria-labelledby={`request-config-tab-${tab.id}`}
+                  hidden={activeConfigTab !== tab.id}
+                />
+              ))}
           </div>
           <div className="divider" />
           <ResponseViewer response={proxyResult} loading={sending} error={proxyError} />
