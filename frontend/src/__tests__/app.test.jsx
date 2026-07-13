@@ -10,6 +10,7 @@ vi.mock('../api/client', () => ({
   apiClient: {
     listCollections: vi.fn(),
     proxyRequest: vi.fn(),
+    updateRequest: vi.fn(),
   },
 }));
 
@@ -51,6 +52,7 @@ const testCollections = [
 
 function renderApp() {
   apiClient.listCollections.mockResolvedValue(testCollections);
+  apiClient.updateRequest.mockImplementation((id, data) => Promise.resolve({...data, id}));
   apiClient.proxyRequest.mockResolvedValue({
     status: 200,
     statusText: 'OK',
@@ -183,6 +185,29 @@ describe('App shell', () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+
+  test('saves edited request method and URL and reconciles the toolbar state', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByRole('combobox', {name: /http method/i}), 'PUT');
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health/updated');
+
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.updateRequest).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      method: 'PUT',
+      url: 'https://example.test/health/updated',
+    }));
+    await waitFor(() => expect(screen.getByRole('combobox', {name: /http method/i})).toHaveValue('PUT'));
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health/updated');
+    expect(screen.getByText('PUT https://example.test/health/updated')).toBeInTheDocument();
+  });
 
   test('sends edited JSON body draft in proxy payload', async () => {
     const user = userEvent.setup();
