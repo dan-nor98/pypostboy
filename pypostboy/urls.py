@@ -7,6 +7,10 @@ from pypostboy import frontend
 
 urlpatterns = [
     path('', frontend.index),
+    path(
+        '.well-known/appspecific/com.chrome.devtools.json',
+        frontend.chrome_devtools_probe,
+    ),
     path('frontend/<path:path>', frontend.asset),
     path('api/auth/', include('pypostboy.apps.auth.urls')),
     path('api/collections', include('pypostboy.apps.collections.urls')),

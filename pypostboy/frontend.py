@@ -8,7 +8,7 @@ configuration, but this module remains the backend fallback/source of truth.
 
 from pathlib import Path
 
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_ROOT = ROOT_DIR / 'frontend'
@@ -56,8 +56,23 @@ def index(request):
     """Serve the built React application shell."""
     index_path = _resolve_dist_path('index.html')
     if not index_path.is_file():
-        raise Http404('Frontend build not found')
+        return HttpResponse(
+            (
+                '<!doctype html><title>PostBoy frontend not built</title>'
+                '<h1>PostBoy frontend not built</h1>'
+                '<p>Run <code>npm install</code> and '
+                '<code>npm run frontend:build</code>, then restart '
+                'the backend-served UI.</p>'
+            ),
+            content_type='text/html',
+            status=200,
+        )
     return _file_response(index_path)
+
+
+def chrome_devtools_probe(request):
+    """Return an empty response for Chrome DevTools automatic discovery probes."""
+    return HttpResponse(status=204)
 
 
 def asset(request, path):

@@ -69,6 +69,26 @@ def test_frontend_asset_rejects_path_traversal(client, monkeypatch, tmp_path):
     assert response.status_code == 404
 
 
+def test_frontend_index_without_build_returns_setup_hint(client, monkeypatch, tmp_path):
+    from pypostboy import frontend
+
+    monkeypatch.setattr(frontend, 'DIST_ROOT', tmp_path / 'missing-dist')
+
+    response = client.get('/')
+
+    assert response.status_code == 200
+    assert response.mimetype == 'text/html'
+    assert b'PostBoy frontend not built' in response.data
+    assert b'npm run frontend:build' in response.data
+
+
+def test_chrome_devtools_probe_returns_no_content(client):
+    response = client.get('/.well-known/appspecific/com.chrome.devtools.json')
+
+    assert response.status_code == 204
+    assert response.data == b''
+
+
 def test_jsx_components_import_react_for_classic_runtime():
     """Ensure built JSX has a React binding when transformed by Vite."""
     src_root = Path(__file__).resolve().parents[2] / 'frontend' / 'src'
