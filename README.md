@@ -45,15 +45,34 @@ The service listens on `http://localhost:3001` by default.
 
 ## Docker
 
-PyPostBoy includes Docker assets for local SQLite development and production-like PostgreSQL runs.
+PyPostBoy includes separate Docker Compose entry points for local HTTP development and production-oriented PostgreSQL deployments.
 
-SQLite development stack:
+### Local HTTP development
+
+Use the SQLite development stack for local-only testing over plain HTTP. This file intentionally keeps developer-friendly defaults such as an HTTP origin and non-secure cookies:
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-Production-like PostgreSQL stack:
+The local stack is exposed at `http://localhost:8080`. Do not use `docker-compose.dev.yml` for an internet-facing deployment.
+
+### Production-oriented PostgreSQL
+
+The default `docker-compose.yml` is production-oriented and fails fast when required secrets and origins are missing. Create an uncommitted `.env` from `.env.example`, then set at least:
+
+- `POSTBOY_SECRET_KEY` to a long random value.
+- `POSTGRES_PASSWORD` for the database container.
+- `POSTBOY_DATABASE_URL` to a PostgreSQL DSN that matches the database credentials. URL-encode special characters in the password.
+- `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS` to your production hostnames and HTTPS origins.
+
+Production examples default `SESSION_COOKIE_SECURE=true` and `CSRF_COOKIE_SECURE=true`, so deploy behind TLS. If TLS is terminated by a host-level reverse proxy, keep the Compose nginx service bound to loopback by layering the provided override example:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.example.yml up -d --build
+```
+
+For quick production-like validation on a private machine, you can run the base stack directly after setting the required variables:
 
 ```bash
 docker compose up --build
@@ -88,7 +107,7 @@ manage.py              # Django management entry point
 
 ## Configuration
 
-Start from `.env.example` and set production values explicitly. In particular, set `POSTBOY_SECRET_KEY` for non-development deployments and configure CORS/CSRF origins according to your network boundary.
+Start from `.env.example` and set production values explicitly in an uncommitted `.env` or secret store. Production-oriented Compose usage requires `POSTBOY_SECRET_KEY`, `POSTGRES_PASSWORD`, `POSTBOY_DATABASE_URL`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS`; missing values stop Compose before containers start. Use HTTPS origins for production TLS deployments and reserve plain HTTP origins for local development only.
 
 ## Security
 

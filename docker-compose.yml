@@ -10,30 +10,30 @@ services:
       - "3001"
     environment:
       POSTBOY_CONFIG: production
-      POSTBOY_DATABASE_URL: postgresql://postboy:postboy@db:5432/postboy
-      POSTBOY_SECRET_KEY: ${POSTBOY_SECRET_KEY:-change-me-for-local-compose-only}
+      POSTBOY_DATABASE_URL: ${POSTBOY_DATABASE_URL:?Set POSTBOY_DATABASE_URL to a PostgreSQL DSN before starting the production stack}
+      POSTBOY_SECRET_KEY: ${POSTBOY_SECRET_KEY:?Set POSTBOY_SECRET_KEY to a long random secret before starting the production stack}
       POSTBOY_PROXY_LOCALHOST_HOST: host.docker.internal
       PORT: 3001
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS to your production hostnames}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Set CORS_ALLOWED_ORIGINS to your HTTPS frontend origins}
       CORS_ALLOW_ALL_ORIGINS: ${CORS_ALLOW_ALL_ORIGINS:-false}
       CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-true}
-      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
-      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-false}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?Set CSRF_TRUSTED_ORIGINS to your HTTPS origins}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-true}
 
   db:
     build:
       context: .
       dockerfile: Dockerfile.postgres
     environment:
-      POSTGRES_DB: postboy
-      POSTGRES_USER: postboy
-      POSTGRES_PASSWORD: postboy
+      POSTGRES_DB: ${POSTGRES_DB:-postboy}
+      POSTGRES_USER: ${POSTGRES_USER:-postboy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before starting the production stack}
     volumes:
       - postboy-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postboy -d postboy"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postboy} -d $${POSTGRES_DB:-postboy}"]
       interval: 5s
       timeout: 5s
       retries: 10
