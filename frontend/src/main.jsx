@@ -36,6 +36,14 @@ function flattenRequests(collections) {
   ]);
 }
 
+function updateRequestInCollections(collections, requestId, nextRequest) {
+  return collections.map((collection) => ({
+    ...collection,
+    requests: (collection.requests || []).map((request) => (request.id === requestId ? {...request, ...nextRequest} : request)),
+    children: updateRequestInCollections(collection.children || [], requestId, nextRequest),
+  }));
+}
+
 function headersArrayToObject(headers = []) {
   return headers.reduce((result, header) => {
     if (Array.isArray(header)) {
@@ -59,6 +67,8 @@ export function App() {
   const [proxyResult, setProxyResult] = useState(null);
   const [proxyError, setProxyError] = useState('');
   const [draftBodies, setDraftBodies] = useState({});
+  const [requestDrafts, setRequestDrafts] = useState({});
+  const [savingRequest, setSavingRequest] = useState(false);
   const paletteTriggerRef = useRef(null);
 
 
@@ -103,10 +113,16 @@ export function App() {
 
   const requests = useMemo(() => flattenRequests(collections), [collections]);
   const activeRequest = requests.find((request) => request.id === activeRequestId) || requests[0] || defaultRequest;
+  const activeRequestDraft = requestDrafts[activeRequest.id] || {};
+  const editableRequest = {
+    ...activeRequest,
+    method: activeRequestDraft.method ?? activeRequest.method ?? 'GET',
+    url: activeRequestDraft.url ?? activeRequest.url ?? '',
+  };
   const requestBody = draftBodies[activeRequest.id] ?? activeRequest.body_content ?? activeRequest.body_raw ?? '';
 
   const sendRequest = useCallback(async () => {
-    if (!activeRequest.url) {
+    if (!editableRequest.url) {
       setProxyError('Select a request with a URL before sending.');
       return;
     }
@@ -116,8 +132,8 @@ export function App() {
     setProxyResult(null);
     try {
       const result = await apiClient.proxyRequest({
-        method: activeRequest.method || 'GET',
-        url: activeRequest.url,
+        method: editableRequest.method || 'GET',
+        url: editableRequest.url,
         headers: headersArrayToObject(activeRequest.headers),
         body: requestBody,
         contentType: activeRequest.body_raw_type || 'application/json',
@@ -128,7 +144,48 @@ export function App() {
     } finally {
       setSending(false);
     }
-  }, [activeRequest, requestBody]);
+  }, [activeRequest, editableRequest, requestBody]);
+
+
+  const updateRequestDraft = useCallback((field, value) => {
+    setRequestDrafts((drafts) => ({
+      ...drafts,
+      [activeRequest.id]: {
+        ...drafts[activeRequest.id],
+        [field]: value,
+      },
+    }));
+  }, [activeRequest.id]);
+
+  const saveRequest = useCallback(async () => {
+    if (!activeRequest.id || !editableRequest.url) return;
+
+    setSavingRequest(true);
+    setProxyError('');
+    try {
+      const payload = {
+        ...activeRequest,
+        method: editableRequest.method || 'GET',
+        url: editableRequest.url,
+        body_content: requestBody,
+      };
+      const savedRequest = await apiClient.updateRequest(activeRequest.id, payload);
+      const nextRequest = savedRequest || payload;
+      setCollections((currentCollections) => updateRequestInCollections(currentCollections, activeRequest.id, nextRequest));
+      setRequestDrafts((drafts) => {
+        const {[activeRequest.id]: _savedDraft, ...remainingDrafts} = drafts;
+        return remainingDrafts;
+      });
+      setDraftBodies((drafts) => {
+        const {[activeRequest.id]: _savedBody, ...remainingDrafts} = drafts;
+        return remainingDrafts;
+      });
+    } catch (error) {
+      setProxyError(error.message);
+    } finally {
+      setSavingRequest(false);
+    }
+  }, [activeRequest, editableRequest, requestBody]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -185,7 +242,17 @@ export function App() {
             aria-labelledby={requestTabId(activeRequest.id)}
             className="request-panel"
           >
-            <RequestToolbar sending={sending} onSend={sendRequest} request={activeRequest} disabled={!activeRequest.url} />
+            <RequestToolbar
+              sending={sending}
+              onSend={sendRequest}
+              request={editableRequest}
+              disabled={!editableRequest.url}
+              onMethodChange={(method) => updateRequestDraft('method', method)}
+              onUrlChange={(url) => updateRequestDraft('url', url)}
+              onSave={saveRequest}
+              saving={savingRequest}
+              saveDisabled={!activeRequest.id || !editableRequest.url}
+            />
             <div className="panel-tabs" role="tablist" aria-label="Request configuration tabs">
               <button id="request-config-tab-params" role="tab" type="button" aria-selected="true" aria-controls="request-config-panel-params" className="active">Params</button><button id="request-config-tab-authorization" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-authorization" tabIndex={-1}>Authorization</button><button id="request-config-tab-headers" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-headers" tabIndex={-1}>Headers</button><button id="request-config-tab-body" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-body" tabIndex={-1}>Body</button><button id="request-config-tab-scripts" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-scripts" tabIndex={-1}>Scripts</button><button id="request-config-tab-tests" role="tab" type="button" aria-selected="false" aria-controls="request-config-panel-tests" tabIndex={-1}>Tests</button>
               {collectionsError && <span className="inline-error">{collectionsError}</span>}
@@ -204,7 +271,7 @@ export function App() {
             <aside className="inspector">
               <h3>Request</h3>
               <p className="mono variable">{activeRequest.name}</p>
-              <p>{activeRequest.method} {activeRequest.url || 'No URL configured'}</p>
+              <p>{editableRequest.method} {editableRequest.url || 'No URL configured'}</p>
               <h3>Headers</h3>
               {(activeRequest.headers || []).length ? <p>{activeRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
             </aside>
