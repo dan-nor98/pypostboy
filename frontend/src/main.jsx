@@ -58,6 +58,7 @@ export function App() {
   const [activeRequestId, setActiveRequestId] = useState(null);
   const [proxyResult, setProxyResult] = useState(null);
   const [proxyError, setProxyError] = useState('');
+  const [draftBodies, setDraftBodies] = useState({});
   const paletteTriggerRef = useRef(null);
 
 
@@ -102,7 +103,32 @@ export function App() {
 
   const requests = useMemo(() => flattenRequests(collections), [collections]);
   const activeRequest = requests.find((request) => request.id === activeRequestId) || requests[0] || defaultRequest;
-  const requestBody = activeRequest.body_content || activeRequest.body_raw || '';
+  const requestBody = draftBodies[activeRequest.id] ?? activeRequest.body_content ?? activeRequest.body_raw ?? '';
+
+  const sendRequest = useCallback(async () => {
+    if (!activeRequest.url) {
+      setProxyError('Select a request with a URL before sending.');
+      return;
+    }
+
+    setSending(true);
+    setProxyError('');
+    setProxyResult(null);
+    try {
+      const result = await apiClient.proxyRequest({
+        method: activeRequest.method || 'GET',
+        url: activeRequest.url,
+        headers: headersArrayToObject(activeRequest.headers),
+        body: requestBody,
+        contentType: activeRequest.body_raw_type || 'application/json',
+      });
+      setProxyResult(result);
+    } catch (error) {
+      setProxyError(error.message);
+    } finally {
+      setSending(false);
+    }
+  }, [activeRequest, requestBody]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -128,32 +154,8 @@ export function App() {
 
     addEventListener('keydown', handleKeyDown);
     return () => removeEventListener('keydown', handleKeyDown);
-  }, [theme, activeRequest, togglePalette]);
+  }, [sendRequest, theme, togglePalette]);
 
-  const sendRequest = async () => {
-    if (!activeRequest.url) {
-      setProxyError('Select a request with a URL before sending.');
-      return;
-    }
-
-    setSending(true);
-    setProxyError('');
-    setProxyResult(null);
-    try {
-      const result = await apiClient.proxyRequest({
-        method: activeRequest.method || 'GET',
-        url: activeRequest.url,
-        headers: headersArrayToObject(activeRequest.headers),
-        body: requestBody,
-        contentType: activeRequest.body_raw_type || 'application/json',
-      });
-      setProxyResult(result);
-    } catch (error) {
-      setProxyError(error.message);
-    } finally {
-      setSending(false);
-    }
-  };
 
   return (
     <div className="app-shell">
@@ -192,7 +194,12 @@ export function App() {
             <section>
               <div className="section-head"><span>Query Parameters</span><button>Bulk Edit</button></div>
               {requests.length ? <EditableGrid rows={params} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
-              <CodeEditor value={requestBody} wordWrap label="Request JSON body editor" />
+              <CodeEditor
+                value={requestBody}
+                onChange={(nextBody) => setDraftBodies((drafts) => ({...drafts, [activeRequest.id]: nextBody}))}
+                wordWrap
+                label="Request JSON body editor"
+              />
             </section>
             <aside className="inspector">
               <h3>Request</h3>

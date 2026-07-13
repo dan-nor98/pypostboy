@@ -159,6 +159,29 @@ describe('App shell', () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+
+  test('sends edited JSON body draft in proxy payload', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: /create widget/i}));
+
+    const editor = screen.getByRole('textbox', {name: /request json body editor/i});
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{"name":"edited"}');
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST',
+      url: 'https://example.test/widgets',
+      body: '{"name":"edited"}',
+      contentType: 'application/json',
+    }));
+  });
+
   test('supports keyboard shortcuts for sending and toggling the command palette', async () => {
     renderApp();
 
