@@ -3,6 +3,7 @@ import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {App} from '../main.jsx';
+import {CodeEditor} from '../components/CodeEditor.jsx';
 import {apiClient} from '../api/client';
 
 vi.mock('../api/client', () => ({
@@ -60,6 +61,29 @@ function renderApp() {
 
   return render(<App />);
 }
+
+
+describe('CodeEditor', () => {
+  test('preserves focus and content when word wrap is toggled externally', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <CodeEditor value={'{\"name\":\"demo\"}'} onChange={vi.fn()} wordWrap={true} label="Request JSON body editor" />,
+    );
+
+    const editor = screen.getByRole('textbox', {name: /request json body editor/i});
+    await user.click(editor);
+
+    expect(editor).toHaveFocus();
+    expect(editor).toHaveTextContent('{"name":"demo"}');
+
+    rerender(
+      <CodeEditor value={'{\"name\":\"demo\"}'} onChange={vi.fn()} wordWrap={false} label="Request JSON body editor" />,
+    );
+
+    expect(screen.getByRole('textbox', {name: /request json body editor/i})).toHaveFocus();
+    expect(screen.getByRole('textbox', {name: /request json body editor/i})).toHaveTextContent('{"name":"demo"}');
+  });
+});
 
 describe('App shell', () => {
   beforeEach(() => {
