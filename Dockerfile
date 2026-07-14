@@ -12,25 +12,49 @@ COPY frontend ./frontend
 RUN npm run frontend:build
 
 
-FROM python:3.12-slim
+FROM python:3.12-slim AS python-deps-builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=3001 \
-    POSTBOY_CONFIG=production
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
-WORKDIR /app
+WORKDIR /build
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m venv "$VIRTUAL_ENV"
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    PORT=3001 \
+    POSTBOY_CONFIG=production \
+    POSTBOY_DB_PATH=/data/postboy-data.db
+
+WORKDIR /app
+
+RUN addgroup --system postboy \
+    && adduser --system --ingroup postboy --home /home/postboy postboy \
+    && mkdir -p /data /app/frontend/dist \
+    && chown -R postboy:postboy /app /data /home/postboy
+
+COPY --from=python-deps-builder /opt/venv /opt/venv
+COPY --chown=postboy:postboy requirements.txt app.py db.py manage.py docker-entrypoint.sh ./
+COPY --chown=postboy:postboy pypostboy ./pypostboy
+COPY --from=frontend-builder --chown=postboy:postboy /app/frontend/dist ./frontend/dist
 RUN chmod +x docker-entrypoint.sh
+
+USER postboy
 
 EXPOSE 3001
 
