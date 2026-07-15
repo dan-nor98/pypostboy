@@ -25,6 +25,22 @@ import {params} from './data/demoWorkspace';
 import {defaultEnvironments, environmentVariables, findVariableTokens, resolveRequestVariables} from './environment';
 import './styles.css';
 
+
+const PANEL_SPLIT_STORAGE_KEY = 'pypostboy.responsePaneRatio';
+const DEFAULT_RESPONSE_PANE_RATIO = 40;
+const MIN_RESPONSE_PANE_RATIO = 25;
+const MAX_RESPONSE_PANE_RATIO = 75;
+const PANEL_SPLIT_KEYBOARD_STEP = 5;
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readStoredNumber(key, fallback, min, max) {
+  const stored = Number(localStorage.getItem(key));
+  return Number.isFinite(stored) ? clampNumber(stored, min, max) : fallback;
+}
+
 const defaultRequest = {
   method: 'GET',
   url: '',
@@ -158,17 +174,51 @@ export function App() {
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState('params');
   const [activeSidePanel, setActiveSidePanel] = useState('collections');
+  const [responsePaneRatio, setResponsePaneRatio] = useState(() => readStoredNumber(PANEL_SPLIT_STORAGE_KEY, DEFAULT_RESPONSE_PANE_RATIO, MIN_RESPONSE_PANE_RATIO, MAX_RESPONSE_PANE_RATIO));
   const [environments, setEnvironments] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pypostboy.environments')) || defaultEnvironments; } catch { return defaultEnvironments; }
   });
   const [activeEnvironmentId, setActiveEnvironmentId] = useState(() => localStorage.getItem('pypostboy.activeEnvironment') || defaultEnvironments[0].id);
   const [environmentWarnings, setEnvironmentWarnings] = useState([]);
+  const mainPanelRef = useRef(null);
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
   const activeEnvironment = environments.find((environment) => environment.id === activeEnvironmentId) || environments[0] || defaultEnvironments[0];
 
   useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
+  useEffect(() => { localStorage.setItem(PANEL_SPLIT_STORAGE_KEY, String(responsePaneRatio)); }, [responsePaneRatio]);
   useEffect(() => { localStorage.setItem('pypostboy.activeEnvironment', activeEnvironmentId); }, [activeEnvironmentId]);
+
+  const updateResponsePaneRatio = useCallback((nextRatio) => {
+    setResponsePaneRatio(clampNumber(Math.round(nextRatio), MIN_RESPONSE_PANE_RATIO, MAX_RESPONSE_PANE_RATIO));
+  }, []);
+
+  const resizeResponsePaneFromClientY = useCallback((clientY) => {
+    const bounds = mainPanelRef.current?.getBoundingClientRect();
+    if (!bounds?.height) return;
+    const dividerOffset = clientY - bounds.top;
+    const nextResponseRatio = ((bounds.height - dividerOffset) / bounds.height) * 100;
+    updateResponsePaneRatio(nextResponseRatio);
+  }, [updateResponsePaneRatio]);
+
+  const handleMainDividerPointerDown = useCallback((event) => {
+    event.preventDefault();
+    resizeResponsePaneFromClientY(event.clientY);
+    const handlePointerMove = (moveEvent) => resizeResponsePaneFromClientY(moveEvent.clientY);
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  }, [resizeResponsePaneFromClientY]);
+
+  const handleMainDividerKeyDown = useCallback((event) => {
+    const keySteps = {ArrowUp: -PANEL_SPLIT_KEYBOARD_STEP, ArrowDown: PANEL_SPLIT_KEYBOARD_STEP, Home: MIN_RESPONSE_PANE_RATIO - responsePaneRatio, End: MAX_RESPONSE_PANE_RATIO - responsePaneRatio};
+    if (!(event.key in keySteps)) return;
+    event.preventDefault();
+    updateResponsePaneRatio(responsePaneRatio + keySteps[event.key]);
+  }, [responsePaneRatio, updateResponsePaneRatio]);
 
   const updateEnvironment = useCallback((nextEnvironment) => {
     setEnvironments((current) => current.map((environment) => (environment.id === nextEnvironment.id ? nextEnvironment : environment)));
@@ -621,7 +671,11 @@ export function App() {
           onCopyRequestCurl={copyRequestCurl}
         />
         )}
-        <section className="main">
+        <section
+          className="main"
+          ref={mainPanelRef}
+          style={{gridTemplateRows: `34px minmax(240px, ${100 - responsePaneRatio}fr) 5px minmax(220px, ${responsePaneRatio}fr)`}}
+        >
           <RequestTabs requests={requests} activeRequestId={activeRequest.id} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
           <div
             id={requestPanelId(activeRequest.id)}
@@ -729,7 +783,18 @@ export function App() {
                 />
               ))}
           </div>
-          <div className="divider" />
+          <div
+            className="divider"
+            role="separator"
+            aria-label="Resize request and response panels"
+            aria-orientation="horizontal"
+            aria-valuemin={MIN_RESPONSE_PANE_RATIO}
+            aria-valuemax={MAX_RESPONSE_PANE_RATIO}
+            aria-valuenow={responsePaneRatio}
+            tabIndex={0}
+            onPointerDown={handleMainDividerPointerDown}
+            onKeyDown={handleMainDividerKeyDown}
+          />
           <ResponseViewer response={proxyResult} loading={sending} error={proxyError} />
         </section>
       </main>

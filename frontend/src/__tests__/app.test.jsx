@@ -216,6 +216,55 @@ describe('App shell', () => {
     expect(screen.getByRole('tabpanel', {name: 'Body'})).toHaveAttribute('id', 'response-panel-body');
   });
 
+  test('resizes request and response panels with keyboard, drag, bounds, and persistence', async () => {
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const divider = screen.getByRole('separator', {name: /resize request and response panels/i});
+    const main = divider.closest('.main');
+    vi.spyOn(main, 'getBoundingClientRect').mockReturnValue({top: 0, left: 0, width: 1000, height: 1000, right: 1000, bottom: 1000, x: 0, y: 0, toJSON: () => {}});
+
+    expect(divider).toHaveAttribute('aria-orientation', 'horizontal');
+    expect(divider).toHaveAttribute('aria-valuenow', '40');
+
+    fireEvent.keyDown(divider, {key: 'ArrowDown'});
+    expect(divider).toHaveAttribute('aria-valuenow', '45');
+    expect(localStorage.getItem('pypostboy.responsePaneRatio')).toBe('45');
+    expect(main).toHaveStyle({gridTemplateRows: '34px minmax(240px, 55fr) 5px minmax(220px, 45fr)'});
+
+    fireEvent.pointerDown(divider, {clientY: 800});
+    fireEvent.pointerMove(window, {clientY: 300});
+    fireEvent.pointerUp(window);
+    expect(divider).toHaveAttribute('aria-valuenow', '70');
+    expect(localStorage.getItem('pypostboy.responsePaneRatio')).toBe('70');
+
+    fireEvent.keyDown(divider, {key: 'ArrowDown'});
+    fireEvent.keyDown(divider, {key: 'ArrowDown'});
+    expect(divider).toHaveAttribute('aria-valuenow', '75');
+  });
+
+  test('resizes response body and headers with keyboard and drag', async () => {
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const divider = screen.getByRole('separator', {name: /resize response body and headers/i});
+    const responseBody = divider.closest('.response-body');
+    vi.spyOn(responseBody, 'getBoundingClientRect').mockReturnValue({top: 0, left: 0, width: 1000, height: 400, right: 1000, bottom: 400, x: 0, y: 0, toJSON: () => {}});
+
+    expect(divider).toHaveAttribute('aria-orientation', 'vertical');
+    expect(divider).toHaveAttribute('aria-valuenow', '35');
+
+    fireEvent.keyDown(divider, {key: 'ArrowLeft'});
+    expect(divider).toHaveAttribute('aria-valuenow', '40');
+    expect(localStorage.getItem('pypostboy.responseHeadersRatio')).toBe('40');
+
+    fireEvent.pointerDown(divider, {clientX: 550});
+    fireEvent.pointerMove(window, {clientX: 800});
+    fireEvent.pointerUp(window);
+    expect(divider).toHaveAttribute('aria-valuenow', '25');
+    expect(responseBody).toHaveStyle({gridTemplateColumns: 'minmax(0, 75fr) 5px minmax(240px, 25fr)'});
+  });
+
   test('supports keyboard-only collections tree navigation', async () => {
     const user = userEvent.setup();
     renderApp();
