@@ -7,6 +7,7 @@ import {
   CodeEditor,
   CommandPalette,
   EditableGrid,
+  EnvironmentPanel,
   IconButton,
   ImportCurlDialog,
   ImportPostmanDialog,
@@ -21,6 +22,7 @@ import {
 } from './components';
 import {apiClient} from './api/client';
 import {params} from './data/demoWorkspace';
+import {defaultEnvironments, environmentVariables, findVariableTokens, resolveRequestVariables} from './environment';
 import './styles.css';
 
 const defaultRequest = {
@@ -98,8 +100,22 @@ export function App() {
   const [snapshotsError, setSnapshotsError] = useState('');
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState('params');
+  const [activeSidePanel, setActiveSidePanel] = useState('collections');
+  const [environments, setEnvironments] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('pypostboy.environments')) || defaultEnvironments; } catch { return defaultEnvironments; }
+  });
+  const [activeEnvironmentId, setActiveEnvironmentId] = useState(() => localStorage.getItem('pypostboy.activeEnvironment') || defaultEnvironments[0].id);
+  const [environmentWarnings, setEnvironmentWarnings] = useState([]);
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
+  const activeEnvironment = environments.find((environment) => environment.id === activeEnvironmentId) || environments[0] || defaultEnvironments[0];
+
+  useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
+  useEffect(() => { localStorage.setItem('pypostboy.activeEnvironment', activeEnvironmentId); }, [activeEnvironmentId]);
+
+  const updateEnvironment = useCallback((nextEnvironment) => {
+    setEnvironments((current) => current.map((environment) => (environment.id === nextEnvironment.id ? nextEnvironment : environment)));
+  }, []);
 
   const refreshCollections = useCallback(async (preferredRequestId = null) => {
     setCollectionsLoading(true);
@@ -183,6 +199,18 @@ export function App() {
     body_raw_type: activeRequestDraft.body_raw_type ?? activeRequest.body_raw_type ?? 'application/json',
   };
   const requestBody = draftBodies[activeRequest.id] ?? activeRequest.body_content ?? activeRequest.body_raw ?? '';
+  const unresolvedVariableHints = useMemo(() => {
+    const variables = environmentVariables(activeEnvironment);
+    const names = [
+      ...findVariableTokens(editableRequest.url).map((token) => token.name),
+      ...Object.entries(headersArrayToObject(editableRequest.headers)).flatMap(([key, value]) => [
+        ...findVariableTokens(key).map((token) => token.name),
+        ...findVariableTokens(value).map((token) => token.name),
+      ]),
+      ...findVariableTokens(requestBody).map((token) => token.name),
+    ];
+    return [...new Set(names.filter((name) => !Object.prototype.hasOwnProperty.call(variables, name) || variables[name] === ''))];
+  }, [activeEnvironment, editableRequest.headers, editableRequest.url, requestBody]);
   const requestConfigTabs = useMemo(() => [
     {id: 'params', label: 'Params'},
     {id: 'authorization', label: 'Authorization'},
@@ -219,11 +247,23 @@ export function App() {
     setProxyError('');
     setProxyResult(null);
     try {
-      const result = await apiClient.proxyRequest({
-        method: editableRequest.method || 'GET',
+      const resolvedRequest = resolveRequestVariables({
         url: editableRequest.url,
         headers: headersArrayToObject(editableRequest.headers),
         body: requestBody,
+      }, activeEnvironment);
+      if (resolvedRequest.unresolved.length) {
+        const message = `Unresolved environment variables: ${resolvedRequest.unresolved.join(', ')}`;
+        setEnvironmentWarnings(resolvedRequest.unresolved);
+        setProxyError(message);
+        return;
+      }
+      setEnvironmentWarnings([]);
+      const result = await apiClient.proxyRequest({
+        method: editableRequest.method || 'GET',
+        url: resolvedRequest.url,
+        headers: resolvedRequest.headers,
+        body: resolvedRequest.body,
         contentType: editableRequest.body_raw_type || 'application/json',
       });
       setProxyResult(result);
@@ -232,7 +272,7 @@ export function App() {
     } finally {
       setSending(false);
     }
-  }, [editableRequest, requestBody]);
+  }, [activeEnvironment, editableRequest, requestBody]);
 
 
   const updateRequestDraft = useCallback((field, value) => {
@@ -405,7 +445,7 @@ export function App() {
       <header className="header">
         <strong className="brand">PostBoy</strong>
         <button className="selector">Workspace: Local API <ChevronDown size={13} /></button>
-        <button className="selector">Environment: Local <ChevronDown size={13} /></button>
+        <button className="selector" onClick={() => setActiveSidePanel('environments')}>Environment: {activeEnvironment.name} <ChevronDown size={13} /></button>
         <div className="global-search"><Search size={14} /><input placeholder="Search requests, URLs, headers (Ctrl+Shift+F)" /></div>
         <Button kind="ghost" onClick={openPalette}>Command Palette <kbd>Ctrl⇧P</kbd></Button>
         <IconButton
@@ -418,7 +458,15 @@ export function App() {
       </header>
 
       <main className="workspace">
-        <ActivityBar />
+        <ActivityBar activePanel={activeSidePanel} onSelectPanel={setActiveSidePanel} />
+        {activeSidePanel === 'environments' ? (
+          <EnvironmentPanel
+            environments={environments}
+            activeEnvironmentId={activeEnvironment.id}
+            onSelectEnvironment={setActiveEnvironmentId}
+            onUpdateEnvironment={updateEnvironment}
+          />
+        ) : (
         <Sidebar
           collections={collections}
           loading={collectionsLoading}
@@ -428,6 +476,7 @@ export function App() {
           onImportCurl={() => setImportCurlOpen(true)}
           onImportPostman={() => setImportPostmanOpen(true)}
         />
+        )}
         <section className="main">
           <RequestTabs requests={requests} activeRequestId={activeRequest.id} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
           <div
@@ -447,6 +496,11 @@ export function App() {
               saving={savingRequest}
               saveDisabled={!activeRequest.id || !editableRequest.url}
             />
+            {(environmentWarnings.length > 0 || unresolvedVariableHints.length > 0 || findVariableTokens(editableRequest.url).length > 0) && (
+              <div className={(environmentWarnings.length || unresolvedVariableHints.length) ? "environment-warning" : "environment-hint"}>
+                {(environmentWarnings.length || unresolvedVariableHints.length) ? `Unresolved variables: ${(environmentWarnings.length ? environmentWarnings : unresolvedVariableHints).join(', ')}` : `Environment variables detected for ${activeEnvironment.name}.`}
+              </div>
+            )}
             <div className="panel-tabs" role="tablist" aria-label="Request configuration tabs" onKeyDown={handleConfigTabKeyDown}>
               {requestConfigTabs.map((tab) => {
                 const selected = activeConfigTab === tab.id;

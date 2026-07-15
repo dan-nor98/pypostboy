@@ -3,9 +3,30 @@ import {bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlightin
 import {json} from '@codemirror/lang-json';
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands';
 import {highlightSelectionMatches, openSearchPanel, searchKeymap, search} from '@codemirror/search';
-import {Compartment, EditorState} from '@codemirror/state';
-import {EditorView, drawSelection, dropCursor, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers} from '@codemirror/view';
+import {Compartment, EditorState, RangeSetBuilder} from '@codemirror/state';
+import {Decoration, EditorView, ViewPlugin, drawSelection, dropCursor, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers} from '@codemirror/view';
 import {Search} from 'lucide-react';
+import {variablePattern} from '../environment';
+
+
+function buildVariableDecorations(view) {
+  const builder = new RangeSetBuilder();
+  for (const {from, to, text} of view.visibleRanges.map((range) => ({...range, text: view.state.doc.sliceString(range.from, range.to)}))) {
+    variablePattern.lastIndex = 0;
+    let match;
+    while ((match = variablePattern.exec(text)) !== null) {
+      builder.add(from + match.index, from + match.index + match[0].length, Decoration.mark({class: 'cm-env-variable-token'}));
+    }
+  }
+  return builder.finish();
+}
+
+export const environmentVariableHighlight = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = buildVariableDecorations(view); }
+  update(update) {
+    if (update.docChanged || update.viewportChanged) this.decorations = buildVariableDecorations(update.view);
+  }
+}, {decorations: (plugin) => plugin.decorations});
 
 function formatJson(value) {
   if (!value.trim()) return value;
@@ -63,6 +84,7 @@ export function CodeEditor({
     },
     '.cm-search input': {backgroundColor: 'var(--color-bg-input)', color: 'var(--color-text-primary)'},
     '.cm-matchingBracket': {backgroundColor: 'var(--color-accent-muted)', outline: '1px solid var(--color-accent-border)'},
+    '.cm-env-variable-token': {backgroundColor: 'var(--color-accent-muted)', color: 'var(--color-accent)', borderRadius: '3px', padding: '0 1px'},
   }), []);
 
   useEffect(() => {
@@ -81,6 +103,7 @@ export function CodeEditor({
       search({top: true}),
       highlightSelectionMatches(),
       highlightActiveLine(),
+      environmentVariableHighlight,
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
       compartmentsRef.current.editable.of(EditorView.editable.of(!readOnly)),
       compartmentsRef.current.readOnly.of(EditorState.readOnly.of(readOnly)),
