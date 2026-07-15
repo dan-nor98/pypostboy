@@ -544,6 +544,100 @@ describe('App shell', () => {
     expect(paramsTab).toHaveFocus();
   });
 
+
+  test('renders query params from the request URL and updates the URL when params are edited', async () => {
+    const user = userEvent.setup();
+    apiClient.listCollections.mockResolvedValueOnce([
+      {
+        ...testCollections[0],
+        requests: [
+          {...testCollections[0].requests[0], url: 'https://example.test/health?status=ok&limit=10#top'},
+          ...testCollections[0].requests.slice(1),
+        ],
+      },
+      testCollections[1],
+    ]);
+
+    render(<App />);
+
+    const statusValue = await screen.findByRole('textbox', {name: /parameter row 1 value/i});
+    expect(screen.getByRole('textbox', {name: /parameter row 1 key/i})).toHaveValue('status');
+    expect(statusValue).toHaveValue('ok');
+
+    await user.clear(statusValue);
+    await user.type(statusValue, 'healthy');
+
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health?status=healthy&limit=10#top');
+  });
+
+  test('renders active request headers and updates the header draft when headers are edited', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: 'Headers'}));
+
+    expect(screen.getByRole('textbox', {name: /header row 1 key/i})).toHaveValue('Accept');
+    const headerValue = screen.getByRole('textbox', {name: /header row 1 value/i});
+    expect(headerValue).toHaveValue('application/json');
+
+    await user.clear(headerValue);
+    await user.type(headerValue, 'text/plain');
+
+    await user.click(screen.getByRole('button', {name: /save/i}));
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      headers: [{enabled: true, key: 'Accept', value: 'text/plain', description: ''}],
+    })));
+  });
+
+  test('sends edited header drafts in the proxy payload', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: 'Headers'}));
+    const headerValue = screen.getByRole('textbox', {name: /header row 1 value/i});
+    await user.clear(headerValue);
+    await user.type(headerValue, 'text/plain');
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({
+      headers: {Accept: 'text/plain'},
+    }));
+  });
+
+  test('saves edited params and headers through the request update API', async () => {
+    const user = userEvent.setup();
+    apiClient.listCollections.mockResolvedValueOnce([
+      {
+        ...testCollections[0],
+        requests: [
+          {...testCollections[0].requests[0], url: 'https://example.test/health?status=ok'},
+          ...testCollections[0].requests.slice(1),
+        ],
+      },
+      testCollections[1],
+    ]);
+
+    render(<App />);
+
+    const paramValue = await screen.findByRole('textbox', {name: /parameter row 1 value/i});
+    await user.clear(paramValue);
+    await user.type(paramValue, 'healthy');
+
+    await user.click(screen.getByRole('tab', {name: 'Headers'}));
+    const headerValue = screen.getByRole('textbox', {name: /header row 1 value/i});
+    await user.clear(headerValue);
+    await user.type(headerValue, 'text/plain');
+
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      url: 'https://example.test/health?status=healthy',
+      headers: [{enabled: true, key: 'Accept', value: 'text/plain', description: ''}],
+    })));
+  });
+
   test('sends edited JSON body draft in proxy payload', async () => {
     const user = userEvent.setup();
     renderApp();
