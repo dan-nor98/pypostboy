@@ -14,6 +14,7 @@ import {
   RequestToolbar,
   ResponseViewer,
   Sidebar,
+  SnapshotsPanel,
   StatusBar,
 } from './components';
 import {apiClient} from './api/client';
@@ -69,6 +70,10 @@ export function App() {
   const [draftBodies, setDraftBodies] = useState({});
   const [requestDrafts, setRequestDrafts] = useState({});
   const [savingRequest, setSavingRequest] = useState(false);
+  const [snapshots, setSnapshots] = useState([]);
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [snapshotsError, setSnapshotsError] = useState('');
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [activeConfigTab, setActiveConfigTab] = useState('params');
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
@@ -124,6 +129,8 @@ export function App() {
     ...activeRequest,
     method: activeRequestDraft.method ?? activeRequest.method ?? 'GET',
     url: activeRequestDraft.url ?? activeRequest.url ?? '',
+    headers: activeRequestDraft.headers ?? activeRequest.headers ?? [],
+    body_raw_type: activeRequestDraft.body_raw_type ?? activeRequest.body_raw_type ?? 'application/json',
   };
   const requestBody = draftBodies[activeRequest.id] ?? activeRequest.body_content ?? activeRequest.body_raw ?? '';
   const requestConfigTabs = useMemo(() => [
@@ -165,9 +172,9 @@ export function App() {
       const result = await apiClient.proxyRequest({
         method: editableRequest.method || 'GET',
         url: editableRequest.url,
-        headers: headersArrayToObject(activeRequest.headers),
+        headers: headersArrayToObject(editableRequest.headers),
         body: requestBody,
-        contentType: activeRequest.body_raw_type || 'application/json',
+        contentType: editableRequest.body_raw_type || 'application/json',
       });
       setProxyResult(result);
     } catch (error) {
@@ -175,7 +182,7 @@ export function App() {
     } finally {
       setSending(false);
     }
-  }, [activeRequest, editableRequest, requestBody]);
+  }, [editableRequest, requestBody]);
 
 
   const updateRequestDraft = useCallback((field, value) => {
@@ -198,7 +205,9 @@ export function App() {
         ...activeRequest,
         method: editableRequest.method || 'GET',
         url: editableRequest.url,
+        headers: editableRequest.headers,
         body_content: requestBody,
+        body_raw_type: editableRequest.body_raw_type || 'application/json',
       };
       const savedRequest = await apiClient.updateRequest(activeRequest.id, payload);
       const nextRequest = savedRequest || payload;
@@ -217,6 +226,102 @@ export function App() {
       setSavingRequest(false);
     }
   }, [activeRequest, editableRequest, requestBody]);
+
+
+  useEffect(() => {
+    if (!activeRequest.id) {
+      setSnapshots([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    async function loadSnapshots() {
+      setSnapshotsLoading(true);
+      setSnapshotsError('');
+      try {
+        const data = await apiClient.listRequestInstances(activeRequest.id);
+        if (!cancelled) setSnapshots(data);
+      } catch (error) {
+        if (!cancelled) setSnapshotsError(error.message);
+      } finally {
+        if (!cancelled) setSnapshotsLoading(false);
+      }
+    }
+    loadSnapshots();
+    return () => { cancelled = true; };
+  }, [activeRequest.id]);
+
+  const saveSnapshot = useCallback(async () => {
+    if (!activeRequest.id) return;
+
+    const optimisticId = `pending-${Date.now()}`;
+    const payload = {
+      name: `${activeRequest.name || 'Request'} snapshot`,
+      method: editableRequest.method || 'GET',
+      url: editableRequest.url || '',
+      headers: editableRequest.headers || [],
+      body_content: requestBody,
+      body_raw_type: editableRequest.body_raw_type || 'application/json',
+      response_status: proxyResult?.status,
+      response_status_text: proxyResult?.statusText,
+      response_headers: proxyResult?.headers || {},
+      response_body: proxyResult?.body ?? '',
+      response_time_ms: proxyResult?.time,
+      response_size: proxyResult?.size,
+    };
+
+    setSavingSnapshot(true);
+    setSnapshotsError('');
+    setSnapshots((current) => [{...payload, id: optimisticId, optimistic: true}, ...current]);
+    try {
+      const createdSnapshot = await apiClient.createRequestInstance(activeRequest.id, payload);
+      setSnapshots((current) => current.map((snapshot) => (snapshot.id === optimisticId ? createdSnapshot : snapshot)));
+    } catch (error) {
+      setSnapshots((current) => current.filter((snapshot) => snapshot.id !== optimisticId));
+      setSnapshotsError(error.message);
+    } finally {
+      setSavingSnapshot(false);
+    }
+  }, [activeRequest.id, activeRequest.name, editableRequest, proxyResult, requestBody]);
+
+  const restoreSnapshot = useCallback((snapshot) => {
+    if (!activeRequest.id) return;
+    setRequestDrafts((drafts) => ({
+      ...drafts,
+      [activeRequest.id]: {
+        ...drafts[activeRequest.id],
+        method: snapshot.method || 'GET',
+        url: snapshot.url || '',
+        headers: snapshot.headers || [],
+        body_raw_type: snapshot.body_raw_type || 'application/json',
+      },
+    }));
+    setDraftBodies((drafts) => ({...drafts, [activeRequest.id]: snapshot.body_content ?? snapshot.body_raw ?? ''}));
+    selectConfigTab('body');
+  }, [activeRequest.id, selectConfigTab]);
+
+  const renameSnapshot = useCallback(async (instanceId, name) => {
+    const previous = snapshots;
+    setSnapshots((current) => current.map((snapshot) => (snapshot.id === instanceId ? {...snapshot, name} : snapshot)));
+    try {
+      const updatedSnapshot = await apiClient.updateRequestInstance(instanceId, {name});
+      setSnapshots((current) => current.map((snapshot) => (snapshot.id === instanceId ? updatedSnapshot : snapshot)));
+    } catch (error) {
+      setSnapshots(previous);
+      setSnapshotsError(error.message);
+    }
+  }, [snapshots]);
+
+  const deleteSnapshot = useCallback(async (instanceId) => {
+    const previous = snapshots;
+    setSnapshots((current) => current.filter((snapshot) => snapshot.id !== instanceId));
+    try {
+      await apiClient.deleteRequestInstance(instanceId);
+    } catch (error) {
+      setSnapshots(previous);
+      setSnapshotsError(error.message);
+    }
+  }, [snapshots]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -328,7 +433,17 @@ export function App() {
                 <p className="mono variable">{activeRequest.name}</p>
                 <p>{editableRequest.method} {editableRequest.url || 'No URL configured'}</p>
                 <h3>Headers</h3>
-                {(activeRequest.headers || []).length ? <p>{activeRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
+                {(editableRequest.headers || []).length ? <p>{editableRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
+                <SnapshotsPanel
+                  snapshots={snapshots}
+                  loading={snapshotsLoading}
+                  error={snapshotsError}
+                  saving={savingSnapshot}
+                  onSave={saveSnapshot}
+                  onRestore={restoreSnapshot}
+                  onRename={renameSnapshot}
+                  onDelete={deleteSnapshot}
+                />
               </aside>
             </div>
             <div

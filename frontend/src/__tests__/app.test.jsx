@@ -11,6 +11,10 @@ vi.mock('../api/client', () => ({
     listCollections: vi.fn(),
     proxyRequest: vi.fn(),
     updateRequest: vi.fn(),
+    listRequestInstances: vi.fn(),
+    createRequestInstance: vi.fn(),
+    updateRequestInstance: vi.fn(),
+    deleteRequestInstance: vi.fn(),
   },
 }));
 
@@ -53,6 +57,32 @@ const testCollections = [
 function renderApp() {
   apiClient.listCollections.mockResolvedValue(testCollections);
   apiClient.updateRequest.mockImplementation((id, data) => Promise.resolve({...data, id}));
+  apiClient.listRequestInstances.mockResolvedValue([
+    {
+      id: 'snapshot-1',
+      name: 'Saved success',
+      method: 'PATCH',
+      url: 'https://example.test/snapshots/1',
+      headers: [{enabled: true, key: 'X-Snapshot', value: 'yes'}],
+      body_content: '{\"restored\":true}',
+      body_raw_type: 'application/json',
+      response_status: 201,
+      response_status_text: 'Created',
+      response_headers: {'content-type': 'application/json'},
+      response_body: {created: true},
+      response_time_ms: 35,
+    },
+  ]);
+  apiClient.createRequestInstance.mockImplementation((requestId, data) => Promise.resolve({...data, id: 'snapshot-created', request_id: requestId}));
+  apiClient.updateRequestInstance.mockImplementation((instanceId, data) => Promise.resolve({
+    id: instanceId,
+    name: data.name,
+    method: 'PATCH',
+    url: 'https://example.test/snapshots/1',
+    headers: [],
+    body_content: '',
+  }));
+  apiClient.deleteRequestInstance.mockResolvedValue({deleted: 1});
   apiClient.proxyRequest.mockResolvedValue({
     status: 200,
     statusText: 'OK',
@@ -271,6 +301,68 @@ describe('App shell', () => {
     }));
   });
 
+
+
+
+  test('loads snapshots for the active request and restores a saved snapshot into the editable draft', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(apiClient.listRequestInstances).toHaveBeenCalledWith('request-1'));
+    expect(screen.getByRole('region', {name: /snapshots/i})).toBeInTheDocument();
+    expect(screen.getByText('Saved success')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: /restore snapshot/i}));
+
+    expect(screen.getByRole('combobox', {name: /http method/i})).toHaveValue('PATCH');
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/snapshots/1');
+    expect(screen.getByRole('tab', {name: 'Body'})).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('textbox', {name: /request json body editor/i})).toHaveTextContent('{"restored":true}');
+  });
+
+  test('saves snapshots with current request and response state using optimistic UI', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Saved success')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    await waitFor(() => expect(screen.getByText('200 OK')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', {name: /save snapshot/i}));
+
+    expect(screen.getByText('Health Check snapshot')).toBeInTheDocument();
+    await waitFor(() => expect(apiClient.createRequestInstance).toHaveBeenCalledTimes(1));
+    expect(apiClient.createRequestInstance).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      method: 'GET',
+      url: 'https://example.test/health',
+      headers: [{enabled: true, key: 'Accept', value: 'application/json'}],
+      body_content: '',
+      response_status: 200,
+      response_status_text: 'OK',
+      response_headers: {'content-type': 'application/json'},
+      response_body: {ok: true},
+      response_time_ms: 42,
+    }));
+  });
+
+  test('renames and deletes snapshots optimistically', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Saved success')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', {name: /rename/i}));
+    const nameInput = screen.getByRole('textbox', {name: /snapshot name/i});
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Renamed snapshot');
+    await user.click(screen.getByRole('button', {name: /^save$/i}));
+
+    expect(screen.getByText('Renamed snapshot')).toBeInTheDocument();
+    await waitFor(() => expect(apiClient.updateRequestInstance).toHaveBeenCalledWith('snapshot-1', {name: 'Renamed snapshot'}));
+
+    await user.click(screen.getByRole('button', {name: /delete/i}));
+    expect(screen.queryByText('Renamed snapshot')).not.toBeInTheDocument();
+    await waitFor(() => expect(apiClient.deleteRequestInstance).toHaveBeenCalledWith('snapshot-1'));
+  });
 
   test('toggles the document theme from the header icon', async () => {
     const user = userEvent.setup();

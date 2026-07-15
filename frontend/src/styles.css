@@ -19,3 +19,15 @@
 .code-editor-host .ͼf{color:var(--color-code-null)}
 .request-panel{min-height:0;display:grid;grid-template-rows:38px 34px minmax(240px,1fr)}.tree-button{width:100%;border:0;background:transparent;color:inherit;text-align:left}.palette li{padding:0}.palette li button{width:100%;height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border:0;background:transparent;color:inherit;border-radius:var(--radius-sm)}.palette li button:hover{background:var(--color-bg-hover)}
 .main{grid-template-rows:34px minmax(312px,1fr) 5px minmax(220px,.8fr)}
+.snapshots-panel{margin-top:12px;border-top:1px solid var(--color-border-subtle);padding-top:8px}
+.snapshots-head{padding:0;margin-bottom:6px}
+.snapshots-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.snapshots-list li{border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);background:var(--color-bg-panel);padding:8px;display:grid;gap:8px}
+.snapshots-list li.optimistic{opacity:.7}
+.snapshots-list strong{display:block;font-size:12px;margin-bottom:2px}
+.snapshots-list p{margin:2px 0}
+.snapshot-actions{display:flex;flex-wrap:wrap;gap:6px}
+.snapshot-actions button,.snapshot-rename button{height:24px;border:1px solid var(--color-border-default);background:var(--color-bg-input);border-radius:var(--radius-sm);padding:0 6px;font-size:11px}
+.snapshot-actions button:hover,.snapshot-rename button:hover{background:var(--color-bg-hover)}
+.snapshot-rename{display:grid;grid-template-columns:1fr auto auto;gap:6px}
+.snapshot-rename input{height:26px;min-width:0}
