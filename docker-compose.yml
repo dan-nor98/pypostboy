@@ -44,7 +44,9 @@ services:
       app:
         condition: service_healthy
     ports:
-      - "80:80"
+      # Bind to loopback by default. Put a TLS-terminating reverse proxy
+      # in front of this service before exposing it to public networks.
+      - "127.0.0.1:8080:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro,Z
 
