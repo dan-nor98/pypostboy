@@ -3,10 +3,12 @@
 from django.urls import include, path
 
 from pypostboy import frontend
+from pypostboy.health import healthz
 
 
 urlpatterns = [
     path('', frontend.index),
+    path('healthz', healthz),
     path(
         '.well-known/appspecific/com.chrome.devtools.json',
         frontend.chrome_devtools_probe,
