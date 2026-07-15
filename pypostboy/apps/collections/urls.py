@@ -27,6 +27,7 @@ urlpatterns = [
         'PUT': collections.update_collection,
         'DELETE': collections.delete_collection,
     })),
+    path('<int:id>/export', collections.export_collection),
     path('<int:id>/duplicate', collections.duplicate_collection),
     path('<int:id>/requests', requests.get_collection_requests),
 ]

@@ -27,6 +27,7 @@ urlpatterns = [
         'PUT': requests.update_request,
         'DELETE': requests.delete_request,
     })),
+    path('<int:id>/export/curl', requests.export_request_curl),
     path('<int:id>/duplicate', requests.duplicate_request),
     path('<int:id>/move', requests.move_request),
 ]

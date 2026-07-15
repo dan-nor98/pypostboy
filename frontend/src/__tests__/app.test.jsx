@@ -24,6 +24,8 @@ vi.mock('../api/client', () => ({
     deleteRequest: vi.fn(),
     duplicateRequest: vi.fn(),
     moveRequest: vi.fn(),
+    exportCollection: vi.fn(),
+    exportRequestCurl: vi.fn(),
     reorderCollections: vi.fn(),
     reorderRequests: vi.fn(),
   },
@@ -118,6 +120,8 @@ function renderApp() {
   apiClient.deleteRequest.mockResolvedValue({deleted: 1});
   apiClient.duplicateRequest.mockResolvedValue({id: 'request-copy', name: 'Health Check Copy'});
   apiClient.moveRequest.mockResolvedValue({id: 'request-1', collection_id: 'collection-3'});
+  apiClient.exportCollection.mockResolvedValue({info: {name: 'Smoke Tests'}, item: []});
+  apiClient.exportRequestCurl.mockResolvedValue({curl: 'curl https://example.test/health'});
   apiClient.reorderCollections.mockResolvedValue({});
   apiClient.reorderRequests.mockResolvedValue({});
   apiClient.proxyRequest.mockResolvedValue({
@@ -162,6 +166,7 @@ describe('App shell', () => {
 
   afterEach(() => {
     document.documentElement.removeAttribute('data-theme');
+    vi.restoreAllMocks();
   });
 
   test('renders the header, activity bar, request toolbar, Send button, command palette, and response summary', async () => {
@@ -364,6 +369,37 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', {name: /confirm/i}));
     await waitFor(() => expect(apiClient.deleteRequest).toHaveBeenCalledWith('request-1'));
   });
+
+  test('exports a collection JSON file from the collection action menu', async () => {
+    const user = userEvent.setup();
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:collection-export');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /actions for collection smoke tests/i}));
+    await user.click(screen.getByRole('button', {name: /export collection/i}));
+    await user.click(screen.getByRole('button', {name: /confirm/i}));
+
+    await waitFor(() => expect(apiClient.exportCollection).toHaveBeenCalledWith('collection-1'));
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(click).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:collection-export');
+  });
+
+  test('copies a request cURL command from the request action menu', async () => {
+    const user = userEvent.setup();
+    Object.assign(navigator, {clipboard: {writeText: vi.fn().mockResolvedValue()}});
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /actions for request health check/i}));
+    await user.click(screen.getByRole('button', {name: /copy as curl/i}));
+    await user.click(screen.getByRole('button', {name: /confirm/i}));
+
+    await waitFor(() => expect(apiClient.exportRequestCurl).toHaveBeenCalledWith('request-1'));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('curl https://example.test/health');
+  });
+
 
   test('shows an inline error when a sidebar action fails', async () => {
     const user = userEvent.setup();
