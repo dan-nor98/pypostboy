@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "frontend:install": "npm install",
+    "frontend:install": "npm ci --include=optional",
     "frontend:dev": "vite --host 0.0.0.0 frontend",
     "frontend:build": "vite build frontend --base=/frontend/",
     "frontend:preview": "vite preview --host 0.0.0.0 frontend",
