@@ -9,13 +9,13 @@ function collectVisibleItems(nodes, expandedIds, depth = 0, parentId = null) {
     const requests = node.requests || [];
     const children = node.children || [];
     const expanded = expandedIds.has(nodeId);
-    const item = {type: 'collection', id: nodeId, rawId: node.id, node, depth, parentId, expandable: requests.length > 0 || children.length > 0, expanded};
+    const item = {type: 'collection', id: nodeId, rawId: node.id, node, depth, parentId, parentRawId: parentId?.replace('collection-', '') || null, expandable: requests.length > 0 || children.length > 0, expanded};
 
     if (!expanded) return [item];
 
     return [
       item,
-      ...requests.map((request) => ({type: 'request', id: `request-${request.id}`, rawId: request.id, request, depth: depth + 1, parentId: nodeId})),
+      ...requests.map((request) => ({type: 'request', id: `request-${request.id}`, rawId: request.id, request, depth: depth + 1, parentId: nodeId, parentRawId: node.id})),
       ...collectVisibleItems(children, expandedIds, depth + 1, nodeId),
     ];
   });
@@ -25,7 +25,7 @@ function collectionIds(nodes) {
   return nodes.flatMap((node) => [`collection-${node.id}`, ...collectionIds(node.children || [])]);
 }
 
-export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman}) {
+export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest}) {
   const treeRef = useRef(null);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [focusedItemId, setFocusedItemId] = useState(null);
@@ -108,6 +108,8 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
             onToggleCollection={toggleCollection}
             tabIndex={item.id === tabStopId ? 0 : -1}
             onFocus={() => setFocusedItemId(item.id)}
+            onMoveCollection={onMoveCollection}
+            onMoveRequest={onMoveRequest}
           />
         ))}
       </div>
