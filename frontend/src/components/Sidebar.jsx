@@ -25,12 +25,16 @@ function collectionIds(nodes) {
   return nodes.flatMap((node) => [`collection-${node.id}`, ...collectionIds(node.children || [])]);
 }
 
-export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest}) {
+export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection}) {
   const treeRef = useRef(null);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [focusedItemId, setFocusedItemId] = useState(null);
+  const [dialog, setDialog] = useState(null);
+  const [formValue, setFormValue] = useState('');
+  const [targetCollectionId, setTargetCollectionId] = useState('');
 
   const visibleItems = useMemo(() => collectVisibleItems(collections, expandedIds), [collections, expandedIds]);
+  const collectionOptions = useMemo(() => visibleItems.filter((item) => item.type === 'collection').map((item) => ({id: item.rawId, name: `${'— '.repeat(item.depth)}${item.node.name}`})), [visibleItems]);
 
   useEffect(() => {
     setExpandedIds((current) => {
@@ -39,6 +43,35 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
       return next;
     });
   }, [collections]);
+
+
+  const openDialog = (nextDialog) => {
+    setDialog(nextDialog);
+    setFormValue(nextDialog.defaultValue || '');
+    setTargetCollectionId(nextDialog.collectionId || collectionOptions[0]?.id || '');
+  };
+
+  const closeDialog = () => setDialog(null);
+
+  const submitDialog = async (event) => {
+    event.preventDefault();
+    if (!dialog) return;
+    if (dialog.kind !== 'confirm' && !formValue.trim()) return;
+    const value = formValue.trim();
+    const targetId = targetCollectionId;
+    closeDialog();
+    if (dialog.action === 'createCollection') onCreateCollection?.({name: value});
+    if (dialog.action === 'createRequest') onCreateRequest?.({collection_id: dialog.collectionId || targetId, name: value});
+    if (dialog.action === 'renameCollection') onRenameCollection?.(dialog.collection.id, {name: value});
+    if (dialog.action === 'duplicateCollection') onDuplicateCollection?.(dialog.collection.id);
+    if (dialog.action === 'deleteCollection') onDeleteCollection?.(dialog.collection.id);
+    if (dialog.action === 'duplicateRequest') onDuplicateRequest?.(dialog.request.id);
+    if (dialog.action === 'deleteRequest') onDeleteRequest?.(dialog.request.id);
+    if (dialog.action === 'moveRequest') onMoveRequestToCollection?.(dialog.request.id, targetId);
+  };
+
+  const openCollectionActions = (collection) => openDialog({kind: 'menu', title: `Actions for ${collection.name}`, collection});
+  const openRequestActions = (request, collectionId) => openDialog({kind: 'menu', title: `Actions for ${request.name}`, request, collectionId});
 
   const activeItemId = visibleItems.find((item) => item.type === 'request' && item.rawId === activeRequestId)?.id;
   const tabStopId = focusedItemId || activeItemId || visibleItems[0]?.id;
@@ -91,7 +124,8 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
         <span>COLLECTIONS</span>
         <IconButton label="Import cURL" onClick={onImportCurl}><Plus size={15} /></IconButton>
         <IconButton label="Import Postman collection" onClick={onImportPostman}><Plus size={15} /></IconButton>
-        <IconButton label="Collection actions"><MoreHorizontal size={15} /></IconButton>
+        <IconButton label="Create collection" onClick={() => openDialog({action: 'createCollection', title: 'Create collection', label: 'Collection name'})}><Plus size={15} /></IconButton>
+        <IconButton label="Create request" onClick={() => openDialog({action: 'createRequest', kind: 'createRequest', title: 'Create request', label: 'Request name'})}><MoreHorizontal size={15} /></IconButton>
       </div>
       <div className="filter"><Search size={14} /><input placeholder="Filter collections" /></div>
       {error && <div className="banner error"><AlertTriangle size={14} /> {error}</div>}
@@ -110,9 +144,46 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
             onFocus={() => setFocusedItemId(item.id)}
             onMoveCollection={onMoveCollection}
             onMoveRequest={onMoveRequest}
+            onCollectionActions={openCollectionActions}
+            onRequestActions={openRequestActions}
           />
         ))}
       </div>
+      {dialog && (
+        <div className="modal-backdrop" onClick={closeDialog}>
+          <dialog open className="import-dialog" aria-modal="true" aria-label={dialog.title} onClick={(event) => event.stopPropagation()}>
+            <form onSubmit={submitDialog}>
+              <div className="section-head"><span>{dialog.title}</span><button type="button" onClick={closeDialog}>Close</button></div>
+              {dialog.kind === 'menu' && dialog.collection && (
+                <div className="action-list">
+                  <button type="button" onClick={() => openDialog({action: 'createRequest', title: `Create request in ${dialog.collection.name}`, label: 'Request name', collectionId: dialog.collection.id})}>Create request</button>
+                  <button type="button" onClick={() => openDialog({action: 'renameCollection', title: `Rename ${dialog.collection.name}`, label: 'Collection name', defaultValue: dialog.collection.name, collection: dialog.collection})}>Rename collection</button>
+                  <button type="button" onClick={() => openDialog({action: 'duplicateCollection', kind: 'confirm', title: `Duplicate ${dialog.collection.name}?`, collection: dialog.collection})}>Duplicate collection</button>
+                  <button type="button" onClick={() => openDialog({action: 'deleteCollection', kind: 'confirm', title: `Delete ${dialog.collection.name}?`, collection: dialog.collection})}>Delete collection</button>
+                </div>
+              )}
+              {dialog.kind === 'menu' && dialog.request && (
+                <div className="action-list">
+                  <button type="button" onClick={() => openDialog({action: 'duplicateRequest', kind: 'confirm', title: `Duplicate ${dialog.request.name}?`, request: dialog.request})}>Duplicate request</button>
+                  <button type="button" onClick={() => openDialog({action: 'moveRequest', kind: 'move', title: `Move ${dialog.request.name}`, request: dialog.request, collectionId: dialog.collectionId})}>Move request</button>
+                  <button type="button" onClick={() => openDialog({action: 'deleteRequest', kind: 'confirm', title: `Delete ${dialog.request.name}?`, request: dialog.request})}>Delete request</button>
+                </div>
+              )}
+              {dialog.kind !== 'menu' && dialog.kind !== 'confirm' && dialog.kind !== 'move' && (
+                <label className="field-stack"><span>{dialog.label}</span><input aria-label={dialog.label} value={formValue} onChange={(event) => setFormValue(event.target.value)} autoFocus /></label>
+              )}
+              {dialog.action === 'createRequest' && !dialog.collectionId && (
+                <label className="field-stack"><span>Destination collection</span><select value={targetCollectionId} onChange={(event) => setTargetCollectionId(event.target.value)}>{collectionOptions.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label>
+              )}
+              {dialog.kind === 'move' && (
+                <label className="field-stack"><span>Destination collection</span><select value={targetCollectionId} onChange={(event) => setTargetCollectionId(event.target.value)}>{collectionOptions.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label>
+              )}
+              {dialog.kind === 'confirm' && <p role="alert">This action changes your collection data. Confirm to continue.</p>}
+              {dialog.kind !== 'menu' && <button className="button button-primary" type="submit">{dialog.kind === 'confirm' ? 'Confirm' : 'Save'}</button>}
+            </form>
+          </dialog>
+        </div>
+      )}
     </aside>
   );
 }

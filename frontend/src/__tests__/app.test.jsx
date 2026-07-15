@@ -17,6 +17,13 @@ vi.mock('../api/client', () => ({
     deleteRequestInstance: vi.fn(),
     importData: vi.fn(),
     createRequest: vi.fn(),
+    createCollection: vi.fn(),
+    updateCollection: vi.fn(),
+    deleteCollection: vi.fn(),
+    duplicateCollection: vi.fn(),
+    deleteRequest: vi.fn(),
+    duplicateRequest: vi.fn(),
+    moveRequest: vi.fn(),
     reorderCollections: vi.fn(),
     reorderRequests: vi.fn(),
   },
@@ -104,6 +111,13 @@ function renderApp() {
   apiClient.deleteRequestInstance.mockResolvedValue({deleted: 1});
   apiClient.importData.mockReset();
   apiClient.createRequest.mockReset();
+  apiClient.createCollection.mockResolvedValue({id: 'collection-new', name: 'New Collection', requests: [], children: []});
+  apiClient.updateCollection.mockResolvedValue({id: 'collection-1', name: 'Renamed Collection'});
+  apiClient.deleteCollection.mockResolvedValue({deleted: 1});
+  apiClient.duplicateCollection.mockResolvedValue({id: 'collection-copy', name: 'Smoke Tests Copy'});
+  apiClient.deleteRequest.mockResolvedValue({deleted: 1});
+  apiClient.duplicateRequest.mockResolvedValue({id: 'request-copy', name: 'Health Check Copy'});
+  apiClient.moveRequest.mockResolvedValue({id: 'request-1', collection_id: 'collection-3'});
   apiClient.reorderCollections.mockResolvedValue({});
   apiClient.reorderRequests.mockResolvedValue({});
   apiClient.proxyRequest.mockResolvedValue({
@@ -282,6 +296,87 @@ describe('App shell', () => {
     }));
     expect(screen.getAllByRole('button', {name: /move request down/i}).length).toBeGreaterThan(0);
   });
+
+
+  test('creates collections and requests from sidebar actions', async () => {
+    const user = userEvent.setup();
+    apiClient.listCollections
+      .mockResolvedValueOnce(testCollections)
+      .mockResolvedValueOnce([...testCollections, {id: 'collection-new', name: 'New Collection', requests: [], children: []}])
+      .mockResolvedValueOnce([...testCollections, {...testCollections[1], requests: [{id: 'request-new', name: 'New Request', method: 'GET', url: '', headers: [], body_content: '', body_raw_type: 'application/json'}]}]);
+    apiClient.createRequest.mockResolvedValue({id: 'request-new', name: 'New Request'});
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', {name: /^create collection$/i}));
+    await user.type(screen.getByRole('textbox', {name: /collection name/i}), 'New Collection');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+    await waitFor(() => expect(apiClient.createCollection).toHaveBeenCalledWith({name: 'New Collection'}));
+
+    await user.click(screen.getByRole('button', {name: /^create request$/i}));
+    await user.type(screen.getByRole('textbox', {name: /request name/i}), 'New Request');
+    await user.selectOptions(screen.getByRole('combobox'), 'collection-3');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+    await waitFor(() => expect(apiClient.createRequest).toHaveBeenCalledWith(expect.objectContaining({collection_id: 'collection-3', name: 'New Request'})));
+  });
+
+  test('renames, duplicates, and deletes a collection from its action menu', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /actions for collection smoke tests/i}));
+    await user.click(screen.getByRole('button', {name: /rename collection/i}));
+    const nameInput = screen.getByRole('textbox', {name: /collection name/i});
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Renamed Collection');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+    await waitFor(() => expect(apiClient.updateCollection).toHaveBeenCalledWith('collection-1', {name: 'Renamed Collection'}));
+
+    await user.click(screen.getByRole('button', {name: /actions for collection smoke tests/i}));
+    await user.click(screen.getByRole('button', {name: /duplicate collection/i}));
+    expect(screen.getByRole('dialog', {name: /duplicate smoke tests/i})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /confirm/i}));
+    await waitFor(() => expect(apiClient.duplicateCollection).toHaveBeenCalledWith('collection-1'));
+
+    await user.click(screen.getByRole('button', {name: /actions for collection smoke tests/i}));
+    await user.click(screen.getByRole('button', {name: /delete collection/i}));
+    expect(screen.getByRole('alert')).toHaveTextContent(/confirm to continue/i);
+    await user.click(screen.getByRole('button', {name: /confirm/i}));
+    await waitFor(() => expect(apiClient.deleteCollection).toHaveBeenCalledWith('collection-1'));
+  });
+
+  test('duplicates, deletes, and moves a request from its action menu', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /actions for request health check/i}));
+    await user.click(screen.getByRole('button', {name: /duplicate request/i}));
+    await user.click(screen.getByRole('button', {name: /confirm/i}));
+    await waitFor(() => expect(apiClient.duplicateRequest).toHaveBeenCalledWith('request-1'));
+
+    await user.click(screen.getByRole('button', {name: /actions for request health check/i}));
+    await user.click(screen.getByRole('button', {name: /move request/i}));
+    await user.selectOptions(screen.getByRole('combobox', {name: /destination collection/i}), 'collection-3');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+    await waitFor(() => expect(apiClient.moveRequest).toHaveBeenCalledWith('request-1', 'collection-3'));
+
+    await user.click(screen.getByRole('button', {name: /actions for request health check/i}));
+    await user.click(screen.getByRole('button', {name: /delete request/i}));
+    await user.click(screen.getByRole('button', {name: /confirm/i}));
+    await waitFor(() => expect(apiClient.deleteRequest).toHaveBeenCalledWith('request-1'));
+  });
+
+  test('shows an inline error when a sidebar action fails', async () => {
+    const user = userEvent.setup();
+    apiClient.createCollection.mockRejectedValueOnce(new Error('Unable to create collection'));
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /^create collection$/i}));
+    await user.type(screen.getByRole('textbox', {name: /collection name/i}), 'Broken');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    expect(await screen.findByText(/unable to create collection/i)).toBeInTheDocument();
+  });
+
 
   test('traps command palette focus, closes on Escape, and restores focus to the trigger', async () => {
     const user = userEvent.setup();
