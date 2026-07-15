@@ -66,13 +66,13 @@ The default `docker-compose.yml` is production-oriented and fails fast when requ
 - `POSTBOY_DATABASE_URL` to a PostgreSQL DSN that matches the database credentials. URL-encode special characters in the password.
 - `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS` to your production hostnames and HTTPS origins.
 
-Production examples default `SESSION_COOKIE_SECURE=true` and `CSRF_COOKIE_SECURE=true`, so deploy behind TLS. If TLS is terminated by a host-level reverse proxy, keep the Compose nginx service bound to loopback by layering the provided override example:
+Production examples default `SESSION_COOKIE_SECURE=true` and `CSRF_COOKIE_SECURE=true`, so deploy behind TLS. The Compose nginx service binds to loopback at `127.0.0.1:8080` by default and expects a host-level TLS-terminating reverse proxy to handle public HTTPS traffic before forwarding to this stack over HTTP. The provided production override keeps that same loopback binding while documenting production hostname and origin settings:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.example.yml up -d --build
 ```
 
-For quick production-like validation on a private machine, you can run the base stack directly after setting the required variables:
+For quick production-like validation on a private machine, you can run the base stack directly after setting the required variables, then visit `http://127.0.0.1:8080`:
 
 ```bash
 docker compose up --build

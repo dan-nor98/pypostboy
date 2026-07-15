@@ -14,4 +14,5 @@ services:
     ports:
       # Keep the application on loopback when another host-level reverse proxy
       # handles public HTTPS traffic and forwards to this stack over HTTP.
+      # Match docker-compose.yml so production examples do not publish plain HTTP.
       - "127.0.0.1:8080:80"
