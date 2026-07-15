@@ -243,26 +243,64 @@ describe('App shell', () => {
     expect(divider).toHaveAttribute('aria-valuenow', '75');
   });
 
-  test('resizes response body and headers with keyboard and drag', async () => {
+  test('switches response tabs by click and exposes accessible tab state', async () => {
+    const user = userEvent.setup();
     renderApp();
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    await waitFor(() => expect(screen.getByText('200 OK')).toBeInTheDocument());
+
+    const responseTabs = screen.getByRole('tablist', {name: /response tabs/i});
+    const bodyTab = within(responseTabs).getByRole('tab', {name: 'Body'});
+    const headersTab = within(responseTabs).getByRole('tab', {name: 'Headers'});
+    const testsTab = within(responseTabs).getByRole('tab', {name: 'Tests'});
+
+    expect(bodyTab).toHaveAttribute('aria-selected', 'true');
+    expect(bodyTab).toHaveAttribute('tabIndex', '0');
+    expect(headersTab).toHaveAttribute('aria-selected', 'false');
+    expect(headersTab).toHaveAttribute('tabIndex', '-1');
+    expect(screen.queryByRole('tab', {name: 'Cookies'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', {name: 'Timeline'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', {name: 'Console'})).not.toBeInTheDocument();
+
+    await user.click(headersTab);
+
+    expect(headersTab).toHaveAttribute('aria-selected', 'true');
+    expect(headersTab).toHaveAttribute('tabIndex', '0');
+    expect(bodyTab).toHaveAttribute('aria-selected', 'false');
+    expect(document.getElementById('response-panel-body')).toHaveAttribute('hidden');
+    expect(document.getElementById('response-panel-headers')).not.toHaveAttribute('hidden');
+    expect(screen.getByText('content-type')).toBeInTheDocument();
+
+    await user.click(testsTab);
+
+    expect(testsTab).toHaveAttribute('aria-selected', 'true');
+    expect(document.getElementById('response-panel-tests')).not.toHaveAttribute('hidden');
+    expect(screen.getByText(/response tests are planned/i)).toBeInTheDocument();
+  });
+
+  test('switches response tabs with left and right arrow keys', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
     await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+    const responseTabs = screen.getByRole('tablist', {name: /response tabs/i});
+    const bodyTab = within(responseTabs).getByRole('tab', {name: 'Body'});
+    const headersTab = within(responseTabs).getByRole('tab', {name: 'Headers'});
+    const testsTab = within(responseTabs).getByRole('tab', {name: 'Tests'});
 
-    const divider = screen.getByRole('separator', {name: /resize response body and headers/i});
-    const responseBody = divider.closest('.response-body');
-    vi.spyOn(responseBody, 'getBoundingClientRect').mockReturnValue({top: 0, left: 0, width: 1000, height: 400, right: 1000, bottom: 400, x: 0, y: 0, toJSON: () => {}});
+    bodyTab.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(headersTab).toHaveAttribute('aria-selected', 'true');
+    expect(headersTab).toHaveFocus();
 
-    expect(divider).toHaveAttribute('aria-orientation', 'vertical');
-    expect(divider).toHaveAttribute('aria-valuenow', '35');
+    await user.keyboard('{ArrowRight}');
+    expect(testsTab).toHaveAttribute('aria-selected', 'true');
+    expect(testsTab).toHaveFocus();
 
-    fireEvent.keyDown(divider, {key: 'ArrowLeft'});
-    expect(divider).toHaveAttribute('aria-valuenow', '40');
-    expect(localStorage.getItem('pypostboy.responseHeadersRatio')).toBe('40');
-
-    fireEvent.pointerDown(divider, {clientX: 550});
-    fireEvent.pointerMove(window, {clientX: 800});
-    fireEvent.pointerUp(window);
-    expect(divider).toHaveAttribute('aria-valuenow', '25');
-    expect(responseBody).toHaveStyle({gridTemplateColumns: 'minmax(0, 75fr) 5px minmax(240px, 25fr)'});
+    await user.keyboard('{ArrowLeft}');
+    expect(headersTab).toHaveAttribute('aria-selected', 'true');
+    expect(headersTab).toHaveFocus();
   });
 
   test('supports keyboard-only collections tree navigation', async () => {
