@@ -9,6 +9,7 @@ import {
   EditableGrid,
   IconButton,
   ImportCurlDialog,
+  ImportPostmanDialog,
   RequestTabs,
   requestPanelId,
   requestTabId,
@@ -46,6 +47,25 @@ function updateRequestInCollections(collections, requestId, nextRequest) {
   }));
 }
 
+
+function findCollectionById(collections, collectionId) {
+  for (const collection of collections) {
+    if (collection.id === collectionId) return collection;
+    const childMatch = findCollectionById(collection.children || [], collectionId);
+    if (childMatch) return childMatch;
+  }
+  return null;
+}
+
+function firstRequestInCollection(collection) {
+  if (!collection) return null;
+  if (collection.requests?.[0]) return collection.requests[0];
+  for (const child of collection.children || []) {
+    const request = firstRequestInCollection(child);
+    if (request) return request;
+  }
+  return null;
+}
 function headersArrayToObject(headers = []) {
   return headers.reduce((result, header) => {
     if (Array.isArray(header)) {
@@ -61,6 +81,7 @@ function headersArrayToObject(headers = []) {
 export function App() {
   const [palette, setPalette] = useState(false);
   const [importCurlOpen, setImportCurlOpen] = useState(false);
+  const [importPostmanOpen, setImportPostmanOpen] = useState(false);
   const [theme, setTheme] = useState('dark');
   const [sending, setSending] = useState(false);
   const [collections, setCollections] = useState([]);
@@ -99,6 +120,13 @@ export function App() {
 
   const handleImportedRequestCreated = useCallback(async (createdRequest) => {
     await refreshCollections(createdRequest?.id || null);
+  }, [refreshCollections]);
+
+  const handlePostmanImported = useCallback(async (importedCollection) => {
+    const refreshedCollections = await refreshCollections();
+    const refreshedCollection = findCollectionById(refreshedCollections || [], importedCollection?.id);
+    const importedRequest = firstRequestInCollection(refreshedCollection || importedCollection);
+    if (importedRequest?.id) setActiveRequestId(importedRequest.id);
   }, [refreshCollections]);
 
   const closePalette = useCallback(() => {
@@ -398,6 +426,7 @@ export function App() {
           activeRequestId={activeRequest.id}
           onSelectRequest={setActiveRequestId}
           onImportCurl={() => setImportCurlOpen(true)}
+          onImportPostman={() => setImportPostmanOpen(true)}
         />
         <section className="main">
           <RequestTabs requests={requests} activeRequestId={activeRequest.id} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
@@ -508,8 +537,9 @@ export function App() {
       </main>
 
       <StatusBar />
-      {palette && <CommandPalette onClose={closePalette} onImportCurl={() => { closePalette(); setImportCurlOpen(true); }} />}
+      {palette && <CommandPalette onClose={closePalette} onImportCurl={() => { closePalette(); setImportCurlOpen(true); }} onImportPostman={() => { closePalette(); setImportPostmanOpen(true); }} />}
       {importCurlOpen && <ImportCurlDialog collections={collections} onClose={() => setImportCurlOpen(false)} onCreated={handleImportedRequestCreated} />}
+      {importPostmanOpen && <ImportPostmanDialog onClose={() => setImportPostmanOpen(false)} onImported={handlePostmanImported} />}
       {proxyError && <div className="toast error" role="status">{proxyError}</div>}
     </div>
   );

@@ -366,6 +366,8 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', {name: /delete/i}));
     expect(screen.queryByText('Renamed snapshot')).not.toBeInTheDocument();
     await waitFor(() => expect(apiClient.deleteRequestInstance).toHaveBeenCalledWith('snapshot-1'));
+  });
+
   test('imports a parsed cURL command, creates a request, refreshes collections, and selects it', async () => {
     const user = userEvent.setup();
     const importedRequest = {
@@ -452,6 +454,70 @@ describe('App shell', () => {
     expect(await screen.findByText(/missing_url: no url found/i)).toBeInTheDocument();
     expect(screen.getByText(/ignored_token: ignored token/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', {name: /create request/i})).not.toBeInTheDocument();
+  });
+
+  test('imports an uploaded Postman collection JSON file, refreshes collections, and selects the first imported request', async () => {
+    const user = userEvent.setup();
+    const importedRequest = {
+      id: 'postman-request-1',
+      name: 'List Widgets',
+      method: 'GET',
+      url: 'https://api.example.test/widgets',
+      headers: [],
+      body_content: '',
+      body_raw_type: 'application/json',
+    };
+    const importedCollection = {id: 'postman-collection-1', name: 'Postman Import', requests: [importedRequest], children: []};
+    apiClient.listCollections
+      .mockResolvedValueOnce(testCollections)
+      .mockResolvedValueOnce([...testCollections, importedCollection]);
+    apiClient.importData.mockResolvedValue(importedCollection);
+
+    render(<App />);
+    const postmanJson = JSON.stringify({
+      info: {name: 'Postman Import'},
+      item: [{name: 'List Widgets', request: {method: 'GET', url: 'https://api.example.test/widgets'}}],
+    });
+    const file = new File([postmanJson], 'postman.json', {type: 'application/json'});
+
+    await user.click(await screen.findByRole('button', {name: /import postman/i}));
+    await user.upload(screen.getByLabelText(/upload postman json file/i), file);
+    expect(await screen.findByText(/selected postman\.json/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /^import postman$/i}));
+
+    await waitFor(() => expect(apiClient.importData).toHaveBeenCalledWith('postman', {
+      info: {name: 'Postman Import'},
+      item: [{name: 'List Widgets', request: {method: 'GET', url: 'https://api.example.test/widgets'}}],
+    }));
+    await waitFor(() => expect(apiClient.listCollections).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('tab', {name: /list widgets/i})).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('shows an accessible alert and skips the API call for invalid Postman JSON', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /import postman/i}));
+    await user.type(screen.getByRole('textbox', {name: /paste postman json/i}), '{"info":');
+    await user.click(screen.getByRole('button', {name: /^import postman$/i}));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid_json: enter valid postman collection json/i);
+    expect(apiClient.importData).not.toHaveBeenCalled();
+  });
+
+  test('surfaces backend validation failures from Postman import in an accessible alert', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const importError = new Error('No data provided');
+    importError.errors = [{code: 'invalid_postman', message: 'Postman collection must include items'}];
+    apiClient.importData.mockRejectedValue(importError);
+
+    await user.click(await screen.findByRole('button', {name: /import postman/i}));
+    await user.type(screen.getByRole('textbox', {name: /paste postman json/i}), JSON.stringify({info: {name: 'Broken'}}));
+    await user.click(screen.getByRole('button', {name: /^import postman$/i}));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid_postman: postman collection must include items/i);
+    expect(apiClient.listCollections).toHaveBeenCalledTimes(1);
   });
 
   test('toggles the document theme from the header icon', async () => {

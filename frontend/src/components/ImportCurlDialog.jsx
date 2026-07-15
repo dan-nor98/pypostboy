@@ -9,7 +9,7 @@ function flattenCollections(collections, depth = 0) {
   ]);
 }
 
-function issueText(issue) {
+export function issueText(issue) {
   if (!issue) return '';
   if (typeof issue === 'string') return issue;
   return [issue.code, issue.message].filter(Boolean).join(': ');
@@ -92,7 +92,7 @@ export function ImportCurlDialog({collections = [], onClose, onCreated}) {
         </form>
 
         {warnings.length > 0 && <div className="banner warning"><strong>Warnings</strong><ul>{warnings.map((warning, index) => <li key={index}>{issueText(warning)}</li>)}</ul></div>}
-        {errors.length > 0 && <div className="banner error"><strong>Errors</strong><ul>{errors.map((parseError, index) => <li key={index}>{issueText(parseError)}</li>)}</ul></div>}
+        {errors.length > 0 && <div className="banner error" role="alert" aria-live="assertive"><strong>Errors</strong><ul>{errors.map((parseError, index) => <li key={index}>{issueText(parseError)}</li>)}</ul></div>}
 
         {parsed && (
           <section aria-label="Parsed cURL request" className="parsed-import">
