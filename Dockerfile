@@ -58,5 +58,8 @@ USER postboy
 
 EXPOSE 3001
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "-m", "pypostboy.healthcheck"]
+
 ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-3001} --workers ${GUNICORN_WORKERS:-3} --access-logfile - --error-logfile - pypostboy.wsgi:application"]
