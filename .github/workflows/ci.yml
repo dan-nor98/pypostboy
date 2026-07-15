@@ -31,6 +31,22 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --include=optional
 
+      - name: Build Docker image
+        run: docker build -t pypostboy-ci .
+
+      - name: Validate development Compose config
+        run: docker compose -f docker-compose.dev.yml config
+
+      - name: Validate production Compose config
+        env:
+          POSTBOY_DATABASE_URL: postgresql://postboy:dummy-password@db:5432/postboy
+          POSTBOY_SECRET_KEY: dummy-ci-secret-key-not-for-production
+          POSTGRES_PASSWORD: dummy-postgres-password
+          ALLOWED_HOSTS: localhost,127.0.0.1
+          CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:8080
+          CSRF_TRUSTED_ORIGINS: http://localhost:3000,http://localhost:8080
+        run: docker compose -f docker-compose.yml config
+
       - name: Run frontend tests
         run: npm run test:frontend
 
