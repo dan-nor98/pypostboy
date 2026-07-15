@@ -23,6 +23,10 @@ async function request(path, options = {}) {
     throw error;
   }
 
+  if (payload && typeof payload === 'object' && payload.success === true && 'data' in payload) {
+    return payload.data;
+  }
+
   return payload;
 }
 
@@ -43,6 +47,12 @@ export const apiClient = {
   duplicateRequest: (id) => request(`/api/requests/${id}/duplicate`, {method: 'POST'}),
   moveRequest: (id, collectionId) => request(`/api/requests/${id}/move`, {method: 'PUT', body: JSON.stringify({collection_id: collectionId})}),
   reorderRequests: (data) => request('/api/requests/reorder', {method: 'PUT', body: JSON.stringify(data)}),
+
+  listRequestInstances: (requestId) => request(`/api/requests/${requestId}/instances`),
+  createRequestInstance: (requestId, data) => request(`/api/requests/${requestId}/instances`, {method: 'POST', body: JSON.stringify(data)}),
+  getRequestInstance: (instanceId) => request(`/api/request-instances/${instanceId}`),
+  updateRequestInstance: (instanceId, data) => request(`/api/request-instances/${instanceId}`, {method: 'PUT', body: JSON.stringify(data)}),
+  deleteRequestInstance: (instanceId) => request(`/api/request-instances/${instanceId}`, {method: 'DELETE'}),
 
   importData: (type, data) => request('/api/import', {method: 'POST', body: JSON.stringify({type, data})}),
   proxyRequest: (data) => request('/api/proxy', {method: 'POST', body: JSON.stringify(data)}),
