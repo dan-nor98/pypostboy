@@ -21,7 +21,6 @@ import {
   StatusBar,
 } from './components';
 import {apiClient} from './api/client';
-import {params} from './data/demoWorkspace';
 import {defaultEnvironments, environmentVariables, findVariableTokens, resolveRequestVariables} from './environment';
 import './styles.css';
 
@@ -141,6 +140,63 @@ function firstRequestInCollection(collection) {
   }
   return null;
 }
+function rowArrayToObject(row = []) {
+  if (Array.isArray(row)) {
+    return {
+      enabled: row[0] !== false && row[0] !== '',
+      key: row[1] || '',
+      value: row[2] || '',
+      description: row[3] || '',
+    };
+  }
+  return {
+    enabled: row.enabled !== false,
+    key: row.key || '',
+    value: row.value || '',
+    description: row.description || '',
+  };
+}
+
+function objectToGridRow(row = {}) {
+  return [row.enabled === false ? '' : '✓', row.key || '', row.value || '', row.description || ''];
+}
+
+function parseQueryParams(url) {
+  if (!url) return [];
+  const queryStart = url.indexOf('?');
+  if (queryStart === -1) return [];
+  const hashStart = url.indexOf('#', queryStart);
+  const query = url.slice(queryStart + 1, hashStart === -1 ? undefined : hashStart);
+  if (!query) return [];
+  return [...new URLSearchParams(query).entries()].map(([key, value]) => objectToGridRow({enabled: true, key, value}));
+}
+
+function updateUrlQueryParams(url, rows) {
+  const enabledRows = rows.map(rowArrayToObject).filter((row) => row.enabled !== false && row.key);
+  const urlText = String(url || '');
+  const hashIndex = urlText.indexOf('#');
+  const withoutHash = hashIndex === -1 ? urlText : urlText.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? '' : urlText.slice(hashIndex);
+  const base = withoutHash.split('?')[0];
+  const search = new URLSearchParams();
+  enabledRows.forEach((row) => search.append(row.key, row.value));
+  const query = search.toString();
+  return `${base}${query ? `?${query}` : ''}${hash}`;
+}
+
+function headersToGridRows(headers = []) {
+  return headers.map((header) => objectToGridRow(rowArrayToObject(header)));
+}
+
+function gridRowsToHeaders(rows = []) {
+  return rows.map(rowArrayToObject).filter((row) => row.key).map((row) => ({
+    enabled: row.enabled !== false,
+    key: row.key,
+    value: row.value,
+    description: row.description || '',
+  }));
+}
+
 function headersArrayToObject(headers = []) {
   return headers.reduce((result, header) => {
     if (Array.isArray(header)) {
@@ -401,6 +457,31 @@ export function App() {
     {id: 'scripts', label: 'Scripts'},
     {id: 'tests', label: 'Tests'},
   ], []);
+
+  const parameterRows = useMemo(() => parseQueryParams(editableRequest.url), [editableRequest.url]);
+  const headerRows = useMemo(() => headersToGridRows(editableRequest.headers), [editableRequest.headers]);
+
+  const handleParameterRowsChange = useCallback((nextRows) => {
+    const url = updateUrlQueryParams(editableRequest.url, nextRows);
+    setRequestDrafts((drafts) => ({
+      ...drafts,
+      [activeRequest.id]: {
+        ...drafts[activeRequest.id],
+        url,
+      },
+    }));
+  }, [activeRequest.id, editableRequest.url]);
+
+  const handleHeaderRowsChange = useCallback((nextRows) => {
+    const headers = gridRowsToHeaders(nextRows);
+    setRequestDrafts((drafts) => ({
+      ...drafts,
+      [activeRequest.id]: {
+        ...drafts[activeRequest.id],
+        headers,
+      },
+    }));
+  }, [activeRequest.id]);
 
   const selectConfigTab = useCallback((tabId, shouldFocus = false) => {
     setActiveConfigTab(tabId);
@@ -730,7 +811,7 @@ export function App() {
             >
               <section>
                 <div className="section-head"><span>Query Parameters</span><button>Bulk Edit</button></div>
-                {requests.length ? <EditableGrid rows={params} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
+                {requests.length ? <EditableGrid rows={parameterRows} onChange={handleParameterRowsChange} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
               </section>
               <aside className="inspector">
                 <h3>Request</h3>
@@ -771,8 +852,24 @@ export function App() {
                 <p className="hint">Editing {activeRequest.body_raw_type || 'application/json'} content for this request.</p>
               </aside>
             </div>
+            <div
+              className="request-grid"
+              id="request-config-panel-headers"
+              role="tabpanel"
+              aria-labelledby="request-config-tab-headers"
+              hidden={activeConfigTab !== 'headers'}
+            >
+              <section>
+                <div className="section-head"><span>Request Headers</span><button>Bulk Edit</button></div>
+                {requests.length ? <EditableGrid rows={headerRows} onChange={handleHeaderRowsChange} type="header" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
+              </section>
+              <aside className="inspector">
+                <h3>Headers</h3>
+                {headerRows.length ? <p>{headerRows.length} configured headers</p> : <p className="hint">No headers configured.</p>}
+              </aside>
+            </div>
             {requestConfigTabs
-              .filter((tab) => !['params', 'body'].includes(tab.id))
+              .filter((tab) => !['params', 'body', 'headers'].includes(tab.id))
               .map((tab) => (
                 <div
                   key={tab.id}
