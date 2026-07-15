@@ -31,3 +31,40 @@
 .snapshot-actions button:hover,.snapshot-rename button:hover{background:var(--color-bg-hover)}
 .snapshot-rename{display:grid;grid-template-columns:1fr auto auto;gap:6px}
 .snapshot-rename input{height:26px;min-width:0}
+
+.import-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+}
+
+.field-stack {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.field-stack textarea,
+.field-stack select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px;
+}
+
+.parsed-import dl {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px 12px;
+}
+
+.parsed-import dt {
+  color: var(--muted);
+}
+
+.parsed-import pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

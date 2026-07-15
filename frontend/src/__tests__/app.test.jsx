@@ -15,6 +15,8 @@ vi.mock('../api/client', () => ({
     createRequestInstance: vi.fn(),
     updateRequestInstance: vi.fn(),
     deleteRequestInstance: vi.fn(),
+    importData: vi.fn(),
+    createRequest: vi.fn(),
   },
 }));
 
@@ -83,6 +85,8 @@ function renderApp() {
     body_content: '',
   }));
   apiClient.deleteRequestInstance.mockResolvedValue({deleted: 1});
+  apiClient.importData.mockReset();
+  apiClient.createRequest.mockReset();
   apiClient.proxyRequest.mockResolvedValue({
     status: 200,
     statusText: 'OK',
@@ -362,6 +366,92 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', {name: /delete/i}));
     expect(screen.queryByText('Renamed snapshot')).not.toBeInTheDocument();
     await waitFor(() => expect(apiClient.deleteRequestInstance).toHaveBeenCalledWith('snapshot-1'));
+  test('imports a parsed cURL command, creates a request, refreshes collections, and selects it', async () => {
+    const user = userEvent.setup();
+    const importedRequest = {
+      id: 'request-3',
+      name: 'POST /widgets',
+      method: 'POST',
+      url: 'https://example.test/widgets',
+      headers: [{enabled: true, key: 'Content-Type', value: 'application/json'}],
+      body_type: 'json',
+      body_content: '{"name":"demo"}',
+      form_data: [],
+      body_raw_type: 'application/json',
+    };
+    apiClient.listCollections
+      .mockResolvedValueOnce(testCollections)
+      .mockResolvedValueOnce([{...testCollections[0], requests: [...testCollections[0].requests, importedRequest]}]);
+    apiClient.importData.mockResolvedValue({
+      method: 'POST',
+      url: 'https://example.test/widgets',
+      headers: {'Content-Type': 'application/json'},
+      body_type: 'json',
+      body_content: '{"name":"demo"}',
+      form_data: [],
+    });
+    apiClient.createRequest.mockResolvedValue(importedRequest);
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', {name: /import curl/i}));
+    await user.click(screen.getByRole('textbox', {name: /paste curl command/i}));
+    await user.paste(`curl -X POST https://example.test/widgets -H 'Content-Type: application/json' -d '{"name":"demo"}'`);
+    await user.click(screen.getByRole('button', {name: /parse curl/i}));
+
+    expect(await screen.findByRole('region', {name: /parsed curl request/i})).toBeInTheDocument();
+    expect(screen.getByText('POST')).toBeInTheDocument();
+    expect(screen.getByText('https://example.test/widgets')).toBeInTheDocument();
+    expect(screen.getByText('json')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: /create request/i}));
+
+    await waitFor(() => expect(apiClient.createRequest).toHaveBeenCalledWith(expect.objectContaining({
+      collection_id: 'collection-1',
+      method: 'POST',
+      url: 'https://example.test/widgets',
+      body_type: 'json',
+      body_content: '{"name":"demo"}',
+    })));
+    await waitFor(() => expect(apiClient.listCollections).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('tab', {name: /post \/widgets/i})).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('shows structured parser warnings from cURL import', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    apiClient.importData.mockResolvedValue({
+      method: 'GET',
+      url: 'https://example.test',
+      headers: {},
+      body_type: 'none',
+      body_content: '',
+      form_data: [],
+      warnings: [{code: 'unsupported_option', message: 'Skipped --compressed'}],
+    });
+
+    await user.click(await screen.findByRole('button', {name: /import curl/i}));
+    await user.type(screen.getByRole('textbox', {name: /paste curl command/i}), 'curl --compressed https://example.test');
+    await user.click(screen.getByRole('button', {name: /parse curl/i}));
+
+    expect(await screen.findByText(/unsupported_option: skipped --compressed/i)).toBeInTheDocument();
+    expect(screen.getByRole('region', {name: /parsed curl request/i})).toBeInTheDocument();
+  });
+
+  test('shows structured parser errors from failed cURL import', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const parseError = new Error('Invalid cURL command');
+    parseError.errors = [{code: 'missing_url', message: 'No URL found'}];
+    parseError.warnings = [{code: 'ignored_token', message: 'Ignored token'}];
+    apiClient.importData.mockRejectedValue(parseError);
+
+    await user.click(await screen.findByRole('button', {name: /import curl/i}));
+    await user.type(screen.getByRole('textbox', {name: /paste curl command/i}), 'curl -X POST');
+    await user.click(screen.getByRole('button', {name: /parse curl/i}));
+
+    expect(await screen.findByText(/missing_url: no url found/i)).toBeInTheDocument();
+    expect(screen.getByText(/ignored_token: ignored token/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: /create request/i})).not.toBeInTheDocument();
   });
 
   test('toggles the document theme from the header icon', async () => {

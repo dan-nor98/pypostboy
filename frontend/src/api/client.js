@@ -15,7 +15,12 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const message = payload && typeof payload === 'object' ? payload.error || payload.message : payload;
-    throw new Error(message || `Request failed with status ${response.status}`);
+    const error = new Error(message || `Request failed with status ${response.status}`);
+    if (payload && typeof payload === 'object') {
+      error.errors = payload.errors || [];
+      error.warnings = payload.warnings || [];
+    }
+    throw error;
   }
 
   if (payload && typeof payload === 'object' && payload.success === true && 'data' in payload) {
