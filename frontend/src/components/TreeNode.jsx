@@ -1,13 +1,42 @@
 import React from 'react';
-import {ChevronDown, Folder} from 'lucide-react';
+import {ChevronDown, Folder, GripVertical} from 'lucide-react';
 import {Method} from './Method';
 
-export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollection, tabIndex, onFocus}) {
+function MoveControls({label, onMoveUp, onMoveDown}) {
+  return (
+    <span className="tree-move-controls" aria-label={`${label} reorder controls`}>
+      <GripVertical size={13} aria-hidden="true" />
+      <button
+        className="tree-move-button"
+        type="button"
+        aria-label={`Move ${label} up`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onMoveUp?.();
+        }}
+      >
+        ↑
+      </button>
+      <button
+        className="tree-move-button"
+        type="button"
+        aria-label={`Move ${label} down`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onMoveDown?.();
+        }}
+      >
+        ↓
+      </button>
+    </span>
+  );
+}
+
+export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollection, tabIndex, onFocus, onMoveCollection, onMoveRequest}) {
   if (item.type === 'collection') {
     return (
-      <button
+      <div
         className="tree-row tree-button folder"
-        type="button"
         role="treeitem"
         aria-expanded={item.expandable ? item.expanded : undefined}
         data-tree-id={item.id}
@@ -19,15 +48,19 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
         <ChevronDown size={13} className={item.expanded ? '' : 'collapsed'} />
         <Folder size={14} />
         <span className="truncate">{item.node.name}</span>
-      </button>
+        <MoveControls
+          label="collection"
+          onMoveUp={() => onMoveCollection?.(item.rawId, 'up', item.parentRawId)}
+          onMoveDown={() => onMoveCollection?.(item.rawId, 'down', item.parentRawId)}
+        />
+      </div>
     );
   }
 
   const request = item.request;
   return (
-    <button
+    <div
       className={`tree-row tree-button ${request.id === activeRequestId ? 'selected' : ''}`}
-      type="button"
       key={request.id}
       role="treeitem"
       aria-selected={request.id === activeRequestId}
@@ -41,6 +74,11 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
       <Method m={request.method} />
       <span className="truncate">{request.name}</span>
       {request.id === activeRequestId && <span className="dirty">●</span>}
-    </button>
+      <MoveControls
+        label="request"
+        onMoveUp={() => onMoveRequest?.(request.id, 'up', item.parentRawId)}
+        onMoveDown={() => onMoveRequest?.(request.id, 'down', item.parentRawId)}
+      />
+    </div>
   );
 }

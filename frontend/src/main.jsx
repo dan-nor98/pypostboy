@@ -49,6 +49,46 @@ function updateRequestInCollections(collections, requestId, nextRequest) {
   }));
 }
 
+function moveItemInArray(items, itemId, direction) {
+  const index = items.findIndex((item) => item.id === itemId);
+  if (index === -1) return items;
+  const nextIndex = direction === 'up' ? index - 1 : index + 1;
+  if (nextIndex < 0 || nextIndex >= items.length) return items;
+  const next = [...items];
+  [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+  return next;
+}
+
+function reorderCollectionSiblings(collections, parentId, collectionId, direction) {
+  if (!parentId) return moveItemInArray(collections, collectionId, direction);
+
+  return collections.map((collection) => {
+    if (collection.id === parentId) {
+      return {...collection, children: moveItemInArray(collection.children || [], collectionId, direction)};
+    }
+
+    return {...collection, children: reorderCollectionSiblings(collection.children || [], parentId, collectionId, direction)};
+  });
+}
+
+function reorderRequestsInCollection(collections, collectionId, requestId, direction) {
+  return collections.map((collection) => {
+    if (collection.id === collectionId) {
+      return {...collection, requests: moveItemInArray(collection.requests || [], requestId, direction)};
+    }
+
+    return {...collection, children: reorderRequestsInCollection(collection.children || [], collectionId, requestId, direction)};
+  });
+}
+
+function collectionSiblingIds(collections, parentId) {
+  const siblings = parentId ? findCollectionById(collections, parentId)?.children || [] : collections;
+  return siblings.map((collection) => collection.id);
+}
+
+function requestSiblingIds(collections, collectionId) {
+  return (findCollectionById(collections, collectionId)?.requests || []).map((request) => request.id);
+}
 
 function findCollectionById(collections, collectionId) {
   for (const collection of collections) {
@@ -137,6 +177,39 @@ export function App() {
   const handleImportedRequestCreated = useCallback(async (createdRequest) => {
     await refreshCollections(createdRequest?.id || null);
   }, [refreshCollections]);
+
+  const moveCollection = useCallback(async (collectionId, direction, parentId = null) => {
+    const previousCollections = collections;
+    const previousIds = collectionSiblingIds(collections, parentId);
+    const nextCollections = reorderCollectionSiblings(collections, parentId, collectionId, direction);
+    const nextIds = collectionSiblingIds(nextCollections, parentId);
+    if (previousIds.join('\0') === nextIds.join('\0')) return;
+
+    setCollections(nextCollections);
+    try {
+      await apiClient.reorderCollections({parent_id: parentId, ordered_ids: nextIds});
+    } catch (error) {
+      setCollections(previousCollections);
+      setCollectionsError(error.message);
+    }
+  }, [collections]);
+
+  const moveRequest = useCallback(async (requestId, direction, collectionId) => {
+    if (!collectionId) return;
+    const previousCollections = collections;
+    const previousIds = requestSiblingIds(collections, collectionId);
+    const nextCollections = reorderRequestsInCollection(collections, collectionId, requestId, direction);
+    const nextIds = requestSiblingIds(nextCollections, collectionId);
+    if (previousIds.join('\0') === nextIds.join('\0')) return;
+
+    setCollections(nextCollections);
+    try {
+      await apiClient.reorderRequests({collection_id: collectionId, ordered_ids: nextIds});
+    } catch (error) {
+      setCollections(previousCollections);
+      setCollectionsError(error.message);
+    }
+  }, [collections]);
 
   const handlePostmanImported = useCallback(async (importedCollection) => {
     const refreshedCollections = await refreshCollections();
@@ -475,6 +548,8 @@ export function App() {
           onSelectRequest={setActiveRequestId}
           onImportCurl={() => setImportCurlOpen(true)}
           onImportPostman={() => setImportPostmanOpen(true)}
+          onMoveCollection={moveCollection}
+          onMoveRequest={moveRequest}
         />
         )}
         <section className="main">

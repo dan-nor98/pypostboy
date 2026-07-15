@@ -17,6 +17,8 @@ vi.mock('../api/client', () => ({
     deleteRequestInstance: vi.fn(),
     importData: vi.fn(),
     createRequest: vi.fn(),
+    reorderCollections: vi.fn(),
+    reorderRequests: vi.fn(),
   },
 }));
 
@@ -31,6 +33,15 @@ const testCollections = [
         method: 'GET',
         url: 'https://example.test/health',
         headers: [{enabled: true, key: 'Accept', value: 'application/json'}],
+        body_content: '',
+        body_raw_type: 'application/json',
+      },
+      {
+        id: 'request-3',
+        name: 'Status Check',
+        method: 'GET',
+        url: 'https://example.test/status',
+        headers: [],
         body_content: '',
         body_raw_type: 'application/json',
       },
@@ -53,6 +64,12 @@ const testCollections = [
         children: [],
       },
     ],
+  },
+  {
+    id: 'collection-3',
+    name: 'Regression Tests',
+    requests: [],
+    children: [],
   },
 ];
 
@@ -87,6 +104,8 @@ function renderApp() {
   apiClient.deleteRequestInstance.mockResolvedValue({deleted: 1});
   apiClient.importData.mockReset();
   apiClient.createRequest.mockReset();
+  apiClient.reorderCollections.mockResolvedValue({});
+  apiClient.reorderRequests.mockResolvedValue({});
   apiClient.proxyRequest.mockResolvedValue({
     status: 200,
     statusText: 'OK',
@@ -200,6 +219,68 @@ describe('App shell', () => {
 
     await user.keyboard('{Enter}');
     expect(root).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  test('reorders sibling collections optimistically', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Regression Tests')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', {name: /move collection up/i}).at(-1));
+
+    await waitFor(() => expect(apiClient.reorderCollections).toHaveBeenCalledWith({
+      parent_id: null,
+      ordered_ids: ['collection-3', 'collection-1'],
+    }));
+    const treeItems = screen.getAllByRole('treeitem');
+    expect(treeItems[0]).toHaveTextContent('Regression Tests');
+    expect(treeItems[1]).toHaveTextContent('Smoke Tests');
+  });
+
+  test('reorders requests inside a collection optimistically', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Status Check')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', {name: /move request up/i}).at(-1));
+
+    await waitFor(() => expect(apiClient.reorderRequests).toHaveBeenCalledWith({
+      collection_id: 'collection-1',
+      ordered_ids: ['request-3', 'request-1'],
+    }));
+    const requestItems = screen.getAllByRole('treeitem').filter((item) => /Health Check|Status Check/.test(item.textContent));
+    expect(requestItems[0]).toHaveTextContent('Status Check');
+    expect(requestItems[1]).toHaveTextContent('Health Check');
+  });
+
+  test('rolls back optimistic request reorder on API error', async () => {
+    const user = userEvent.setup();
+    apiClient.reorderRequests.mockRejectedValueOnce(new Error('Could not reorder requests'));
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Status Check')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', {name: /move request up/i}).at(-1));
+
+    await waitFor(() => expect(screen.getByText(/could not reorder requests/i)).toBeInTheDocument());
+    const requestItems = screen.getAllByRole('treeitem').filter((item) => /Health Check|Status Check/.test(item.textContent));
+    expect(requestItems[0]).toHaveTextContent('Health Check');
+    expect(requestItems[1]).toHaveTextContent('Status Check');
+  });
+
+  test('supports keyboard operation for reorder controls', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Status Check')).toBeInTheDocument());
+    const moveStatusUp = screen.getAllByRole('button', {name: /move request up/i}).at(-1);
+    moveStatusUp.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(apiClient.reorderRequests).toHaveBeenCalledWith({
+      collection_id: 'collection-1',
+      ordered_ids: ['request-3', 'request-1'],
+    }));
+    expect(screen.getAllByRole('button', {name: /move request down/i}).length).toBeGreaterThan(0);
   });
 
   test('traps command palette focus, closes on Escape, and restores focus to the trigger', async () => {
