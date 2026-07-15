@@ -124,6 +124,7 @@ describe('CodeEditor', () => {
 describe('App shell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -307,6 +308,49 @@ describe('App shell', () => {
 
 
 
+
+
+  test('resolves environment variables before sending a request', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const urlInput = await screen.findByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, '{{baseUrl}}/health');
+    expect(screen.getByText(/environment variables detected for local/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://example.test/health',
+    }));
+  });
+
+  test('blocks send and warns for unresolved environment variables', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const urlInput = await screen.findByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, '{{missing}}/health');
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    expect(await screen.findByText(/unresolved variables: missing/i)).toBeInTheDocument();
+    expect(apiClient.proxyRequest).not.toHaveBeenCalled();
+  });
+
+  test('opens the environment panel and masks secret values', async () => {
+    localStorage.setItem('pypostboy.environments', JSON.stringify([{id: 'local', name: 'Local', variables: [{key: 'token', value: 'super-secret-token', secret: true}]}]));
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole('button', {name: /environments/i}));
+
+    expect(screen.getByRole('complementary', {name: /environment panel/i})).toBeInTheDocument();
+    expect(screen.getByRole('textbox', {name: /variable 1 value/i})).toHaveValue('su••••••••en');
+    expect(screen.queryByDisplayValue('super-secret-token')).not.toBeInTheDocument();
+  });
 
   test('loads snapshots for the active request and restores a saved snapshot into the editable draft', async () => {
     const user = userEvent.setup();

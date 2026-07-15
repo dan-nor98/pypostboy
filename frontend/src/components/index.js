@@ -15,3 +15,4 @@ export {Sidebar} from './Sidebar';
 export {StatusBar} from './StatusBar';
 export {TreeNode} from './TreeNode';
 export {SnapshotsPanel} from './SnapshotsPanel.jsx';
+export {EnvironmentPanel} from './EnvironmentPanel.jsx';
