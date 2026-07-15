@@ -1,5 +1,5 @@
 import React from 'react';
-import {ChevronDown, Folder, GripVertical} from 'lucide-react';
+import {ChevronDown, Folder, GripVertical, MoreHorizontal} from 'lucide-react';
 import {Method} from './Method';
 
 function MoveControls({label, onMoveUp, onMoveDown}) {
@@ -32,7 +32,7 @@ function MoveControls({label, onMoveUp, onMoveDown}) {
   );
 }
 
-export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollection, tabIndex, onFocus, onMoveCollection, onMoveRequest}) {
+export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollection, tabIndex, onFocus, onMoveCollection, onMoveRequest, onCollectionActions, onRequestActions}) {
   if (item.type === 'collection') {
     return (
       <div
@@ -48,11 +48,24 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
         <ChevronDown size={13} className={item.expanded ? '' : 'collapsed'} />
         <Folder size={14} />
         <span className="truncate">{item.node.name}</span>
-        <MoveControls
-          label="collection"
-          onMoveUp={() => onMoveCollection?.(item.rawId, 'up', item.parentRawId)}
-          onMoveDown={() => onMoveCollection?.(item.rawId, 'down', item.parentRawId)}
-        />
+        <span className="tree-row-actions">
+          <button
+            className="tree-action-button"
+            type="button"
+            aria-label={`Actions for collection ${item.node.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onCollectionActions?.(item.node);
+            }}
+          >
+            <MoreHorizontal size={13} />
+          </button>
+          <MoveControls
+            label="collection"
+            onMoveUp={() => onMoveCollection?.(item.rawId, 'up', item.parentRawId)}
+            onMoveDown={() => onMoveCollection?.(item.rawId, 'down', item.parentRawId)}
+          />
+        </span>
       </div>
     );
   }
@@ -74,11 +87,24 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
       <Method m={request.method} />
       <span className="truncate">{request.name}</span>
       {request.id === activeRequestId && <span className="dirty">●</span>}
-      <MoveControls
-        label="request"
-        onMoveUp={() => onMoveRequest?.(request.id, 'up', item.parentRawId)}
-        onMoveDown={() => onMoveRequest?.(request.id, 'down', item.parentRawId)}
-      />
+      <span className="tree-row-actions">
+        <button
+          className="tree-action-button"
+          type="button"
+          aria-label={`Actions for request ${request.name}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRequestActions?.(request, item.parentRawId);
+          }}
+        >
+          <MoreHorizontal size={13} />
+        </button>
+        <MoveControls
+          label="request"
+          onMoveUp={() => onMoveRequest?.(request.id, 'up', item.parentRawId)}
+          onMoveDown={() => onMoveRequest?.(request.id, 'down', item.parentRawId)}
+        />
+      </span>
     </div>
   );
 }

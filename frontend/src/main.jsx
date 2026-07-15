@@ -211,6 +211,28 @@ export function App() {
     }
   }, [collections]);
 
+
+  const runCollectionMutation = useCallback(async (mutation, preferredRequestId = undefined) => {
+    setCollectionsError('');
+    try {
+      const result = await mutation();
+      await refreshCollections(preferredRequestId === undefined ? result?.id || null : preferredRequestId);
+      return result;
+    } catch (error) {
+      setCollectionsError(error.message);
+      return null;
+    }
+  }, [refreshCollections]);
+
+  const createCollection = useCallback((data) => runCollectionMutation(() => apiClient.createCollection(data), null), [runCollectionMutation]);
+  const renameCollection = useCallback((collectionId, data) => runCollectionMutation(() => apiClient.updateCollection(collectionId, data), null), [runCollectionMutation]);
+  const duplicateCollection = useCallback((collectionId) => runCollectionMutation(() => apiClient.duplicateCollection(collectionId), null), [runCollectionMutation]);
+  const deleteCollection = useCallback((collectionId) => runCollectionMutation(() => apiClient.deleteCollection(collectionId), null), [runCollectionMutation]);
+  const createSidebarRequest = useCallback((data) => runCollectionMutation(() => apiClient.createRequest({method: 'GET', url: '', headers: [], body_content: '', body_raw_type: 'application/json', ...data}), null), [runCollectionMutation]);
+  const duplicateSidebarRequest = useCallback((requestId) => runCollectionMutation(() => apiClient.duplicateRequest(requestId)), [runCollectionMutation]);
+  const deleteSidebarRequest = useCallback((requestId) => runCollectionMutation(() => apiClient.deleteRequest(requestId)), [runCollectionMutation]);
+  const moveSidebarRequest = useCallback((requestId, collectionId) => runCollectionMutation(() => apiClient.moveRequest(requestId, collectionId), requestId), [runCollectionMutation]);
+
   const handlePostmanImported = useCallback(async (importedCollection) => {
     const refreshedCollections = await refreshCollections();
     const refreshedCollection = findCollectionById(refreshedCollections || [], importedCollection?.id);
@@ -550,6 +572,14 @@ export function App() {
           onImportPostman={() => setImportPostmanOpen(true)}
           onMoveCollection={moveCollection}
           onMoveRequest={moveRequest}
+          onCreateCollection={createCollection}
+          onCreateRequest={createSidebarRequest}
+          onRenameCollection={renameCollection}
+          onDuplicateCollection={duplicateCollection}
+          onDeleteCollection={deleteCollection}
+          onDuplicateRequest={duplicateSidebarRequest}
+          onDeleteRequest={deleteSidebarRequest}
+          onMoveRequestToCollection={moveSidebarRequest}
         />
         )}
         <section className="main">
