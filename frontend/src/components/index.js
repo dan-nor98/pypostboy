@@ -6,6 +6,7 @@ export {CommandPalette} from './CommandPalette';
 export {EditableGrid} from './EditableGrid';
 export {IconButton} from './IconButton';
 export {ImportCurlDialog} from './ImportCurlDialog';
+export {ImportPostmanDialog} from './ImportPostmanDialog';
 export {Method} from './Method';
 export {RequestTabs, requestPanelId, requestTabId} from './RequestTabs';
 export {RequestToolbar} from './RequestToolbar';

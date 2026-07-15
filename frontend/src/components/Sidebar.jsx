@@ -25,7 +25,7 @@ function collectionIds(nodes) {
   return nodes.flatMap((node) => [`collection-${node.id}`, ...collectionIds(node.children || [])]);
 }
 
-export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl}) {
+export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman}) {
   const treeRef = useRef(null);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [focusedItemId, setFocusedItemId] = useState(null);
@@ -90,6 +90,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
       <div className="side-title">
         <span>COLLECTIONS</span>
         <IconButton label="Import cURL" onClick={onImportCurl}><Plus size={15} /></IconButton>
+        <IconButton label="Import Postman collection" onClick={onImportPostman}><Plus size={15} /></IconButton>
         <IconButton label="Collection actions"><MoreHorizontal size={15} /></IconButton>
       </div>
       <div className="filter"><Search size={14} /><input placeholder="Filter collections" /></div>
