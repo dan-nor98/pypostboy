@@ -8,6 +8,7 @@ from db import Requests
 from pypostboy.auth import require_current_user
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
+from pypostboy.services.export_service import export_request_curl as export_request_curl_data
 
 
 logger = logging.getLogger(__name__)
@@ -155,4 +156,13 @@ def move_request(request, id):
         return error('Invalid JSON request body', 400)
     except Exception as err:
         _log_exception('move_request', request, request_id=id, collection_id=collection_id)
+        return error(err, _status_for_error(err))
+
+
+def export_request_curl(request, id):
+    """Export a request as a cURL command."""
+    try:
+        return ok(export_request_curl_data(id, _current_user_id(request)))
+    except Exception as err:
+        _log_exception('export_request_curl', request, request_id=id)
         return error(err, _status_for_error(err))

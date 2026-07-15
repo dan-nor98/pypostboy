@@ -8,6 +8,7 @@ from db import Collections
 from pypostboy.auth import require_current_user
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
+from pypostboy.services.export_service import export_collection as export_collection_data
 
 
 logger = logging.getLogger(__name__)
@@ -132,4 +133,13 @@ def duplicate_collection(request, id):
         return error('Invalid JSON request body', 400)
     except Exception as err:
         _log_exception('duplicate_collection', request, collection_id=id)
+        return error(err, _status_for_error(err))
+
+
+def export_collection(request, id):
+    """Export a collection tree as Postman v2.1 JSON."""
+    try:
+        return ok(export_collection_data(id, _current_user_id(request)))
+    except Exception as err:
+        _log_exception('export_collection', request, collection_id=id)
         return error(err, _status_for_error(err))

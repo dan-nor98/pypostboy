@@ -25,7 +25,7 @@ function collectionIds(nodes) {
   return nodes.flatMap((node) => [`collection-${node.id}`, ...collectionIds(node.children || [])]);
 }
 
-export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection}) {
+export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection, onExportCollection, onCopyRequestCurl}) {
   const treeRef = useRef(null);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [focusedItemId, setFocusedItemId] = useState(null);
@@ -64,8 +64,10 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
     if (dialog.action === 'createRequest') onCreateRequest?.({collection_id: dialog.collectionId || targetId, name: value});
     if (dialog.action === 'renameCollection') onRenameCollection?.(dialog.collection.id, {name: value});
     if (dialog.action === 'duplicateCollection') onDuplicateCollection?.(dialog.collection.id);
+    if (dialog.action === 'exportCollection') onExportCollection?.(dialog.collection.id);
     if (dialog.action === 'deleteCollection') onDeleteCollection?.(dialog.collection.id);
     if (dialog.action === 'duplicateRequest') onDuplicateRequest?.(dialog.request.id);
+    if (dialog.action === 'copyRequestCurl') onCopyRequestCurl?.(dialog.request.id);
     if (dialog.action === 'deleteRequest') onDeleteRequest?.(dialog.request.id);
     if (dialog.action === 'moveRequest') onMoveRequestToCollection?.(dialog.request.id, targetId);
   };
@@ -159,6 +161,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
                   <button type="button" onClick={() => openDialog({action: 'createRequest', title: `Create request in ${dialog.collection.name}`, label: 'Request name', collectionId: dialog.collection.id})}>Create request</button>
                   <button type="button" onClick={() => openDialog({action: 'renameCollection', title: `Rename ${dialog.collection.name}`, label: 'Collection name', defaultValue: dialog.collection.name, collection: dialog.collection})}>Rename collection</button>
                   <button type="button" onClick={() => openDialog({action: 'duplicateCollection', kind: 'confirm', title: `Duplicate ${dialog.collection.name}?`, collection: dialog.collection})}>Duplicate collection</button>
+                  <button type="button" onClick={() => openDialog({action: 'exportCollection', kind: 'confirm', title: `Export ${dialog.collection.name}?`, collection: dialog.collection})}>Export collection</button>
                   <button type="button" onClick={() => openDialog({action: 'deleteCollection', kind: 'confirm', title: `Delete ${dialog.collection.name}?`, collection: dialog.collection})}>Delete collection</button>
                 </div>
               )}
@@ -166,6 +169,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
                 <div className="action-list">
                   <button type="button" onClick={() => openDialog({action: 'duplicateRequest', kind: 'confirm', title: `Duplicate ${dialog.request.name}?`, request: dialog.request})}>Duplicate request</button>
                   <button type="button" onClick={() => openDialog({action: 'moveRequest', kind: 'move', title: `Move ${dialog.request.name}`, request: dialog.request, collectionId: dialog.collectionId})}>Move request</button>
+                  <button type="button" onClick={() => openDialog({action: 'copyRequestCurl', kind: 'confirm', title: `Copy ${dialog.request.name} as cURL?`, request: dialog.request})}>Copy as cURL</button>
                   <button type="button" onClick={() => openDialog({action: 'deleteRequest', kind: 'confirm', title: `Delete ${dialog.request.name}?`, request: dialog.request})}>Delete request</button>
                 </div>
               )}

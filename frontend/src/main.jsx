@@ -34,6 +34,23 @@ const defaultRequest = {
   body_raw_type: 'application/json',
 };
 
+
+function downloadJson(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function safeFilename(name) {
+  return `${String(name || 'collection').trim().replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'collection'}.postman_collection.json`;
+}
+
 function flattenRequests(collections) {
   return collections.flatMap((collection) => [
     ...(collection.requests || []),
@@ -232,6 +249,26 @@ export function App() {
   const duplicateSidebarRequest = useCallback((requestId) => runCollectionMutation(() => apiClient.duplicateRequest(requestId)), [runCollectionMutation]);
   const deleteSidebarRequest = useCallback((requestId) => runCollectionMutation(() => apiClient.deleteRequest(requestId)), [runCollectionMutation]);
   const moveSidebarRequest = useCallback((requestId, collectionId) => runCollectionMutation(() => apiClient.moveRequest(requestId, collectionId), requestId), [runCollectionMutation]);
+
+  const exportSidebarCollection = useCallback(async (collectionId) => {
+    setCollectionsError('');
+    try {
+      const exportedCollection = await apiClient.exportCollection(collectionId);
+      downloadJson(safeFilename(exportedCollection?.info?.name), exportedCollection);
+    } catch (error) {
+      setCollectionsError(error.message);
+    }
+  }, []);
+
+  const copyRequestCurl = useCallback(async (requestId) => {
+    setCollectionsError('');
+    try {
+      const exportedRequest = await apiClient.exportRequestCurl(requestId);
+      await navigator.clipboard.writeText(exportedRequest.curl);
+    } catch (error) {
+      setCollectionsError(error.message);
+    }
+  }, []);
 
   const handlePostmanImported = useCallback(async (importedCollection) => {
     const refreshedCollections = await refreshCollections();
@@ -580,6 +617,8 @@ export function App() {
           onDuplicateRequest={duplicateSidebarRequest}
           onDeleteRequest={deleteSidebarRequest}
           onMoveRequestToCollection={moveSidebarRequest}
+          onExportCollection={exportSidebarCollection}
+          onCopyRequestCurl={copyRequestCurl}
         />
         )}
         <section className="main">

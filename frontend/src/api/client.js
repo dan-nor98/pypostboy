@@ -37,6 +37,7 @@ export const apiClient = {
   updateCollection: (id, data) => request(`/api/collections/${id}`, {method: 'PUT', body: JSON.stringify(data)}),
   deleteCollection: (id) => request(`/api/collections/${id}`, {method: 'DELETE'}),
   duplicateCollection: (id) => request(`/api/collections/${id}/duplicate`, {method: 'POST'}),
+  exportCollection: (id) => request(`/api/collections/${id}/export`),
   reorderCollections: (data) => request('/api/collections/reorder', {method: 'PUT', body: JSON.stringify(data)}),
 
   getCollectionRequests: (collectionId) => request(`/api/collections/${collectionId}/requests`),
@@ -45,6 +46,7 @@ export const apiClient = {
   updateRequest: (id, data) => request(`/api/requests/${id}`, {method: 'PUT', body: JSON.stringify(data)}),
   deleteRequest: (id) => request(`/api/requests/${id}`, {method: 'DELETE'}),
   duplicateRequest: (id) => request(`/api/requests/${id}/duplicate`, {method: 'POST'}),
+  exportRequestCurl: (id) => request(`/api/requests/${id}/export/curl`),
   moveRequest: (id, collectionId) => request(`/api/requests/${id}/move`, {method: 'PUT', body: JSON.stringify({collection_id: collectionId})}),
   reorderRequests: (data) => request('/api/requests/reorder', {method: 'PUT', body: JSON.stringify(data)}),
 
