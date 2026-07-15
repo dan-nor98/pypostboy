@@ -19,3 +19,40 @@
 .code-editor-host .ͼf{color:var(--color-code-null)}
 .request-panel{min-height:0;display:grid;grid-template-rows:38px 34px minmax(240px,1fr)}.tree-button{width:100%;border:0;background:transparent;color:inherit;text-align:left}.palette li{padding:0}.palette li button{width:100%;height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border:0;background:transparent;color:inherit;border-radius:var(--radius-sm)}.palette li button:hover{background:var(--color-bg-hover)}
 .main{grid-template-rows:34px minmax(312px,1fr) 5px minmax(220px,.8fr)}
+
+.import-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+}
+
+.field-stack {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.field-stack textarea,
+.field-stack select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px;
+}
+
+.parsed-import dl {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px 12px;
+}
+
+.parsed-import dt {
+  color: var(--muted);
+}
+
+.parsed-import pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

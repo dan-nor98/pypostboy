@@ -8,6 +8,7 @@ import {
   CommandPalette,
   EditableGrid,
   IconButton,
+  ImportCurlDialog,
   RequestTabs,
   requestPanelId,
   requestTabId,
@@ -58,6 +59,7 @@ function headersArrayToObject(headers = []) {
 
 export function App() {
   const [palette, setPalette] = useState(false);
+  const [importCurlOpen, setImportCurlOpen] = useState(false);
   const [theme, setTheme] = useState('dark');
   const [sending, setSending] = useState(false);
   const [collections, setCollections] = useState([]);
@@ -73,6 +75,26 @@ export function App() {
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
 
+  const refreshCollections = useCallback(async (preferredRequestId = null) => {
+    setCollectionsLoading(true);
+    setCollectionsError('');
+    try {
+      const data = await apiClient.listCollections();
+      setCollections(data);
+      const nextRequestId = preferredRequestId || activeRequestId || flattenRequests(data)[0]?.id || null;
+      setActiveRequestId(nextRequestId);
+      return data;
+    } catch (error) {
+      setCollectionsError(error.message);
+      return null;
+    } finally {
+      setCollectionsLoading(false);
+    }
+  }, [activeRequestId]);
+
+  const handleImportedRequestCreated = useCallback(async (createdRequest) => {
+    await refreshCollections(createdRequest?.id || null);
+  }, [refreshCollections]);
 
   const closePalette = useCallback(() => {
     setPalette(false);
@@ -270,6 +292,7 @@ export function App() {
           error={collectionsError}
           activeRequestId={activeRequest.id}
           onSelectRequest={setActiveRequestId}
+          onImportCurl={() => setImportCurlOpen(true)}
         />
         <section className="main">
           <RequestTabs requests={requests} activeRequestId={activeRequest.id} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
@@ -370,7 +393,8 @@ export function App() {
       </main>
 
       <StatusBar />
-      {palette && <CommandPalette onClose={closePalette} />}
+      {palette && <CommandPalette onClose={closePalette} onImportCurl={() => { closePalette(); setImportCurlOpen(true); }} />}
+      {importCurlOpen && <ImportCurlDialog collections={collections} onClose={() => setImportCurlOpen(false)} onCreated={handleImportedRequestCreated} />}
       {proxyError && <div className="toast error" role="status">{proxyError}</div>}
     </div>
   );
