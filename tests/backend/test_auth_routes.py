@@ -1,4 +1,7 @@
 """Authentication route tests."""
+import hashlib
+
+from django.contrib.auth.hashers import check_password
 
 
 def assert_success(response, status=200):
@@ -850,6 +853,78 @@ def test_recover_request_accepts_username_without_exposing_missing_accounts(clie
     assert existing_response.status_code == missing_response.status_code == 200
     assert existing_response.get_json() == missing_response.get_json()
 
+
+def test_recovery_key_storage_uses_django_password_hasher(client):
+    from pypostboy.apps.core.models import User
+
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "hashed-recovery-user", "password": "password123"},
+        ),
+        201,
+    )
+
+    user = User.objects.get(username="hashed-recovery-user")
+    legacy_sha256 = hashlib.sha256(registration["recovery_key"].encode("utf-8")).hexdigest()
+
+    assert user.recovery_key_hash != registration["recovery_key"]
+    assert user.recovery_key_hash != legacy_sha256
+    assert len(user.recovery_key_hash) != 64
+    assert check_password(registration["recovery_key"], user.recovery_key_hash)
+
+
+def test_recovery_verify_accepts_django_hashed_recovery_key(client):
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "django-hashed-recover-user", "password": "password123"},
+        ),
+        201,
+    )
+
+    verified = assert_success(
+        client.post(
+            "/api/auth/recover/verify",
+            json={
+                "username": "django-hashed-recover-user",
+                "recovery_key": registration["recovery_key"],
+            },
+        )
+    )
+
+    assert verified["valid"] is True
+
+
+def test_recovery_verify_accepts_and_rehashes_legacy_sha256_key(client):
+    from pypostboy.apps.core.models import User
+
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "legacy-recover-user", "password": "password123"},
+        ),
+        201,
+    )
+    user = User.objects.get(username="legacy-recover-user")
+    legacy_sha256 = hashlib.sha256(registration["recovery_key"].encode("utf-8")).hexdigest()
+    user.recovery_key_hash = legacy_sha256
+    user.save(update_fields=["recovery_key_hash"])
+
+    verified = assert_success(
+        client.post(
+            "/api/auth/recover/verify",
+            json={
+                "username": "legacy-recover-user",
+                "recovery_key": registration["recovery_key"],
+            },
+        )
+    )
+    user.refresh_from_db()
+
+    assert verified["valid"] is True
+    assert user.recovery_key_hash != legacy_sha256
+    assert check_password(registration["recovery_key"], user.recovery_key_hash)
 
 def test_recovery_verify_reset_and_rotate_key(client):
     registration = assert_success(

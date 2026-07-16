@@ -10,6 +10,8 @@ import hashlib
 import hmac
 import secrets
 
+from django.contrib.auth.hashers import check_password, make_password
+
 from pypostboy.db.serializers import timestamp
 
 RECOVERY_KEY_BYTES = 32
@@ -22,13 +24,28 @@ def issue_recovery_key():
 
 def hash_recovery_key(recovery_key):
     """Return the persisted one-way hash for a recovery key."""
+    return make_password(recovery_key)
+
+
+def _legacy_recovery_key_hash(recovery_key):
     return hashlib.sha256((recovery_key or "").encode("utf-8")).hexdigest()
+
+
+def _is_legacy_recovery_key_hash(expected_hash):
+    return (
+        isinstance(expected_hash, str)
+        and len(expected_hash) == 64
+        and all(char in "0123456789abcdefABCDEF" for char in expected_hash)
+    )
 
 
 def constant_time_recovery_match(recovery_key, expected_hash):
     """Return True when a supplied recovery key matches a stored hash."""
-    candidate_hash = hash_recovery_key(recovery_key)
-    return hmac.compare_digest(candidate_hash, expected_hash or "")
+    if not expected_hash:
+        return False
+    if _is_legacy_recovery_key_hash(expected_hash):
+        return hmac.compare_digest(_legacy_recovery_key_hash(recovery_key), expected_hash)
+    return check_password(recovery_key, expected_hash)
 
 
 def rotate_recovery_key(user):
