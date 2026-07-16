@@ -1,11 +1,20 @@
 const JSON_HEADERS = {'Content-Type': 'application/json'};
 
+function readCookie(name) {
+  return document.cookie
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1) || '';
+}
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     credentials: 'same-origin',
     ...options,
     headers: {
       ...(options.body ? JSON_HEADERS : {}),
+      ...(options.body ? {'X-CSRFToken': readCookie('csrftoken')} : {}),
       ...options.headers,
     },
   });
@@ -58,4 +67,12 @@ export const apiClient = {
 
   importData: (type, data) => request('/api/import', {method: 'POST', body: JSON.stringify({type, data})}),
   proxyRequest: (data) => request('/api/proxy', {method: 'POST', body: JSON.stringify(data)}),
+
+  getCsrf: () => request('/api/auth/csrf'),
+  currentUser: () => request('/api/auth/me'),
+  login: (data) => request('/api/auth/login', {method: 'POST', body: JSON.stringify(data)}),
+  register: (data) => request('/api/auth/register', {method: 'POST', body: JSON.stringify(data)}),
+  recoverVerify: (data) => request('/api/auth/recover/verify', {method: 'POST', body: JSON.stringify(data)}),
+  recoverReset: (data) => request('/api/auth/recover/reset', {method: 'POST', body: JSON.stringify(data)}),
+  logout: () => request('/api/auth/logout', {method: 'POST'}),
 };
