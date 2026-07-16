@@ -1,7 +1,5 @@
 """Authentication API views for PostBoy."""
 import hashlib
-import hmac
-import secrets
 import sqlite3
 
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
@@ -19,8 +17,14 @@ from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
 from pypostboy.db.serializers import timestamp
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
+from pypostboy.services.auth_service import (
+    constant_time_recovery_match,
+    hash_recovery_key,
+    initiate_recovery,
+    issue_recovery_key,
+    rotate_recovery_key,
+)
 
-RECOVERY_KEY_BYTES = 32
 GENERIC_RECOVERY_ERROR = "Invalid recovery credentials"
 RECOVERY_MAX_ATTEMPTS = 5
 RECOVERY_WINDOW_SECONDS = 300
@@ -105,16 +109,15 @@ def _validate_password_policy(password):
 
 
 def _issue_recovery_key():
-    return secrets.token_urlsafe(RECOVERY_KEY_BYTES)
+    return issue_recovery_key()
 
 
 def _hash_recovery_key(recovery_key):
-    return hashlib.sha256((recovery_key or "").encode("utf-8")).hexdigest()
+    return hash_recovery_key(recovery_key)
 
 
 def _constant_time_recovery_match(recovery_key, expected_hash):
-    candidate_hash = _hash_recovery_key(recovery_key)
-    return hmac.compare_digest(candidate_hash, expected_hash or "")
+    return constant_time_recovery_match(recovery_key, expected_hash)
 
 
 def _hashed_identity(identity):
@@ -313,6 +316,27 @@ def _find_user_for_recovery(username, email):
     return None
 
 
+def recover_request(request):
+    """Initiate forgot-password recovery without revealing account existence."""
+    generic_response = {
+        "recovery_requested": True,
+        "message": (
+            "If the account exists, recovery instructions have been prepared. "
+            "PyPostBoy is local-first and does not send email unless a notification adapter is configured."
+        ),
+    }
+    try:
+        payload = json_body(request, allow_blank=False)
+    except BadJsonBody:
+        return error("Invalid JSON request body", 400)
+
+    username, email = _normalize_recovery_identity(payload)
+    if username or email:
+        user = _find_user_for_recovery(username, email)
+        if user:
+            initiate_recovery(user)
+    return ok(generic_response)
+
 def recover_verify(request):
     try:
         payload = json_body(request, allow_blank=False)
@@ -363,19 +387,15 @@ def recover_reset(request):
         return error(GENERIC_RECOVERY_ERROR, 401)
 
     now = timestamp()
-    new_recovery_key = _issue_recovery_key()
     user.password = make_password(new_password)
-    user.recovery_key_hash = _hash_recovery_key(new_recovery_key)
-    user.recovery_key_rotated_at = now
     user.credentials_updated_at = now
     user.updated_at = now
     user.save(update_fields=[
         "password",
-        "recovery_key_hash",
-        "recovery_key_rotated_at",
         "credentials_updated_at",
         "updated_at",
     ])
+    new_recovery_key = rotate_recovery_key(user)
     _delete_sessions_for_user(user.id)
     if hasattr(request, "current_user"):
         delattr(request, "current_user")
