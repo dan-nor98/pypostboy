@@ -1,9 +1,10 @@
 """Authentication API views for PostBoy."""
 import hashlib
+import hmac
 import sqlite3
 
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.sessions.models import Session
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
@@ -18,8 +19,6 @@ from pypostboy.db.serializers import timestamp
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
 from pypostboy.services.auth_service import (
-    constant_time_recovery_match,
-    hash_recovery_key,
     initiate_recovery,
     issue_recovery_key,
     rotate_recovery_key,
@@ -113,11 +112,35 @@ def _issue_recovery_key():
 
 
 def _hash_recovery_key(recovery_key):
-    return hash_recovery_key(recovery_key)
+    return make_password(recovery_key)
+
+
+def _legacy_recovery_key_hash(recovery_key):
+    return hashlib.sha256((recovery_key or "").encode("utf-8")).hexdigest()
+
+
+def _is_legacy_recovery_key_hash(expected_hash):
+    return (
+        isinstance(expected_hash, str)
+        and len(expected_hash) == 64
+        and all(char in "0123456789abcdefABCDEF" for char in expected_hash)
+    )
 
 
 def _constant_time_recovery_match(recovery_key, expected_hash):
-    return constant_time_recovery_match(recovery_key, expected_hash)
+    if not expected_hash:
+        return False
+    if _is_legacy_recovery_key_hash(expected_hash):
+        return hmac.compare_digest(_legacy_recovery_key_hash(recovery_key), expected_hash)
+    return check_password(recovery_key, expected_hash)
+
+
+def _rehash_legacy_recovery_key(user, recovery_key):
+    if not _is_legacy_recovery_key_hash(user.recovery_key_hash):
+        return
+    user.recovery_key_hash = _hash_recovery_key(recovery_key)
+    user.updated_at = timestamp()
+    user.save(update_fields=["recovery_key_hash", "updated_at"])
 
 
 def _hashed_identity(identity):
@@ -371,6 +394,7 @@ def recover_verify(request):
         _record_recovery_failure(request, identity)
         return error(GENERIC_RECOVERY_ERROR, 401)
 
+    _rehash_legacy_recovery_key(user, recovery_key)
     _reset_recovery_failures(request, identity)
     return ok({"valid": True})
 
@@ -399,6 +423,8 @@ def recover_reset(request):
     ):
         _record_recovery_failure(request, identity)
         return error(GENERIC_RECOVERY_ERROR, 401)
+
+    _rehash_legacy_recovery_key(user, recovery_key)
 
     now = timestamp()
     user.password = make_password(new_password)
