@@ -134,16 +134,26 @@ def _hashed_remote_addr(request):
     return hashlib.sha256(remote_addr.encode("utf-8")).hexdigest()
 
 
+def _recovery_rate_limit_key(request, identity):
+    return f"recover_rate_limit::{_hashed_remote_addr(request)}::{_hashed_recovery_identity(identity)}"
+
+
 def _is_recovery_rate_limited(request, identity):
-    key = f"recover_rate_limit::{_hashed_remote_addr(request)}::{_hashed_recovery_identity(identity)}"
+    current = cache.get(_recovery_rate_limit_key(request, identity))
+    return current is not None and current >= RECOVERY_MAX_ATTEMPTS
+
+
+def _record_recovery_failure(request, identity):
+    key = _recovery_rate_limit_key(request, identity)
     current = cache.get(key)
     if current is None:
         cache.add(key, 1, timeout=RECOVERY_WINDOW_SECONDS)
-        return False
-    if current >= RECOVERY_MAX_ATTEMPTS:
-        return True
+        return
     cache.incr(key)
-    return False
+
+
+def _reset_recovery_failures(request, identity):
+    cache.delete(_recovery_rate_limit_key(request, identity))
 
 
 def _auth_rate_limit_key(request, username):
@@ -344,13 +354,13 @@ def recover_verify(request):
         return error("Invalid JSON request body", 400)
 
     username, email = _normalize_recovery_identity(payload)
-    recovery_key = payload.get("recovery_key") or ""
-    if (not username and not email) or not recovery_key:
-        return error(GENERIC_RECOVERY_ERROR, 401)
-
     identity = username or email
     if _is_recovery_rate_limited(request, identity):
         return error("Too many recovery attempts, try again later", 429)
+
+    recovery_key = payload.get("recovery_key") or ""
+    if (not username and not email) or not recovery_key:
+        return error(GENERIC_RECOVERY_ERROR, 401)
 
     user = _find_user_for_recovery(username, email)
     if (
@@ -358,7 +368,10 @@ def recover_verify(request):
         or not user.recovery_key_hash
         or not _constant_time_recovery_match(recovery_key, user.recovery_key_hash)
     ):
+        _record_recovery_failure(request, identity)
         return error(GENERIC_RECOVERY_ERROR, 401)
+
+    _reset_recovery_failures(request, identity)
     return ok({"valid": True})
 
 
@@ -369,14 +382,14 @@ def recover_reset(request):
         return error("Invalid JSON request body", 400)
 
     username, email = _normalize_recovery_identity(payload)
+    identity = username or email
+    if _is_recovery_rate_limited(request, identity):
+        return error("Too many recovery attempts, try again later", 429)
+
     recovery_key = payload.get("recovery_key") or ""
     new_password = payload.get("new_password") or ""
     if (not username and not email) or not recovery_key or not _validate_password_policy(new_password):
         return error(GENERIC_RECOVERY_ERROR, 401)
-
-    identity = username or email
-    if _is_recovery_rate_limited(request, identity):
-        return error("Too many recovery attempts, try again later", 429)
 
     user = _find_user_for_recovery(username, email)
     if (
@@ -384,6 +397,7 @@ def recover_reset(request):
         or not user.recovery_key_hash
         or not _constant_time_recovery_match(recovery_key, user.recovery_key_hash)
     ):
+        _record_recovery_failure(request, identity)
         return error(GENERIC_RECOVERY_ERROR, 401)
 
     now = timestamp()
@@ -396,6 +410,7 @@ def recover_reset(request):
         "updated_at",
     ])
     new_recovery_key = rotate_recovery_key(user)
+    _reset_recovery_failures(request, identity)
     _delete_sessions_for_user(user.id)
     if hasattr(request, "current_user"):
         delattr(request, "current_user")
