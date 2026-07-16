@@ -901,6 +901,81 @@ def test_recovery_verify_reset_and_rotate_key(client):
     assert logged_in["username"] == "recover-user"
 
 
+def test_recovery_verify_successes_do_not_consume_failure_quota(client):
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "recover-valid-repeat-user", "password": "password123"},
+        ),
+        201,
+    )
+
+    for _ in range(6):
+        verified = assert_success(
+            client.post(
+                "/api/auth/recover/verify",
+                json={
+                    "username": "recover-valid-repeat-user",
+                    "recovery_key": registration["recovery_key"],
+                },
+            )
+        )
+        assert verified["valid"] is True
+
+
+def test_successful_recovery_verify_clears_prior_failed_attempts(client):
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "recover-clear-failures-user", "password": "password123"},
+        ),
+        201,
+    )
+
+    for _ in range(4):
+        assert_error(
+            client.post(
+                "/api/auth/recover/verify",
+                json={"username": "recover-clear-failures-user", "recovery_key": "wrong"},
+            ),
+            401,
+            "Invalid recovery credentials",
+        )
+
+    verified = assert_success(
+        client.post(
+            "/api/auth/recover/verify",
+            json={
+                "username": "recover-clear-failures-user",
+                "recovery_key": registration["recovery_key"],
+            },
+        )
+    )
+    assert verified["valid"] is True
+
+    for _ in range(5):
+        assert_error(
+            client.post(
+                "/api/auth/recover/verify",
+                json={"username": "recover-clear-failures-user", "recovery_key": "wrong"},
+            ),
+            401,
+            "Invalid recovery credentials",
+        )
+
+    assert_error(
+        client.post(
+            "/api/auth/recover/verify",
+            json={
+                "username": "recover-clear-failures-user",
+                "recovery_key": registration["recovery_key"],
+            },
+        ),
+        429,
+        "Too many recovery attempts, try again later",
+    )
+
+
 def test_recovery_rate_limit_enforces_threshold(client):
     registration = assert_success(
         client.post(
