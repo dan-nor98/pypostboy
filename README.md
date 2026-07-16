@@ -55,7 +55,7 @@ Use the SQLite development stack for local-only testing over plain HTTP. This fi
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-The local stack is exposed at `http://localhost:8080`. Do not use `docker-compose.dev.yml` for an internet-facing deployment.
+The local stack is exposed at `http://localhost:8080` by default. If port 8080 is already in use, set `POSTBOY_HTTP_PORT` when starting Compose, for example `POSTBOY_HTTP_PORT=8081 docker compose -f docker-compose.dev.yml up --build`, then visit `http://localhost:8081`. Do not use `docker-compose.dev.yml` for an internet-facing deployment.
 
 ### Production-oriented PostgreSQL
 
