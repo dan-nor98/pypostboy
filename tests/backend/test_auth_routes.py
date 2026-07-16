@@ -785,6 +785,72 @@ def test_register_returns_conflict_when_insert_raises_postgres_unique_violation(
 
     assert_error(response, 409, "Username or email already exists")
 
+def test_recover_request_existing_and_missing_accounts_return_identical_responses(client):
+    from pypostboy.apps.core.models import User
+
+    registration = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": "forgot-existing-user",
+                "email": "forgot-existing-user@example.test",
+                "password": "password123",
+            },
+        ),
+        201,
+    )
+    user = User.objects.get(username="forgot-existing-user")
+    previous_recovery_hash = user.recovery_key_hash
+
+    existing_payload = assert_success(
+        client.post(
+            "/api/auth/recover/request",
+            json={"email": "forgot-existing-user@example.test"},
+        )
+    )
+    user.refresh_from_db()
+
+    missing_payload = assert_success(
+        client.post(
+            "/api/auth/recover/request",
+            json={"email": "forgot-missing-user@example.test"},
+        )
+    )
+
+    assert existing_payload == missing_payload
+    assert existing_payload == {
+        "recovery_requested": True,
+        "message": (
+            "If the account exists, recovery instructions have been prepared. "
+            "PyPostBoy is local-first and does not send email unless a notification adapter is configured."
+        ),
+    }
+    assert user.recovery_key_hash != previous_recovery_hash
+    assert user.recovery_key_hash != registration["recovery_key"]
+
+
+def test_recover_request_accepts_username_without_exposing_missing_accounts(client):
+    assert_success(
+        client.post(
+            "/api/auth/register",
+            json={"username": "forgot-username-user", "password": "password123"},
+        ),
+        201,
+    )
+
+    existing_response = client.post(
+        "/api/auth/recover/request",
+        json={"username": "forgot-username-user"},
+    )
+    missing_response = client.post(
+        "/api/auth/recover/request",
+        json={"username": "forgot-username-missing"},
+    )
+
+    assert existing_response.status_code == missing_response.status_code == 200
+    assert existing_response.get_json() == missing_response.get_json()
+
+
 def test_recovery_verify_reset_and_rotate_key(client):
     registration = assert_success(
         client.post(

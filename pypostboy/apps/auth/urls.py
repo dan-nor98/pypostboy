@@ -10,6 +10,7 @@ urlpatterns = [
     path('login', auth.login),
     path('register', auth.register),
     path('token', auth.token),
+    path('recover/request', auth.recover_request),
     path('recover/verify', auth.recover_verify),
     path('recover/reset', auth.recover_reset),
     path('logout', auth.logout),

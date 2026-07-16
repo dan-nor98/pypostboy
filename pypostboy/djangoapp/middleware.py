@@ -16,6 +16,7 @@ PUBLIC_API_PATHS = {
     '/api/auth/login',
     '/api/auth/register',
     '/api/auth/token',
+    '/api/auth/recover/request',
     '/api/auth/recover/verify',
     '/api/auth/recover/reset',
     '/api/proxy',
