@@ -87,6 +87,13 @@ def _normalize_credentials(payload):
     return username, password, email
 
 
+def _normalize_auth_identity(payload):
+    identity = (payload.get("identity") or "").strip()
+    username = (payload.get("username") or "").strip()
+    email = (payload.get("email") or "").strip()
+    return identity or username or email, payload.get("password") or ""
+
+
 def _normalize_recovery_identity(payload):
     username = (payload.get("username") or "").strip()
     email = (payload.get("email") or "").strip()
@@ -220,22 +227,22 @@ def insert_and_get_id(**fields):
 def login(request):
     """Start a session for a username/password user."""
     try:
-        username, password, _email = _normalize_credentials(
+        identity, password = _normalize_auth_identity(
             json_body(request, allow_blank=False)
         )
     except BadJsonBody:
         return error("Invalid JSON request body", 400)
-    if not username or not password:
+    if not identity or not password:
         return error("Username and password are required", 400)
-    if _is_auth_rate_limited(request, username):
+    if _is_auth_rate_limited(request, identity):
         return error(GENERIC_AUTH_RATE_LIMIT_ERROR, 429)
 
-    user = authenticate(request, username=username, password=password)
+    user = authenticate(request, username=identity, password=password)
     if not user:
-        _record_auth_failure(request, username)
+        _record_auth_failure(request, identity)
         return error("Invalid username or password", 401)
 
-    _reset_auth_failures(request, username)
+    _reset_auth_failures(request, identity)
     django_login(request, user, backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend")
     request.current_user = _user_to_mapping(user)
     return ok(_public_user(user))
@@ -381,22 +388,22 @@ def token(request):
     if request.method != "POST":
         return error("Method not allowed", 405)
     try:
-        username, password, _email = _normalize_credentials(
+        identity, password = _normalize_auth_identity(
             json_body(request, allow_blank=False)
         )
     except BadJsonBody:
         return error("Invalid JSON request body", 400)
-    if not username or not password:
+    if not identity or not password:
         return error("Username and password are required", 400)
-    if _is_auth_rate_limited(request, username):
+    if _is_auth_rate_limited(request, identity):
         return error(GENERIC_AUTH_RATE_LIMIT_ERROR, 429)
 
-    user = authenticate(request, username=username, password=password)
+    user = authenticate(request, username=identity, password=password)
     if not user:
-        _record_auth_failure(request, username)
+        _record_auth_failure(request, identity)
         return error("Invalid username or password", 401)
 
-    _reset_auth_failures(request, username)
+    _reset_auth_failures(request, identity)
     return ok({
         "token": issue_api_token(user.id),
         "token_type": "Bearer",

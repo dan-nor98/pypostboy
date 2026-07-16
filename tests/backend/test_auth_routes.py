@@ -149,6 +149,109 @@ def test_register_login_logout_session_scopes_collections(client):
     assert len(assert_success(client.get("/api/collections"))) == 1
 
 
+def test_login_accepts_email_after_registering_with_email(client):
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": "email-login-user",
+                "email": "email-login-user@example.test",
+                "password": "password123",
+            },
+        ),
+        201,
+    )
+    assert_success(client.post("/api/auth/logout"))
+
+    logged_in = assert_success(
+        client.post(
+            "/api/auth/login",
+            json={"email": "email-login-user@example.test", "password": "password123"},
+        )
+    )
+
+    assert logged_in["id"] == registered["user"]["id"]
+    assert logged_in["username"] == "email-login-user"
+    assert logged_in["email"] == "email-login-user@example.test"
+
+
+def test_login_accepts_identity_field(client):
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": "identity-login-user",
+                "email": "identity-login-user@example.test",
+                "password": "password123",
+            },
+        ),
+        201,
+    )
+    assert_success(client.post("/api/auth/logout"))
+
+    logged_in = assert_success(
+        client.post(
+            "/api/auth/login",
+            json={"identity": "identity-login-user@example.test", "password": "password123"},
+        )
+    )
+
+    assert logged_in["id"] == registered["user"]["id"]
+
+
+def test_token_endpoint_accepts_email(client):
+    registered = assert_success(
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": "email-token-user",
+                "email": "email-token-user@example.test",
+                "password": "password123",
+            },
+        ),
+        201,
+    )
+    assert_success(client.post("/api/auth/logout"))
+
+    token_payload = assert_success(
+        client.post(
+            "/api/auth/token",
+            json={"email": "email-token-user@example.test", "password": "password123"},
+        )
+    )
+
+    current = assert_success(
+        client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token_payload['token']}"},
+        )
+    )
+    assert current["id"] == registered["user"]["id"]
+
+
+def test_invalid_email_password_uses_generic_auth_error(client):
+    assert_success(
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": "invalid-email-password-user",
+                "email": "invalid-email-password-user@example.test",
+                "password": "password123",
+            },
+        ),
+        201,
+    )
+    assert_success(client.post("/api/auth/logout"))
+
+    assert_error(
+        client.post(
+            "/api/auth/login",
+            json={"email": "invalid-email-password-user@example.test", "password": "wrong-password"},
+        ),
+        401,
+        "Invalid username or password",
+    )
+
 def test_login_rate_limit_enforces_failed_attempt_threshold(client):
     assert_success(
         client.post(

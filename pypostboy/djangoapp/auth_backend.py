@@ -2,17 +2,19 @@
 
 from django.contrib.auth.backends import BaseBackend
 from django.contrib.auth.hashers import check_password
+from django.db.models import Q
 
 from pypostboy.apps.core.models import User
 
 
 class PostBoyAuthBackend(BaseBackend):
     def authenticate(self, request, username=None, password=None, **kwargs):
-        if not username or not password:
+        identity = (kwargs.get("identity") or username or kwargs.get("email") or "").strip()
+        if not identity or not password:
             return None
         try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
+            user = User.objects.get(Q(username=identity) | Q(email=identity))
+        except (User.DoesNotExist, User.MultipleObjectsReturned):
             return None
         if not user.password or not check_password(password, user.password):
             return None
