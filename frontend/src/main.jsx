@@ -209,6 +209,106 @@ function headersArrayToObject(headers = []) {
   }, {});
 }
 
+
+function AuthPanel({mode, onModeChange, onAuthenticated, onClose}) {
+  const [form, setForm] = useState({username: '', email: '', password: '', recovery_key: '', new_password: ''});
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const updateField = (field, value) => setForm((current) => ({...current, [field]: value}));
+
+  const submitAuth = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError('');
+    setMessage('');
+    try {
+      await apiClient.getCsrf?.();
+      if (mode === 'login') {
+        const user = await apiClient.login({username: form.username, password: form.password});
+        onAuthenticated(user);
+        return;
+      }
+      if (mode === 'signup') {
+        const registration = await apiClient.register({username: form.username, email: form.email || undefined, password: form.password});
+        onAuthenticated(registration.user, {keepOpen: true});
+        setMessage(`Account created. Save this recovery key now: ${registration.recovery_key}`);
+        return;
+      }
+      const payload = {
+        username: form.username || undefined,
+        email: form.email || undefined,
+        recovery_key: form.recovery_key,
+        new_password: form.new_password,
+      };
+      const reset = await apiClient.recoverReset(payload);
+      setMessage(`Password reset. Save your new recovery key: ${reset.recovery_key}`);
+      onModeChange('login');
+    } catch (submitError) {
+      setError(submitError.message || 'Authentication request failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isRecovery = mode === 'forgot';
+  const title = mode === 'signup' ? 'Create your PostBoy account' : isRecovery ? 'Reset your password' : 'Welcome back';
+  const subtitle = mode === 'signup'
+    ? 'Secure your local workspace and keep requests scoped to your account.'
+    : isRecovery
+      ? 'Use your saved recovery key to rotate your password and recovery key.'
+      : 'Sign in to continue working with your local API collections.';
+
+  return (
+    <section className="auth-card" aria-labelledby="auth-title">
+      <div className="auth-brand-mark">PB</div>
+      <p className="auth-eyebrow">Local-first API client</p>
+      <h1 id="auth-title">{title}</h1>
+      <p className="auth-subtitle">{subtitle}</p>
+      <form className="auth-form" onSubmit={submitAuth}>
+        <label>
+          <span>Username</span>
+          <input value={form.username} onChange={(event) => updateField('username', event.target.value)} placeholder="workspace-user" autoComplete="username" />
+        </label>
+        {(mode === 'signup' || isRecovery) && (
+          <label>
+            <span>Email {isRecovery ? 'or username above' : '(optional)'}</span>
+            <input type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} placeholder="you@example.com" autoComplete="email" />
+          </label>
+        )}
+        {!isRecovery && (
+          <label>
+            <span>Password</span>
+            <input type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} placeholder="At least 8 characters" autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} required />
+          </label>
+        )}
+        {isRecovery && (
+          <>
+            <label>
+              <span>Recovery key</span>
+              <input value={form.recovery_key} onChange={(event) => updateField('recovery_key', event.target.value)} placeholder="Paste your saved recovery key" required />
+            </label>
+            <label>
+              <span>New password</span>
+              <input type="password" value={form.new_password} onChange={(event) => updateField('new_password', event.target.value)} placeholder="At least 8 characters" autoComplete="new-password" required />
+            </label>
+          </>
+        )}
+        {error && <div className="auth-alert auth-alert-error" role="alert">{error}</div>}
+        {message && <div className="auth-alert auth-alert-success" role="status">{message}</div>}
+        {message && mode === 'signup' && <Button kind="secondary" type="button" onClick={onClose}>Continue to workspace</Button>}
+        <Button kind="primary" type="submit" disabled={submitting}>{submitting ? 'Working…' : isRecovery ? 'Reset password' : mode === 'signup' ? 'Create account' : 'Sign in'}</Button>
+      </form>
+      <div className="auth-switcher">
+        {mode !== 'login' && <button type="button" onClick={() => onModeChange('login')}>Back to login</button>}
+        {mode !== 'signup' && <button type="button" onClick={() => onModeChange('signup')}>Create account</button>}
+        {mode !== 'forgot' && <button type="button" onClick={() => onModeChange('forgot')}>Forgot password?</button>}
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const [palette, setPalette] = useState(false);
   const [importCurlOpen, setImportCurlOpen] = useState(false);
@@ -218,6 +318,9 @@ export function App() {
   const [collections, setCollections] = useState([]);
   const [collectionsLoading, setCollectionsLoading] = useState(true);
   const [collectionsError, setCollectionsError] = useState('');
+  const [authMode, setAuthMode] = useState('login');
+  const [authOpen, setAuthOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const [activeRequestId, setActiveRequestId] = useState(null);
   const [proxyResult, setProxyResult] = useState(null);
   const [proxyError, setProxyError] = useState('');
@@ -244,6 +347,23 @@ export function App() {
   useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
   useEffect(() => { localStorage.setItem(PANEL_SPLIT_STORAGE_KEY, String(responsePaneRatio)); }, [responsePaneRatio]);
   useEffect(() => { localStorage.setItem('pypostboy.activeEnvironment', activeEnvironmentId); }, [activeEnvironmentId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCurrentUser() {
+      if (!apiClient.currentUser) return;
+      try {
+        await apiClient.getCsrf?.();
+        const user = await apiClient.currentUser();
+        if (!cancelled) setCurrentUser(user);
+      } catch {
+        if (!cancelled) setAuthOpen(true);
+      }
+    }
+    loadCurrentUser();
+    return () => { cancelled = true; };
+  }, []);
+
 
   const updateResponsePaneRatio = useCallback((nextRatio) => {
     setResponsePaneRatio(clampNumber(Math.round(nextRatio), MIN_RESPONSE_PANE_RATIO, MAX_RESPONSE_PANE_RATIO));
@@ -296,6 +416,23 @@ export function App() {
       setCollectionsLoading(false);
     }
   }, [activeRequestId]);
+
+  const handleAuthenticated = useCallback((user, options = {}) => {
+    setCurrentUser(user);
+    if (!options.keepOpen) setAuthOpen(false);
+    refreshCollections();
+  }, [refreshCollections]);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await apiClient.logout?.();
+      const user = await apiClient.currentUser?.();
+      setCurrentUser(user || null);
+    } catch {
+      setCurrentUser(null);
+      setAuthOpen(true);
+    }
+  }, []);
 
   const handleImportedRequestCreated = useCallback(async (createdRequest) => {
     await refreshCollections(createdRequest?.id || null);
@@ -711,6 +848,8 @@ export function App() {
         <button className="selector" onClick={() => setActiveSidePanel('environments')}>Environment: {activeEnvironment.name} <ChevronDown size={13} /></button>
         <div className="global-search"><Search size={14} /><input placeholder="Search requests, URLs, headers (Ctrl+Shift+F)" /></div>
         <Button kind="ghost" onClick={openPalette}>Command Palette <kbd>Ctrl⇧P</kbd></Button>
+        <Button kind="secondary" onClick={() => setAuthOpen(true)}>{currentUser?.is_guest === false ? currentUser.username : 'Sign in'}</Button>
+        {currentUser?.is_guest === false && <Button kind="ghost" onClick={handleLogout}>Logout</Button>}
         <IconButton
           label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme Ctrl+,`}
           aria-pressed={theme === 'light'}
@@ -900,6 +1039,12 @@ export function App() {
       {palette && <CommandPalette onClose={closePalette} onImportCurl={() => { closePalette(); setImportCurlOpen(true); }} onImportPostman={() => { closePalette(); setImportPostmanOpen(true); }} />}
       {importCurlOpen && <ImportCurlDialog collections={collections} onClose={() => setImportCurlOpen(false)} onCreated={handleImportedRequestCreated} />}
       {importPostmanOpen && <ImportPostmanDialog onClose={() => setImportPostmanOpen(false)} onImported={handlePostmanImported} />}
+      {authOpen && (
+        <div className="auth-backdrop" role="dialog" aria-modal="true" aria-label="Authentication">
+          <AuthPanel mode={authMode} onModeChange={setAuthMode} onAuthenticated={handleAuthenticated} onClose={() => setAuthOpen(false)} />
+          <button className="auth-close" type="button" onClick={() => setAuthOpen(false)} aria-label="Close authentication dialog">×</button>
+        </div>
+      )}
       {proxyError && <div className="toast error" role="status">{proxyError}</div>}
     </div>
   );
