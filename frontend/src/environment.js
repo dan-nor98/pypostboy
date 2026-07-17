@@ -58,15 +58,25 @@ export function resolveRequestVariables({url = '', headers = {}, body = ''}, env
   const variables = environmentVariables(environment);
   const resolvedUrl = interpolateVariables(url, variables);
   const resolvedBody = interpolateVariables(body, variables);
-  const headerEntries = Object.entries(headers).map(([key, value]) => {
-    const resolvedKey = interpolateVariables(key, variables);
-    const resolvedValue = interpolateVariables(value, variables);
-    return [resolvedKey.resolved, resolvedValue.resolved, [...resolvedKey.unresolved, ...resolvedValue.unresolved]];
+  const headerRows = Array.isArray(headers)
+    ? headers.map((header) => ({...header}))
+    : Object.entries(headers).map(([key, value]) => ({enabled: true, key, value}));
+  const resolvedHeaders = headerRows.map((header) => {
+    const resolvedKey = interpolateVariables(header.key, variables);
+    const resolvedValue = interpolateVariables(header.value, variables);
+    return {
+      ...header,
+      key: resolvedKey.resolved,
+      value: resolvedValue.resolved,
+      unresolved: [...resolvedKey.unresolved, ...resolvedValue.unresolved],
+    };
   });
   return {
     url: resolvedUrl.resolved,
     body: resolvedBody.resolved,
-    headers: Object.fromEntries(headerEntries.map(([key, value]) => [key, value])),
-    unresolved: uniqueUnresolved([resolvedUrl, resolvedBody, ...headerEntries.map(([, , unresolved]) => ({unresolved}))]),
+    headers: Array.isArray(headers)
+      ? resolvedHeaders.map(({unresolved, ...header}) => header)
+      : Object.fromEntries(resolvedHeaders.map(({key, value}) => [key, value])),
+    unresolved: uniqueUnresolved([resolvedUrl, resolvedBody, ...resolvedHeaders.map(({unresolved}) => ({unresolved}))]),
   };
 }

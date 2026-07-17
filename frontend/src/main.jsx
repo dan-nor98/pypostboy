@@ -422,26 +422,26 @@ function maskSecretValue(value) {
 }
 
 function maskHeaders(headers = {}) {
-  return Object.entries(headers).reduce((masked, [key, value]) => {
-    masked[key] = /authorization|api[-_]?key|token|secret|password/i.test(key) ? maskSecretValue(value) : value;
-    return masked;
-  }, {});
+  return headersArrayToRows(headers).map((header) => ({
+    ...header,
+    value: /authorization|api[-_]?key|token|secret|password/i.test(header.key) ? maskSecretValue(header.value) : header.value,
+  }));
 }
 
 function applyAuthorization(request, authType = 'none', authData = {}) {
-  const next = {...request, headers: {...(request.headers || {})}};
+  const next = {...request, headers: headersArrayToRows(request.headers || [])};
   const type = String(authType || 'none').toLowerCase();
   if (type === 'bearer' && authData.token) {
-    next.headers.Authorization = `Bearer ${authData.token}`;
+    next.headers = setHeaderRow(next.headers, 'Authorization', `Bearer ${authData.token}`);
   } else if (type === 'basic' && (authData.username || authData.password)) {
-    next.headers.Authorization = `Basic ${btoa(`${authData.username || ''}:${authData.password || ''}`)}`;
+    next.headers = setHeaderRow(next.headers, 'Authorization', `Basic ${btoa(`${authData.username || ''}:${authData.password || ''}`)}`);
   } else if (type === 'api_key' && authData.key) {
     if (authData.in === 'query') {
       const url = new URL(next.url, window.location.origin);
       url.searchParams.set(authData.key, authData.value || '');
       next.url = url.href;
     } else {
-      next.headers[authData.key] = authData.value || '';
+      next.headers = setHeaderRow(next.headers, authData.key, authData.value || '');
     }
   }
   return next;
@@ -449,10 +449,10 @@ function applyAuthorization(request, authType = 'none', authData = {}) {
 
 function runPreRequestScript(source, request) {
   if (!String(source || '').trim()) return request;
-  const mutable = {...request, headers: {...(request.headers || {})}};
+  const mutable = {...request, headers: headersArrayToRows(request.headers || [])};
   const api = Object.freeze({
-    setHeader: (key, value) => { if (key) mutable.headers[String(key)] = String(value ?? ''); },
-    removeHeader: (key) => { delete mutable.headers[String(key)]; },
+    setHeader: (key, value) => { if (key) mutable.headers = setHeaderRow(mutable.headers, String(key), String(value ?? '')); },
+    removeHeader: (key) => { mutable.headers = mutable.headers.filter((header) => String(header.key || '').toLowerCase() !== String(key || '').toLowerCase()); },
     setUrl: (url) => { mutable.url = String(url || ''); },
     setBody: (body) => { mutable.body = body == null ? '' : String(body); },
     setMethod: (method) => { mutable.method = String(method || 'GET').toUpperCase(); },
@@ -462,7 +462,7 @@ function runPreRequestScript(source, request) {
       url.searchParams.set(String(key), String(value ?? ''));
       mutable.url = url.href;
     },
-    get request() { return Object.freeze({...mutable, headers: Object.freeze({...mutable.headers})}); },
+    get request() { return Object.freeze({...mutable, headers: Object.freeze([...mutable.headers])}); },
   });
   const runner = new Function('pb', '"use strict"; const window = undefined, document = undefined, localStorage = undefined, sessionStorage = undefined, fetch = undefined, XMLHttpRequest = undefined;\n' + String(source));
   runner(api);
@@ -484,7 +484,7 @@ function buildHistoryPayload({request, response, error}) {
     name: `${request.method || 'GET'} ${request.url} @ ${new Date().toISOString()}`,
     method: request.method || 'GET',
     url: request.url,
-    headers: Object.entries(maskHeaders(request.headers || {})).map(([key, value]) => ({enabled: true, key, value})),
+    headers: maskHeaders(request.headers || {}),
     body_content: bodyText ? `[${bodyText.length} bytes ${request.contentType || 'body'}]` : '',
     body_raw_type: request.contentType || 'application/json',
     response_status: response?.status ?? null,
@@ -496,7 +496,7 @@ function buildHistoryPayload({request, response, error}) {
   };
 }
 
-function headersArrayToObject(headers = []) {
+export function headersArrayToObject(headers = []) {
   return headers.reduce((result, header) => {
     if (Array.isArray(header)) {
       const [enabled, key, value] = header.length > 2 ? header : ['✓', header[0], header[1]];
@@ -508,6 +508,23 @@ function headersArrayToObject(headers = []) {
   }, {});
 }
 
+export function headersArrayToRows(headers = []) {
+  return headers.flatMap((header) => {
+    if (Array.isArray(header)) {
+      const [enabled, key, value] = header.length > 2 ? header : [true, header[0], header[1]];
+      return [{enabled: enabled !== false && enabled !== '', key: key || '', value: value || ''}];
+    }
+    return [{enabled: header?.enabled !== false, key: header?.key || '', value: header?.value || ''}];
+  });
+}
+
+function setHeaderRow(headers = [], key, value) {
+  const rows = headersArrayToRows(headers);
+  const index = rows.findIndex((header) => String(header.key || '').toLowerCase() === String(key || '').toLowerCase());
+  if (index >= 0) rows[index] = {...rows[index], enabled: true, key, value};
+  else rows.push({enabled: true, key, value});
+  return rows;
+}
 
 
 function shellQuote(value) {
@@ -518,7 +535,7 @@ function shellQuote(value) {
 
 function requestToCurl(request = {}) {
   const parts = ['curl', '-X', request.method || 'GET'];
-  Object.entries(headersArrayToObject(request.headers || [])).forEach(([key, value]) => {
+  headersArrayToRows(request.headers || []).filter((header) => header.enabled !== false && header.key).forEach(({key, value}) => {
     parts.push('-H', shellQuote(`${key}: ${value}`));
   });
   const body = request.body_content ?? request.body_raw ?? '';
@@ -1102,7 +1119,7 @@ export function App() {
     const variables = environmentVariables(activeEnvironment);
     const names = [
       ...findVariableTokens(editableRequest.url).map((token) => token.name),
-      ...Object.entries(headersArrayToObject(editableRequest.headers)).flatMap(([key, value]) => [
+      ...headersArrayToRows(editableRequest.headers).flatMap(({key, value}) => [
         ...findVariableTokens(key).map((token) => token.name),
         ...findVariableTokens(value).map((token) => token.name),
       ]),
@@ -1228,7 +1245,7 @@ export function App() {
     try {
       const resolvedRequest = resolveRequestVariables({
         url: editableRequest.url,
-        headers: headersArrayToObject(editableRequest.headers),
+        headers: headersArrayToRows(editableRequest.headers),
         body: requestBody,
       }, activeEnvironment);
       if (resolvedRequest.unresolved.length) {
