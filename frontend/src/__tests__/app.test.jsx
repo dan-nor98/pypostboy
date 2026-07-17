@@ -547,13 +547,12 @@ describe('App shell', () => {
   });
 
 
-  test('creates collections and requests from sidebar actions', async () => {
+  test('creates collections and local draft requests from sidebar actions before saving to the backend', async () => {
     const user = userEvent.setup();
     apiClient.listCollections
       .mockResolvedValueOnce(testCollections)
-      .mockResolvedValueOnce([...testCollections, {id: 'collection-new', name: 'New Collection', requests: [], children: []}])
-      .mockResolvedValueOnce([...testCollections, {...testCollections[1], requests: [{id: 'request-new', name: 'New Request', method: 'GET', url: '', headers: [], body_content: '', body_raw_type: 'application/json'}]}]);
-    apiClient.createRequest.mockResolvedValue({id: 'request-new', name: 'New Request'});
+      .mockResolvedValueOnce([...testCollections, {id: 'collection-new', name: 'New Collection', requests: [], children: []}]);
+    apiClient.createRequest.mockResolvedValue({id: 'request-new', name: 'New Request', method: 'GET', url: '', headers: [], body_content: '', body_raw_type: 'application/json', collection_id: 'collection-3'});
 
     render(<App />);
     await user.click(await screen.findByRole('button', {name: /^create collection$/i}));
@@ -565,7 +564,55 @@ describe('App shell', () => {
     await user.type(screen.getByRole('textbox', {name: /request name/i}), 'New Request');
     await user.selectOptions(screen.getByRole('combobox'), 'collection-3');
     await user.click(screen.getByRole('button', {name: /save/i}));
-    await waitFor(() => expect(apiClient.createRequest).toHaveBeenCalledWith(expect.objectContaining({collection_id: 'collection-3', name: 'New Request'})));
+
+    expect(apiClient.createRequest).not.toHaveBeenCalled();
+    expect(screen.getByRole('tab', {name: /new request unsaved/i})).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('treeitem', {name: /get new request/i})).toHaveTextContent('●');
+
+    await user.click(screen.getByRole('button', {name: /^save$/i}));
+    await waitFor(() => expect(apiClient.createRequest).toHaveBeenCalledWith(expect.objectContaining({collection_id: 'collection-3', name: 'New Request', method: 'GET'})));
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^new request$/i})).toBeInTheDocument());
+  });
+
+
+  test('defaults blank sidebar draft requests to an untitled GET request and scopes them to the selected collection', async () => {
+    const user = userEvent.setup();
+    apiClient.createRequest.mockResolvedValue({id: 'request-blank', name: 'Untitled Request', method: 'GET', url: '', headers: [], body_content: '', body_raw_type: 'application/json', collection_id: 'collection-3'});
+
+    renderApp();
+    await user.click(await screen.findByRole('button', {name: /^create request$/i}));
+    await user.selectOptions(screen.getByRole('combobox'), 'collection-3');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    expect(screen.getByRole('tab', {name: /untitled request unsaved/i})).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('combobox', {name: /http method/i})).toHaveValue('GET');
+    expect(apiClient.createRequest).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', {name: /^save$/i}));
+    await waitFor(() => expect(apiClient.createRequest).toHaveBeenCalledWith(expect.objectContaining({
+      collection_id: 'collection-3',
+      name: 'Untitled Request',
+      method: 'GET',
+    })));
+  });
+
+  test('preserves draft form data and shows an actionable error when backend creation fails', async () => {
+    const user = userEvent.setup();
+    apiClient.createRequest.mockRejectedValueOnce(new Error('Collection is no longer available'));
+
+    renderApp();
+    await user.click(await screen.findByRole('button', {name: /^create request$/i}));
+    await user.type(screen.getByRole('textbox', {name: /request name/i}), 'Retry Me');
+    await user.selectOptions(screen.getByRole('combobox'), 'collection-3');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+    await user.type(screen.getByRole('textbox', {name: /request url/i}), 'https://example.test/retry');
+
+    await user.click(screen.getByRole('button', {name: /^save$/i}));
+
+    await waitFor(() => expect(screen.getByText(/could not save draft request/i)).toBeInTheDocument());
+    expect(screen.getByText(/collection is no longer available/i)).toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: /retry me unsaved/i})).toBeInTheDocument();
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/retry');
   });
 
   test('creates a nested folder from the collection action menu and keeps existing requests unchanged', async () => {
