@@ -10,7 +10,7 @@ export function requestPanelId(requestId) {
   return `request-panel-${requestId}`;
 }
 
-export function RequestTabs({requests = [], activeRequestId, onSelectRequest, loading = false, error = ''}) {
+export function RequestTabs({requests = [], activeRequestId, onSelectRequest, loading = false, error = '', dirtyRequestIds = []}) {
   if (loading) return <div className="tabs"><span className="empty-state">Loading requests…</span></div>;
   if (error) return <div className="tabs"><span className="empty-state error"><AlertTriangle size={12} /> Unable to load requests</span></div>;
   if (!requests.length) return <div className="tabs"><span className="empty-state">No requests available</span></div>;
@@ -19,6 +19,7 @@ export function RequestTabs({requests = [], activeRequestId, onSelectRequest, lo
     <div className="tabs" role="tablist" aria-label="Open requests">
       {requests.slice(0, 6).map((request) => {
         const selected = request.id === activeRequestId;
+        const dirty = dirtyRequestIds.includes(request.id) || request.is_draft;
         return (
           <button
             className={`request-tab ${selected ? 'active' : ''}`}
@@ -28,10 +29,11 @@ export function RequestTabs({requests = [], activeRequestId, onSelectRequest, lo
             role="tab"
             aria-selected={selected}
             aria-controls={requestPanelId(request.id)}
+            aria-label={`${request.name}${dirty ? ' unsaved' : ''}`}
             tabIndex={selected ? 0 : -1}
             onClick={() => onSelectRequest?.(request.id)}
           >
-            <Method m={request.method} />{request.name}<X size={13} aria-hidden="true" />
+            <Method m={request.method} />{request.name}{dirty && <span className="dirty" aria-hidden="true">●</span>}<X size={13} aria-hidden="true" />
           </button>
         );
       })}

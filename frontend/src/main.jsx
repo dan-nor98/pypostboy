@@ -81,6 +81,28 @@ function updateRequestInCollections(collections, requestId, nextRequest) {
   }));
 }
 
+function addRequestToCollection(collections, collectionId, request) {
+  return collections.map((collection) => {
+    if (collection.id === collectionId) {
+      return {...collection, requests: [...(collection.requests || []), request]};
+    }
+
+    return {...collection, children: addRequestToCollection(collection.children || [], collectionId, request)};
+  });
+}
+
+function replaceRequestInCollections(collections, requestId, nextRequest) {
+  return collections.map((collection) => ({
+    ...collection,
+    requests: (collection.requests || []).map((request) => (request.id === requestId ? nextRequest : request)),
+    children: replaceRequestInCollections(collection.children || [], requestId, nextRequest),
+  }));
+}
+
+function isDraftRequestId(requestId) {
+  return String(requestId || '').startsWith('draft-request-');
+}
+
 function moveItemInArray(items, itemId, direction) {
   const index = items.findIndex((item) => item.id === itemId);
   if (index === -1) return items;
@@ -343,6 +365,7 @@ export function App() {
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
   const activeEnvironment = environments.find((environment) => environment.id === activeEnvironmentId) || environments[0] || defaultEnvironments[0];
+  const dirtyRequestIds = useMemo(() => [...new Set([...Object.keys(requestDrafts), ...Object.keys(draftBodies)])], [draftBodies, requestDrafts]);
 
   useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
   useEffect(() => { localStorage.setItem(PANEL_SPLIT_STORAGE_KEY, String(responsePaneRatio)); }, [responsePaneRatio]);
@@ -488,7 +511,33 @@ export function App() {
   const renameCollection = useCallback((collectionId, data) => runCollectionMutation(() => apiClient.updateCollection(collectionId, data), null), [runCollectionMutation]);
   const duplicateCollection = useCallback((collectionId) => runCollectionMutation(() => apiClient.duplicateCollection(collectionId), null), [runCollectionMutation]);
   const deleteCollection = useCallback((collectionId) => runCollectionMutation(() => apiClient.deleteCollection(collectionId), null), [runCollectionMutation]);
-  const createSidebarRequest = useCallback((data) => runCollectionMutation(() => apiClient.createRequest({method: 'GET', url: '', headers: [], body_content: '', body_raw_type: 'application/json', ...data}), null), [runCollectionMutation]);
+  const createSidebarRequest = useCallback((data = {}) => {
+    const destinationCollection = findCollectionById(collections, data.collection_id) || collections[0];
+    if (!destinationCollection?.id) {
+      setCollectionsError('Choose a destination collection before creating a request.');
+      return null;
+    }
+
+    const draftRequest = {
+      id: `draft-request-${Date.now()}`,
+      collection_id: destinationCollection.id,
+      workspace_id: destinationCollection.workspace_id || currentUser?.workspace_id || 'local',
+      name: data.name?.trim() || 'Untitled Request',
+      method: data.method || 'GET',
+      url: data.url || '',
+      headers: data.headers || [],
+      body_content: data.body_content || '',
+      body_raw_type: data.body_raw_type || 'application/json',
+      is_draft: true,
+    };
+
+    setCollectionsError('');
+    setCollections((currentCollections) => addRequestToCollection(currentCollections, destinationCollection.id, draftRequest));
+    setRequestDrafts((drafts) => ({...drafts, [draftRequest.id]: {name: draftRequest.name, method: draftRequest.method}}));
+    setDraftBodies((drafts) => ({...drafts, [draftRequest.id]: draftRequest.body_content}));
+    setActiveRequestId(draftRequest.id);
+    return draftRequest;
+  }, [collections, currentUser]);
   const duplicateSidebarRequest = useCallback((requestId) => runCollectionMutation(() => apiClient.duplicateRequest(requestId)), [runCollectionMutation]);
   const deleteSidebarRequest = useCallback((requestId) => runCollectionMutation(() => apiClient.deleteRequest(requestId)), [runCollectionMutation]);
   const moveSidebarRequest = useCallback((requestId, collectionId) => runCollectionMutation(() => apiClient.moveRequest(requestId, collectionId), requestId), [runCollectionMutation]);
@@ -568,6 +617,7 @@ export function App() {
   const activeRequestDraft = requestDrafts[activeRequest.id] || {};
   const editableRequest = {
     ...activeRequest,
+    name: activeRequestDraft.name ?? activeRequest.name ?? 'Untitled Request',
     method: activeRequestDraft.method ?? activeRequest.method ?? 'GET',
     url: activeRequestDraft.url ?? activeRequest.url ?? '',
     headers: activeRequestDraft.headers ?? activeRequest.headers ?? [],
@@ -686,7 +736,7 @@ export function App() {
   }, [activeRequest.id]);
 
   const saveRequest = useCallback(async () => {
-    if (!activeRequest.id || !editableRequest.url) return;
+    if (!activeRequest.id) return;
 
     setSavingRequest(true);
     setProxyError('');
@@ -699,9 +749,16 @@ export function App() {
         body_content: requestBody,
         body_raw_type: editableRequest.body_raw_type || 'application/json',
       };
-      const savedRequest = await apiClient.updateRequest(activeRequest.id, payload);
-      const nextRequest = savedRequest || payload;
-      setCollections((currentCollections) => updateRequestInCollections(currentCollections, activeRequest.id, nextRequest));
+      const saveDraft = isDraftRequestId(activeRequest.id) || activeRequest.is_draft;
+      const {_temporaryId, id: _draftId, is_draft: _isDraft, ...createPayload} = payload;
+      const savedRequest = saveDraft
+        ? await apiClient.createRequest({...createPayload, collection_id: activeRequest.collection_id})
+        : await apiClient.updateRequest(activeRequest.id, payload);
+      const nextRequest = {...payload, ...(savedRequest || {}), is_draft: false};
+      setCollections((currentCollections) => (saveDraft
+        ? replaceRequestInCollections(currentCollections, activeRequest.id, nextRequest)
+        : updateRequestInCollections(currentCollections, activeRequest.id, nextRequest)));
+      if (saveDraft && nextRequest.id) setActiveRequestId(nextRequest.id);
       setRequestDrafts((drafts) => {
         const {[activeRequest.id]: _savedDraft, ...remainingDrafts} = drafts;
         return remainingDrafts;
@@ -711,7 +768,9 @@ export function App() {
         return remainingDrafts;
       });
     } catch (error) {
-      setProxyError(error.message);
+      setProxyError(isDraftRequestId(activeRequest.id) || activeRequest.is_draft
+        ? `Could not save draft request. ${error.message || 'Check the destination collection and try Save again.'}`
+        : error.message);
     } finally {
       setSavingRequest(false);
     }
@@ -719,7 +778,7 @@ export function App() {
 
 
   useEffect(() => {
-    if (!activeRequest.id) {
+    if (!activeRequest.id || isDraftRequestId(activeRequest.id) || activeRequest.is_draft) {
       setSnapshots([]);
       return undefined;
     }
@@ -874,6 +933,7 @@ export function App() {
           loading={collectionsLoading}
           error={collectionsError}
           activeRequestId={activeRequest.id}
+          dirtyRequestIds={dirtyRequestIds}
           onSelectRequest={setActiveRequestId}
           onImportCurl={() => setImportCurlOpen(true)}
           onImportPostman={() => setImportPostmanOpen(true)}
@@ -896,7 +956,7 @@ export function App() {
           ref={mainPanelRef}
           style={{gridTemplateRows: `34px minmax(240px, ${100 - responsePaneRatio}fr) 5px minmax(220px, ${responsePaneRatio}fr)`}}
         >
-          <RequestTabs requests={requests} activeRequestId={activeRequest.id} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
+          <RequestTabs requests={requests} activeRequestId={activeRequest.id} dirtyRequestIds={dirtyRequestIds} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
           <div
             id={requestPanelId(activeRequest.id)}
             role="tabpanel"
@@ -912,7 +972,7 @@ export function App() {
               onUrlChange={(url) => updateRequestDraft('url', url)}
               onSave={saveRequest}
               saving={savingRequest}
-              saveDisabled={!activeRequest.id || !editableRequest.url}
+              saveDisabled={!activeRequest.id}
             />
             {(environmentWarnings.length > 0 || unresolvedVariableHints.length > 0 || findVariableTokens(editableRequest.url).length > 0) && (
               <div className={(environmentWarnings.length || unresolvedVariableHints.length) ? "environment-warning" : "environment-hint"}>

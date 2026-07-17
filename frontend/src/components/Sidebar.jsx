@@ -95,7 +95,7 @@ function filterCollections(collections, filterValue) {
   });
 }
 
-export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection, onExportCollection, onCopyRequestCurl}) {
+export function Sidebar({collections = [], loading = false, error = '', activeRequestId, dirtyRequestIds = [], onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection, onExportCollection, onCopyRequestCurl}) {
   const treeRef = useRef(null);
   const initialExpandedIdsRef = useRef(readStoredExpandedIds());
   const knownCollectionIdsRef = useRef(null);
@@ -154,7 +154,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
   const submitDialog = async (event) => {
     event.preventDefault();
     if (!dialog) return;
-    if (dialog.kind !== 'confirm' && dialog.kind !== 'move' && dialog.kind !== 'menu' && !formValue.trim()) {
+    if (dialog.kind !== 'confirm' && dialog.kind !== 'move' && dialog.kind !== 'menu' && dialog.action !== 'createRequest' && !formValue.trim()) {
       setValidationError(`${dialog.label || 'Name'} is required.`);
       return;
     }
@@ -245,6 +245,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
             item={item}
             key={item.id}
             activeRequestId={activeRequestId}
+            dirtyRequestIds={dirtyRequestIds}
             onSelectRequest={onSelectRequest}
             onToggleCollection={toggleCollection}
             tabIndex={item.id === tabStopId ? 0 : -1}

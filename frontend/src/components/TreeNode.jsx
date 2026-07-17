@@ -49,7 +49,7 @@ function MoveControls({label, onMoveUp, onMoveDown}) {
   );
 }
 
-export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollection, tabIndex, onFocus, onMoveCollection, onMoveRequest, onCollectionActions, onRequestActions, filterValue = ''}) {
+export function TreeNode({item, activeRequestId, dirtyRequestIds = [], onSelectRequest, onToggleCollection, tabIndex, onFocus, onMoveCollection, onMoveRequest, onCollectionActions, onRequestActions, filterValue = ''}) {
   if (item.type === 'empty') {
     return (
       <div
@@ -101,6 +101,7 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
   }
 
   const request = item.request;
+  const dirty = dirtyRequestIds.includes(request.id) || request.is_draft;
   return (
     <div
       className={`tree-row tree-button ${request.id === activeRequestId ? 'selected' : ''}`}
@@ -117,7 +118,7 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
       <span />
       <Method m={request.method} />
       <span className="truncate" title={request.name}>{highlightMatch(request.name, filterValue)}</span>
-      {request.id === activeRequestId && <span className="dirty">●</span>}
+      {dirty && <span className="dirty" aria-label="Unsaved request">●</span>}
       <span className="tree-row-actions">
         <button
           className="tree-action-button"
