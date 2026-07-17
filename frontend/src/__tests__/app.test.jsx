@@ -405,6 +405,66 @@ describe('App shell', () => {
     expect(apiClient.updateRequest).not.toHaveBeenCalled();
   });
 
+
+  test('removes the unsaved indicator when an edited URL is reverted', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health?dirty=true');
+
+    expect(screen.getByRole('tab', {name: /health check unsaved/i})).toBeInTheDocument();
+
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health');
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+    expect(screen.queryByRole('tab', {name: /health check unsaved/i})).not.toBeInTheDocument();
+  });
+
+  test('removes the unsaved indicator when an edited body is reverted', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /post create widget/i}));
+    await user.click(within(screen.getByRole('tablist', {name: /request configuration tabs/i})).getByRole('tab', {name: 'Body'}));
+
+    const editor = screen.getByRole('textbox', {name: /request json body editor/i});
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{"name":"changed"}');
+
+    expect(screen.getByRole('tab', {name: /create widget unsaved/i})).toBeInTheDocument();
+
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{"name":"demo"}');
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^create widget$/i})).toBeInTheDocument());
+    expect(screen.queryByRole('tab', {name: /create widget unsaved/i})).not.toBeInTheDocument();
+  });
+
+  test('removes the unsaved indicator when an edited header is reverted', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+    await user.click(within(screen.getByRole('tablist', {name: /request configuration tabs/i})).getByRole('tab', {name: 'Headers'}));
+
+    const headerValue = screen.getByRole('textbox', {name: /header row 1 value/i});
+    await user.clear(headerValue);
+    await user.type(headerValue, 'text/plain');
+
+    expect(screen.getByRole('tab', {name: /health check unsaved/i})).toBeInTheDocument();
+
+    await user.clear(headerValue);
+    await user.type(headerValue, 'application/json');
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+    expect(screen.queryByRole('tab', {name: /health check unsaved/i})).not.toBeInTheDocument();
+  });
+
   test('opens a sidebar request by loading full details without sending it', async () => {
     const user = userEvent.setup();
     const partialCollections = [
