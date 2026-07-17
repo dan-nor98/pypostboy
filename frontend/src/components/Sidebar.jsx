@@ -32,14 +32,18 @@ function collectVisibleItems(nodes, expandedIds, depth = 0, parentId = null) {
     const requests = node.requests || [];
     const children = node.children || [];
     const expanded = expandedIds.has(nodeId);
-    const item = {type: 'collection', id: nodeId, rawId: node.id, node, depth, parentId, parentRawId: parentId?.replace('collection-', '') || null, expandable: requests.length > 0 || children.length > 0, expanded};
+    const item = {type: 'collection', id: nodeId, rawId: node.id, node, depth, parentId, parentRawId: parentId?.replace('collection-', '') || null, expandable: true, expanded};
 
     if (!expanded) return [item];
 
-    return [
-      item,
+    const childItems = [
       ...requests.map((request) => ({type: 'request', id: `request-${request.id}`, rawId: request.id, request, depth: depth + 1, parentId: nodeId, parentRawId: node.id})),
       ...collectVisibleItems(children, expandedIds, depth + 1, nodeId),
+    ];
+
+    return [
+      item,
+      ...(childItems.length > 0 ? childItems : [{type: 'empty', id: `empty-${node.id}`, depth: depth + 1, parentId: nodeId, parentRawId: node.id}]),
     ];
   });
 }
@@ -173,8 +177,9 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
   const openCollectionActions = (collection) => openDialog({kind: 'menu', title: `Actions for ${collection.name}`, collection});
   const openRequestActions = (request, collectionId) => openDialog({kind: 'menu', title: `Actions for ${request.name}`, request, collectionId});
 
-  const activeItemId = visibleItems.find((item) => item.type === 'request' && item.rawId === activeRequestId)?.id;
-  const tabStopId = focusedItemId || activeItemId || visibleItems[0]?.id;
+  const focusableItems = visibleItems.filter((item) => item.type !== 'empty');
+  const activeItemId = focusableItems.find((item) => item.type === 'request' && item.rawId === activeRequestId)?.id;
+  const tabStopId = focusedItemId || activeItemId || focusableItems[0]?.id;
 
   const focusItem = (id) => {
     const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
@@ -194,20 +199,20 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
 
   const handleKeyDown = (event) => {
     const currentId = document.activeElement?.dataset?.treeId || tabStopId;
-    const currentIndex = visibleItems.findIndex((item) => item.id === currentId);
-    const current = visibleItems[currentIndex];
+    const currentIndex = focusableItems.findIndex((item) => item.id === currentId);
+    const current = focusableItems[currentIndex];
     if (!current) return;
 
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      focusItem(visibleItems[Math.min(currentIndex + 1, visibleItems.length - 1)].id);
+      focusItem(focusableItems[Math.min(currentIndex + 1, focusableItems.length - 1)].id);
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      focusItem(visibleItems[Math.max(currentIndex - 1, 0)].id);
+      focusItem(focusableItems[Math.max(currentIndex - 1, 0)].id);
     } else if (event.key === 'ArrowRight' && current.type === 'collection') {
       event.preventDefault();
       if (current.expandable && !current.expanded) toggleCollection(current.id, true);
-      else if (visibleItems[currentIndex + 1]) focusItem(visibleItems[currentIndex + 1].id);
+      else if (focusableItems[currentIndex + 1]) focusItem(focusableItems[currentIndex + 1].id);
     } else if (event.key === 'ArrowLeft') {
       event.preventDefault();
       if (current.type === 'collection' && current.expandable && current.expanded) toggleCollection(current.id, false);

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {App} from '../main.jsx';
 import {CodeEditor} from '../components/CodeEditor.jsx';
+import {Sidebar} from '../components/Sidebar.jsx';
 import {apiClient} from '../api/client';
 
 vi.mock('../api/client', () => ({
@@ -82,8 +83,8 @@ const testCollections = [
   },
 ];
 
-function renderApp() {
-  apiClient.listCollections.mockResolvedValue(testCollections);
+function renderApp(collections = testCollections) {
+  apiClient.listCollections.mockResolvedValue(collections);
   apiClient.updateRequest.mockImplementation((id, data) => Promise.resolve({...data, id}));
   apiClient.listRequestInstances.mockResolvedValue([
     {
@@ -327,6 +328,35 @@ describe('App shell', () => {
     expect(root).toHaveAttribute('aria-expanded', 'true');
   });
 
+
+
+  test('shows a non-actionable empty row for an expanded root collection', () => {
+    render(<Sidebar collections={[{id: 'empty-root', name: 'Empty Root', requests: [], children: []}]} />);
+
+    const tree = screen.getByRole('tree', {name: /collections/i});
+    expect(within(tree).getByRole('treeitem', {name: /empty root/i})).toHaveAttribute('aria-expanded', 'true');
+    expect(within(tree).getByText('No requests or folders')).toBeInTheDocument();
+    expect(within(tree).queryByRole('treeitem', {name: /no requests or folders/i})).not.toBeInTheDocument();
+    expect(within(tree).queryByRole('button', {name: /no requests or folders/i})).not.toBeInTheDocument();
+  });
+
+  test('shows a non-actionable empty row for an expanded nested folder', () => {
+    render(
+      <Sidebar
+        collections={[{
+          id: 'root',
+          name: 'Root',
+          requests: [],
+          children: [{id: 'nested-empty', name: 'Nested Empty', requests: [], children: []}],
+        }]}
+      />,
+    );
+
+    const tree = screen.getByRole('tree', {name: /collections/i});
+    expect(within(tree).getByRole('treeitem', {name: /nested empty/i})).toHaveAttribute('aria-expanded', 'true');
+    expect(within(tree).getByText('No requests or folders')).toBeInTheDocument();
+    expect(within(tree).queryByRole('treeitem', {name: /no requests or folders/i})).not.toBeInTheDocument();
+    expect(within(tree).queryByRole('button', {name: /no requests or folders/i})).not.toBeInTheDocument();
   test('keeps a collapsed collection collapsed after collections refresh', async () => {
     const user = userEvent.setup();
     renderApp();
