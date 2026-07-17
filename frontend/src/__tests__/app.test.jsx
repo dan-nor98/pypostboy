@@ -10,6 +10,7 @@ import {apiClient} from '../api/client';
 vi.mock('../api/client', () => ({
   apiClient: {
     listCollections: vi.fn(),
+    getRequest: vi.fn(),
     proxyRequest: vi.fn(),
     updateRequest: vi.fn(),
     listRequestInstances: vi.fn(),
@@ -83,8 +84,17 @@ const testCollections = [
   },
 ];
 
+
+function flattenTestRequests(collections) {
+  return collections.flatMap((collection) => [
+    ...(collection.requests || []),
+    ...flattenTestRequests(collection.children || []),
+  ]);
+}
+
 function renderApp(collections = testCollections) {
   apiClient.listCollections.mockResolvedValue(collections);
+  apiClient.getRequest.mockImplementation((id) => Promise.resolve(flattenTestRequests(testCollections).find((request) => request.id === id)));
   apiClient.updateRequest.mockImplementation((id, data) => Promise.resolve({...data, id}));
   apiClient.listRequestInstances.mockResolvedValue([
     {
@@ -215,6 +225,95 @@ describe('App shell', () => {
     expect(responseBodyTab).toHaveAttribute('aria-selected', 'true');
     expect(responseBodyTab).toHaveAttribute('aria-controls', 'response-panel-body');
     expect(screen.getByRole('tabpanel', {name: 'Body'})).toHaveAttribute('id', 'response-panel-body');
+  });
+
+
+  test('opens a sidebar request by loading full details without sending it', async () => {
+    const user = userEvent.setup();
+    const partialCollections = [
+      {
+        ...testCollections[0],
+        requests: [
+          testCollections[0].requests[0],
+          {...testCollections[0].requests[1], headers: [], body_content: '', body_raw_type: 'text/plain'},
+        ],
+      },
+      testCollections[1],
+    ];
+    apiClient.getRequest.mockResolvedValueOnce({
+      id: 'request-3',
+      collection_id: 'collection-1',
+      name: 'Status Check Full',
+      method: 'PATCH',
+      url: 'https://example.test/status/full',
+      headers: [{enabled: true, key: 'X-Loaded', value: 'yes'}],
+      body_content: '{"loaded":true}',
+      body_raw_type: 'application/json',
+    });
+    renderApp(partialCollections);
+
+    await user.click(await screen.findByRole('treeitem', {name: /status check/i}));
+
+    await waitFor(() => expect(apiClient.getRequest).toHaveBeenCalledWith('request-3'));
+    expect(screen.getByRole('tab', {name: /status check full/i})).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/status/full');
+    expect(apiClient.proxyRequest).not.toHaveBeenCalled();
+  });
+
+  test('activates an already-open request tab without duplicating or reloading details', async () => {
+    const user = userEvent.setup();
+    apiClient.getRequest.mockResolvedValueOnce({
+      ...testCollections[0].requests[1],
+      name: 'Status Check Loaded',
+      url: 'https://example.test/status/loaded',
+    });
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: /status check/i}));
+    await waitFor(() => expect(apiClient.getRequest).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('tab', {name: /health check/i}));
+    await user.click(screen.getByRole('tab', {name: /status check loaded/i}));
+
+    expect(screen.getAllByRole('tab', {name: /status check loaded/i})).toHaveLength(1);
+    expect(apiClient.getRequest).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('tab', {name: /status check loaded/i})).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('loads all editable fields when opening a request', async () => {
+    const user = userEvent.setup();
+    apiClient.getRequest.mockResolvedValueOnce({
+      id: 'request-2',
+      name: 'Create Widget Details',
+      method: 'PUT',
+      url: 'https://example.test/widgets/42?expand=true',
+      headers: [{enabled: true, key: 'Content-Type', value: 'application/json'}],
+      body_content: '{"name":"loaded"}',
+      body_raw_type: 'application/json',
+    });
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: /create widget/i}));
+
+    await waitFor(() => expect(screen.getByRole('combobox', {name: /http method/i})).toHaveValue('PUT'));
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/widgets/42?expand=true');
+    expect(screen.getByRole('textbox', {name: /parameter row 1 key/i})).toHaveValue('expand');
+    await user.click(screen.getByRole('tab', {name: 'Headers'}));
+    expect(screen.getByRole('textbox', {name: /header row 1 key/i})).toHaveValue('Content-Type');
+    await user.click(screen.getByRole('tab', {name: 'Body'}));
+    expect(screen.getByRole('textbox', {name: /request json body editor/i})).toHaveTextContent('{"name":"loaded"}');
+  });
+
+  test('shows request-specific load failures without sending the request', async () => {
+    const user = userEvent.setup();
+    apiClient.getRequest.mockRejectedValueOnce(new Error('Unable to load request details'));
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: /status check/i}));
+
+    expect(await screen.findByText(/unable to load request details/i)).toBeInTheDocument();
+    expect(apiClient.proxyRequest).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('tab', {name: /health check/i}));
+    expect(screen.queryByText(/unable to load request details/i)).not.toBeInTheDocument();
   });
 
   test('resizes request and response panels with keyboard, drag, bounds, and persistence', async () => {
