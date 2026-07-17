@@ -17,7 +17,7 @@ export function RequestTabs({requests = [], activeRequestId, onSelectRequest, on
 
   return (
     <div className="tabs" role="tablist" aria-label="Open requests">
-      {requests.slice(0, 6).map((request) => {
+      {requests.map((request) => {
         const selected = request.id === activeRequestId;
         const dirty = dirtyRequestIds.includes(request.id) || request.is_draft;
         const closeLabel = `Close ${request.name}`;
@@ -45,7 +45,7 @@ export function RequestTabs({requests = [], activeRequestId, onSelectRequest, on
             onClick={() => onSelectRequest?.(request.id)}
             onKeyDown={handleTabKeyDown}
           >
-            <Method m={request.method} />{request.name}{dirty && <span className="dirty" aria-hidden="true">●</span>}
+            <Method m={request.method} /><span className="request-tab-label">{request.name}</span>{dirty && <span className="dirty" aria-hidden="true">●</span>}
             <button
               className="request-tab-close"
               type="button"

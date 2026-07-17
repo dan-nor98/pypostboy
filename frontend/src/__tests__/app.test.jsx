@@ -107,7 +107,7 @@ function renderApp(collections = testCollections) {
   apiClient.listCollections.mockResolvedValue(collections);
   apiClient.getSyncStatus.mockResolvedValue({status: 'synchronized', label: 'Synchronized', diagnostics: [], conflicts: [], retryable: false});
   apiClient.retrySync.mockResolvedValue({status: 'synchronizing', label: 'Synchronizing', diagnostics: ['Retry requested by client'], conflicts: [], retryable: false});
-  apiClient.getRequest.mockImplementation((id) => Promise.resolve(flattenTestRequests(testCollections).find((request) => request.id === id)));
+  apiClient.getRequest.mockImplementation((id) => Promise.resolve(flattenTestRequests(collections).find((request) => request.id === id)));
   apiClient.updateRequest.mockImplementation((id, data) => Promise.resolve({...data, id}));
   apiClient.listRequestInstances.mockResolvedValue([
     {
@@ -265,6 +265,41 @@ describe('App shell', () => {
     expect(requestTabs).toHaveLength(2);
     expect(requestTabs.map((tab) => tab.getAttribute('aria-label'))).toEqual(['Health Check', 'Status Check']);
     expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('renders all opened request tabs when more than six requests are open', async () => {
+    const user = userEvent.setup();
+    const requests = Array.from({length: 8}, (_, index) => ({
+      id: `request-many-${index + 1}`,
+      updated_at: `many-${index + 1}-v1`,
+      name: `Bulk Request ${index + 1}`,
+      method: 'GET',
+      url: `https://example.test/bulk/${index + 1}`,
+      headers: [],
+      body_content: '',
+      body_raw_type: 'application/json',
+    }));
+    renderApp([
+      {
+        id: 'collection-many',
+        updated_at: 'collection-many-v1',
+        name: 'Many Requests',
+        requests,
+        children: [],
+      },
+    ]);
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /bulk request 1/i})).toBeInTheDocument());
+    for (const request of requests.slice(1)) {
+      await user.click(screen.getByRole('treeitem', {name: new RegExp(`get ${request.name}`, 'i')}));
+    }
+
+    const requestTabs = within(screen.getByRole('tablist', {name: /open requests/i})).getAllByRole('tab');
+    expect(requestTabs).toHaveLength(requests.length);
+    expect(requestTabs.map((tab) => tab.getAttribute('aria-label'))).toEqual(requests.map((request) => request.name));
+    for (const request of requests) {
+      expect(within(screen.getByRole('tablist', {name: /open requests/i})).getByRole('tab', {name: request.name})).toBeInTheDocument();
+    }
   });
 
   test('selecting an already-open request activates its tab without duplicating it', async () => {
