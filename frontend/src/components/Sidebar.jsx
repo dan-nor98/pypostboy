@@ -177,6 +177,20 @@ export function Sidebar({collections = [], loading = false, error = '', syncStat
     setValidationError('');
   };
 
+  useEffect(() => {
+    if (!dialog) return undefined;
+
+    const handleDialogKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeDialog();
+      }
+    };
+
+    window.addEventListener('keydown', handleDialogKeyDown);
+    return () => window.removeEventListener('keydown', handleDialogKeyDown);
+  }, [dialog]);
+
   const submitDialog = async (event) => {
     event.preventDefault();
     if (!dialog) return;
