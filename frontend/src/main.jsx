@@ -348,6 +348,8 @@ export function App() {
   const [proxyError, setProxyError] = useState('');
   const [draftBodies, setDraftBodies] = useState({});
   const [requestDrafts, setRequestDrafts] = useState({});
+  const [requestDetails, setRequestDetails] = useState({});
+  const [requestLoadErrors, setRequestLoadErrors] = useState({});
   const [savingRequest, setSavingRequest] = useState(false);
   const [snapshots, setSnapshots] = useState([]);
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
@@ -429,6 +431,14 @@ export function App() {
     try {
       const data = await apiClient.listCollections();
       setCollections(data);
+      setRequestDetails((currentDetails) => {
+        const refreshedRequests = flattenRequests(data);
+        return refreshedRequests.reduce((details, request) => {
+          const existing = currentDetails[request.id];
+          if (existing && existing.sourceUpdatedAt === request.updated_at) details[request.id] = existing;
+          return details;
+        }, {});
+      });
       const nextRequestId = preferredRequestId || activeRequestId || flattenRequests(data)[0]?.id || null;
       setActiveRequestId(nextRequestId);
       return data;
@@ -600,6 +610,14 @@ export function App() {
         const data = await apiClient.listCollections();
         if (!cancelled) {
           setCollections(data);
+          setRequestDetails((currentDetails) => {
+            const refreshedRequests = flattenRequests(data);
+            return refreshedRequests.reduce((details, request) => {
+              const existing = currentDetails[request.id];
+              if (existing && existing.sourceUpdatedAt === request.updated_at) details[request.id] = existing;
+              return details;
+            }, {});
+          });
           setActiveRequestId((current) => current || flattenRequests(data)[0]?.id || null);
         }
       } catch (error) {
@@ -612,7 +630,47 @@ export function App() {
     return () => { cancelled = true; };
   }, []);
 
-  const requests = useMemo(() => flattenRequests(collections), [collections]);
+
+  const openRequest = useCallback(async (requestId) => {
+    if (!requestId) return;
+
+    setActiveRequestId(requestId);
+    setRequestLoadErrors((errors) => {
+      if (!errors[requestId]) return errors;
+      const {[requestId]: _clearedError, ...remainingErrors} = errors;
+      return remainingErrors;
+    });
+
+    const sourceRequest = flattenRequests(collections).find((request) => request.id === requestId);
+    if (!sourceRequest || isDraftRequestId(requestId) || sourceRequest.is_draft) return;
+
+    const cachedDetail = requestDetails[requestId];
+    const isStale = cachedDetail?.sourceUpdatedAt !== sourceRequest.updated_at;
+    const needsFullDetails = !cachedDetail || isStale;
+    if (!needsFullDetails) return;
+
+    try {
+      const loadedRequest = await apiClient.getRequest(requestId);
+      const nextRequest = {
+        ...sourceRequest,
+        ...(loadedRequest || {}),
+        collection_id: loadedRequest?.collection_id ?? sourceRequest.collection_id,
+      };
+      setRequestDetails((details) => ({
+        ...details,
+        [requestId]: {data: nextRequest, sourceUpdatedAt: nextRequest.updated_at ?? sourceRequest.updated_at},
+      }));
+      setCollections((currentCollections) => updateRequestInCollections(currentCollections, requestId, nextRequest));
+    } catch (error) {
+      setRequestLoadErrors((errors) => ({...errors, [requestId]: error.message || 'Unable to load request details'}));
+    }
+  }, [collections, requestDetails]);
+
+  const requests = useMemo(() => flattenRequests(collections).map((request) => {
+    const detail = requestDetails[request.id]?.data;
+    if (!detail) return request;
+    return {...request, ...detail, collection_id: detail.collection_id ?? request.collection_id};
+  }), [collections, requestDetails]);
   const activeRequest = requests.find((request) => request.id === activeRequestId) || requests[0] || defaultRequest;
   const activeRequestDraft = requestDrafts[activeRequest.id] || {};
   const editableRequest = {
@@ -624,6 +682,7 @@ export function App() {
     body_raw_type: activeRequestDraft.body_raw_type ?? activeRequest.body_raw_type ?? 'application/json',
   };
   const requestBody = draftBodies[activeRequest.id] ?? activeRequest.body_content ?? activeRequest.body_raw ?? '';
+  const requestLoadError = requestLoadErrors[activeRequest.id] || '';
   const unresolvedVariableHints = useMemo(() => {
     const variables = environmentVariables(activeEnvironment);
     const names = [
@@ -934,7 +993,7 @@ export function App() {
           error={collectionsError}
           activeRequestId={activeRequest.id}
           dirtyRequestIds={dirtyRequestIds}
-          onSelectRequest={setActiveRequestId}
+          onSelectRequest={openRequest}
           onImportCurl={() => setImportCurlOpen(true)}
           onImportPostman={() => setImportPostmanOpen(true)}
           onMoveCollection={moveCollection}
@@ -956,7 +1015,7 @@ export function App() {
           ref={mainPanelRef}
           style={{gridTemplateRows: `34px minmax(240px, ${100 - responsePaneRatio}fr) 5px minmax(220px, ${responsePaneRatio}fr)`}}
         >
-          <RequestTabs requests={requests} activeRequestId={activeRequest.id} dirtyRequestIds={dirtyRequestIds} onSelectRequest={setActiveRequestId} loading={collectionsLoading} error={collectionsError} />
+          <RequestTabs requests={requests} activeRequestId={activeRequest.id} dirtyRequestIds={dirtyRequestIds} onSelectRequest={openRequest} loading={collectionsLoading} error={collectionsError} />
           <div
             id={requestPanelId(activeRequest.id)}
             role="tabpanel"
@@ -1091,7 +1150,7 @@ export function App() {
             onPointerDown={handleMainDividerPointerDown}
             onKeyDown={handleMainDividerKeyDown}
           />
-          <ResponseViewer response={proxyResult} loading={sending} error={proxyError} />
+          <ResponseViewer response={proxyResult} loading={sending} error={requestLoadError || proxyError} />
         </section>
       </main>
 
