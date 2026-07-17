@@ -26,6 +26,15 @@ function collectionIds(nodes) {
   return nodes.flatMap((node) => [`collection-${node.id}`, ...collectionIds(node.children || [])]);
 }
 
+export const MAX_COLLECTION_NESTING_DEPTH = Infinity;
+
+function flattenCollectionOptions(nodes, depth = 0) {
+  return nodes.flatMap((node) => [
+    {id: node.id, name: `${'— '.repeat(depth)}${node.name}`, depth},
+    ...flattenCollectionOptions(node.children || [], depth + 1),
+  ]);
+}
+
 function normalizeFilter(value) {
   return value.trim().toLowerCase();
 }
@@ -67,12 +76,13 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
   const [formValue, setFormValue] = useState('');
   const [targetCollectionId, setTargetCollectionId] = useState('');
   const [filterValue, setFilterValue] = useState('');
+  const [validationError, setValidationError] = useState('');
 
   const normalizedFilter = normalizeFilter(filterValue);
   const filteredCollections = useMemo(() => filterCollections(collections, filterValue), [collections, filterValue]);
   const visibleExpandedIds = useMemo(() => (normalizedFilter ? new Set(collectionIds(filteredCollections)) : expandedIds), [expandedIds, filteredCollections, normalizedFilter]);
   const visibleItems = useMemo(() => collectVisibleItems(filteredCollections, visibleExpandedIds), [filteredCollections, visibleExpandedIds]);
-  const collectionOptions = useMemo(() => visibleItems.filter((item) => item.type === 'collection').map((item) => ({id: item.rawId, name: `${'— '.repeat(item.depth)}${item.node.name}`})), [visibleItems]);
+  const collectionOptions = useMemo(() => flattenCollectionOptions(collections), [collections]);
 
   useEffect(() => {
     setExpandedIds((current) => {
@@ -87,18 +97,26 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
     setDialog(nextDialog);
     setFormValue(nextDialog.defaultValue || '');
     setTargetCollectionId(nextDialog.collectionId || collectionOptions[0]?.id || '');
+    setValidationError('');
   };
 
-  const closeDialog = () => setDialog(null);
+  const closeDialog = () => {
+    setDialog(null);
+    setValidationError('');
+  };
 
   const submitDialog = async (event) => {
     event.preventDefault();
     if (!dialog) return;
-    if (dialog.kind !== 'confirm' && !formValue.trim()) return;
+    if (dialog.kind !== 'confirm' && dialog.kind !== 'move' && dialog.kind !== 'menu' && !formValue.trim()) {
+      setValidationError(`${dialog.label || 'Name'} is required.`);
+      return;
+    }
     const value = formValue.trim();
     const targetId = targetCollectionId;
     closeDialog();
     if (dialog.action === 'createCollection') onCreateCollection?.({name: value});
+    if (dialog.action === 'createFolder') onCreateCollection?.({name: value, parent_id: dialog.collection.id});
     if (dialog.action === 'createRequest') onCreateRequest?.({collection_id: dialog.collectionId || targetId, name: value});
     if (dialog.action === 'renameCollection') onRenameCollection?.(dialog.collection.id, {name: value});
     if (dialog.action === 'duplicateCollection') onDuplicateCollection?.(dialog.collection.id);
@@ -199,6 +217,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
               {dialog.kind === 'menu' && dialog.collection && (
                 <div className="action-list">
                   <button type="button" onClick={() => openDialog({action: 'createRequest', title: `Create request in ${dialog.collection.name}`, label: 'Request name', collectionId: dialog.collection.id})}>Create request</button>
+                  <button type="button" onClick={() => openDialog({action: 'createFolder', title: `Create folder in ${dialog.collection.name}`, label: 'Folder name', collection: dialog.collection})}>Create folder</button>
                   <button type="button" onClick={() => openDialog({action: 'renameCollection', title: `Rename ${dialog.collection.name}`, label: 'Collection name', defaultValue: dialog.collection.name, collection: dialog.collection})}>Rename collection</button>
                   <button type="button" onClick={() => openDialog({action: 'duplicateCollection', kind: 'confirm', title: `Duplicate ${dialog.collection.name}?`, collection: dialog.collection})}>Duplicate collection</button>
                   <button type="button" onClick={() => openDialog({action: 'exportCollection', kind: 'confirm', title: `Export ${dialog.collection.name}?`, collection: dialog.collection})}>Export collection</button>
@@ -213,9 +232,16 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
                   <button type="button" onClick={() => openDialog({action: 'deleteRequest', kind: 'confirm', title: `Delete ${dialog.request.name}?`, request: dialog.request})}>Delete request</button>
                 </div>
               )}
-              {dialog.kind !== 'menu' && dialog.kind !== 'confirm' && dialog.kind !== 'move' && (
-                <label className="field-stack"><span>{dialog.label}</span><input aria-label={dialog.label} value={formValue} onChange={(event) => setFormValue(event.target.value)} autoFocus /></label>
+              {dialog.action === 'createFolder' && (
+                <>
+                  <p className="hint">Destination: {dialog.collection.name}</p>
+                  <p className="hint">Folder nesting: {Number.isFinite(MAX_COLLECTION_NESTING_DEPTH) ? `${MAX_COLLECTION_NESTING_DEPTH} levels maximum` : 'Unlimited'}</p>
+                </>
               )}
+              {dialog.kind !== 'menu' && dialog.kind !== 'confirm' && dialog.kind !== 'move' && (
+                <label className="field-stack"><span>{dialog.label}</span><input aria-label={dialog.label} value={formValue} onChange={(event) => { setFormValue(event.target.value); if (validationError) setValidationError(''); }} autoFocus /></label>
+              )}
+              {validationError && <p role="alert" className="error">{validationError}</p>}
               {dialog.action === 'createRequest' && !dialog.collectionId && (
                 <label className="field-stack"><span>Destination collection</span><select value={targetCollectionId} onChange={(event) => setTargetCollectionId(event.target.value)}>{collectionOptions.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label>
               )}
