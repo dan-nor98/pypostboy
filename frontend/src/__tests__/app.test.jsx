@@ -1387,6 +1387,7 @@ describe('App shell', () => {
       name: `${method} Draft`,
       method,
     })));
+    expect(apiClient.createRequest.mock.calls.at(-1)[0]).not.toHaveProperty('expected_updated_at');
   });
 
   test('saves edited request method and URL and reconciles the toolbar state', async () => {
@@ -1406,10 +1407,35 @@ describe('App shell', () => {
     expect(apiClient.updateRequest).toHaveBeenCalledWith('request-1', expect.objectContaining({
       method: 'PUT',
       url: 'https://example.test/health/updated',
+      expected_updated_at: 'r1-v1',
     }));
     await waitFor(() => expect(screen.getByRole('combobox', {name: /http method/i})).toHaveValue('PUT'));
     expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health/updated');
     expect(screen.getByText('PUT https://example.test/health/updated')).toBeInTheDocument();
+  });
+
+
+  test('keeps local edits visible and dirty when an existing request save conflicts', async () => {
+    const user = userEvent.setup();
+    const conflict = new Error('stale request');
+    conflict.status = 409;
+    apiClient.updateRequest.mockRejectedValueOnce(conflict);
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health/local-conflict');
+
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      url: 'https://example.test/health/local-conflict',
+      expected_updated_at: 'r1-v1',
+    })));
+    expect(await screen.findByText(/changed elsewhere/i)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health/local-conflict');
+    expect(screen.getByRole('tab', {name: /health check unsaved/i})).toBeInTheDocument();
   });
 
   test('switches request configuration tabs by click and updates tab/panel state', async () => {
