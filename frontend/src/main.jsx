@@ -248,6 +248,60 @@ function gridRowsToHeaders(rows = []) {
   }));
 }
 
+
+function normalizeRequestHeaders(headers = []) {
+  return gridRowsToHeaders(headersToGridRows(headers));
+}
+
+function headersEqual(left = [], right = []) {
+  return JSON.stringify(normalizeRequestHeaders(left)) === JSON.stringify(normalizeRequestHeaders(right));
+}
+
+function requestFieldValue(request = {}, field) {
+  if (field === 'body_content') return request.body_content ?? request.body_raw ?? '';
+  if (field === 'body_raw_type') return request.body_raw_type ?? 'application/json';
+  if (field === 'headers') return request.headers ?? [];
+  if (field === 'method') return request.method ?? 'GET';
+  if (field === 'name') return request.name ?? 'Untitled Request';
+  if (field === 'url') return request.url ?? '';
+  return request[field];
+}
+
+function requestFieldEquals(field, value, sourceRequest = {}) {
+  const sourceValue = requestFieldValue(sourceRequest, field);
+  if (field === 'headers') return headersEqual(value, sourceValue);
+  return (value ?? '') === (sourceValue ?? '');
+}
+
+function getRequestDirtyFields(requestId, draft = {}, bodyDraft, sourceRequest = {}) {
+  if (!requestId) return {};
+  const dirtyFields = {};
+  ['name', 'method', 'url', 'headers', 'body_raw_type'].forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(draft, field) && !requestFieldEquals(field, draft[field], sourceRequest)) {
+      dirtyFields[field] = true;
+    }
+  });
+  if (bodyDraft !== undefined && !requestFieldEquals('body_content', bodyDraft, sourceRequest)) {
+    dirtyFields.body_content = true;
+  }
+  return dirtyFields;
+}
+
+function removeRequestDraftIfClean(drafts, draftBodies, requestId, sourceRequest) {
+  const draft = drafts[requestId] || {};
+  const bodyDraft = Object.prototype.hasOwnProperty.call(draftBodies, requestId) ? draftBodies[requestId] : undefined;
+  if (Object.keys(getRequestDirtyFields(requestId, draft, bodyDraft, sourceRequest)).length) return drafts;
+  const {[requestId]: _cleanDraft, ...remainingDrafts} = drafts;
+  return remainingDrafts;
+}
+
+function removeRequestBodyDraftIfClean(draftBodies, requestId, sourceRequest) {
+  if (!Object.prototype.hasOwnProperty.call(draftBodies, requestId)) return draftBodies;
+  if (!requestFieldEquals('body_content', draftBodies[requestId], sourceRequest)) return draftBodies;
+  const {[requestId]: _cleanBody, ...remainingBodies} = draftBodies;
+  return remainingBodies;
+}
+
 function headersArrayToObject(headers = []) {
   return headers.reduce((result, header) => {
     if (Array.isArray(header)) {
@@ -402,9 +456,9 @@ export function App() {
   const isRequestDirty = useCallback((requestId) => {
     if (!requestId) return false;
     const request = flattenRequests(collections).find((candidate) => candidate.id === requestId);
+    const bodyDraft = Object.prototype.hasOwnProperty.call(draftBodies, requestId) ? draftBodies[requestId] : undefined;
     return Boolean(
-      Object.prototype.hasOwnProperty.call(requestDrafts, requestId)
-      || Object.prototype.hasOwnProperty.call(draftBodies, requestId)
+      Object.keys(getRequestDirtyFields(requestId, requestDrafts[requestId] || {}, bodyDraft, request)).length
       || isDraftRequestId(requestId)
       || request?.is_draft
     );
@@ -832,27 +886,30 @@ export function App() {
   const parameterRows = useMemo(() => parseQueryParams(editableRequest.url), [editableRequest.url]);
   const headerRows = useMemo(() => headersToGridRows(editableRequest.headers), [editableRequest.headers]);
 
+  const setComparableRequestDraftField = useCallback((requestId, field, value, sourceRequest) => {
+    setRequestDrafts((drafts) => {
+      const nextDraft = {...drafts[requestId]};
+      if (requestFieldEquals(field, value, sourceRequest)) delete nextDraft[field];
+      else nextDraft[field] = value;
+
+      const nextDrafts = Object.keys(nextDraft).length ? {...drafts, [requestId]: nextDraft} : (() => {
+        const {[requestId]: _removedDraft, ...remainingDrafts} = drafts;
+        return remainingDrafts;
+      })();
+      return removeRequestDraftIfClean(nextDrafts, draftBodies, requestId, sourceRequest);
+    });
+    setDraftBodies((drafts) => removeRequestBodyDraftIfClean(drafts, requestId, sourceRequest));
+  }, [draftBodies]);
+
   const handleParameterRowsChange = useCallback((nextRows) => {
     const url = updateUrlQueryParams(editableRequest.url, nextRows);
-    setRequestDrafts((drafts) => ({
-      ...drafts,
-      [activeRequest.id]: {
-        ...drafts[activeRequest.id],
-        url,
-      },
-    }));
-  }, [activeRequest.id, editableRequest.url]);
+    setComparableRequestDraftField(activeRequest.id, 'url', url, activeRequest);
+  }, [activeRequest, editableRequest.url, setComparableRequestDraftField]);
 
   const handleHeaderRowsChange = useCallback((nextRows) => {
     const headers = gridRowsToHeaders(nextRows);
-    setRequestDrafts((drafts) => ({
-      ...drafts,
-      [activeRequest.id]: {
-        ...drafts[activeRequest.id],
-        headers,
-      },
-    }));
-  }, [activeRequest.id]);
+    setComparableRequestDraftField(activeRequest.id, 'headers', headers, activeRequest);
+  }, [activeRequest, setComparableRequestDraftField]);
 
   const selectConfigTab = useCallback((tabId, shouldFocus = false) => {
     setActiveConfigTab(tabId);
@@ -910,14 +967,22 @@ export function App() {
 
 
   const updateRequestDraft = useCallback((field, value) => {
-    setRequestDrafts((drafts) => ({
-      ...drafts,
-      [activeRequest.id]: {
-        ...drafts[activeRequest.id],
-        [field]: value,
-      },
-    }));
-  }, [activeRequest.id]);
+    setComparableRequestDraftField(activeRequest.id, field, value, activeRequest);
+  }, [activeRequest, setComparableRequestDraftField]);
+
+  const updateBodyDraft = useCallback((nextBody) => {
+    setDraftBodies((drafts) => {
+      if (requestFieldEquals('body_content', nextBody, activeRequest)) {
+        const {[activeRequest.id]: _removedBody, ...remainingBodies} = drafts;
+        return remainingBodies;
+      }
+      return {...drafts, [activeRequest.id]: nextBody};
+    });
+    setRequestDrafts((drafts) => removeRequestDraftIfClean(drafts, {
+      ...draftBodies,
+      [activeRequest.id]: nextBody,
+    }, activeRequest.id, activeRequest));
+  }, [activeRequest, draftBodies]);
 
   const saveRequestById = useCallback(async (requestId, {activateSavedDraft = true} = {}) => {
     const request = requests.find((candidate) => candidate.id === requestId);
@@ -1055,19 +1120,34 @@ export function App() {
 
   const restoreSnapshot = useCallback((snapshot) => {
     if (!activeRequest.id) return;
-    setRequestDrafts((drafts) => ({
-      ...drafts,
-      [activeRequest.id]: {
-        ...drafts[activeRequest.id],
-        method: snapshot.method || 'GET',
-        url: snapshot.url || '',
-        headers: snapshot.headers || [],
-        body_raw_type: snapshot.body_raw_type || 'application/json',
-      },
-    }));
-    setDraftBodies((drafts) => ({...drafts, [activeRequest.id]: snapshot.body_content ?? snapshot.body_raw ?? ''}));
+    const restoredDraft = {
+      method: snapshot.method || 'GET',
+      url: snapshot.url || '',
+      headers: snapshot.headers || [],
+      body_raw_type: snapshot.body_raw_type || 'application/json',
+    };
+    const restoredBody = snapshot.body_content ?? snapshot.body_raw ?? '';
+    setRequestDrafts((drafts) => {
+      const nextDraft = {...drafts[activeRequest.id]};
+      Object.entries(restoredDraft).forEach(([field, value]) => {
+        if (requestFieldEquals(field, value, activeRequest)) delete nextDraft[field];
+        else nextDraft[field] = value;
+      });
+      const nextDrafts = Object.keys(nextDraft).length ? {...drafts, [activeRequest.id]: nextDraft} : (() => {
+        const {[activeRequest.id]: _removedDraft, ...remainingDrafts} = drafts;
+        return remainingDrafts;
+      })();
+      return removeRequestDraftIfClean(nextDrafts, {...draftBodies, [activeRequest.id]: restoredBody}, activeRequest.id, activeRequest);
+    });
+    setDraftBodies((drafts) => {
+      if (requestFieldEquals('body_content', restoredBody, activeRequest)) {
+        const {[activeRequest.id]: _removedBody, ...remainingBodies} = drafts;
+        return remainingBodies;
+      }
+      return {...drafts, [activeRequest.id]: restoredBody};
+    });
     selectConfigTab('body');
-  }, [activeRequest.id, selectConfigTab]);
+  }, [activeRequest, draftBodies, selectConfigTab]);
 
   const renameSnapshot = useCallback(async (instanceId, name) => {
     const previous = snapshots;
@@ -1263,7 +1343,7 @@ export function App() {
                 <div className="section-head"><span>Request Body</span></div>
                 <CodeEditor
                   value={requestBody}
-                  onChange={(nextBody) => setDraftBodies((drafts) => ({...drafts, [activeRequest.id]: nextBody}))}
+                  onChange={updateBodyDraft}
                   wordWrap
                   label="Request JSON body editor"
                 />
