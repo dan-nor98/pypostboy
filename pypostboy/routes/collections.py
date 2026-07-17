@@ -5,6 +5,7 @@ import logging
 from django.views.decorators.csrf import csrf_exempt
 
 from db import Collections
+from pypostboy.repositories.collections import DuplicateCollectionNameError
 from pypostboy.auth import require_current_user
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
@@ -19,6 +20,8 @@ def _current_user_id(request):
 
 
 def _status_for_error(err):
+    if isinstance(err, DuplicateCollectionNameError):
+        return 409
     return 404 if 'not found' in str(err).lower() else 400
 
 
