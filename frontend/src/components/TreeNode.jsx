@@ -2,6 +2,23 @@ import React from 'react';
 import {ChevronDown, Folder, GripVertical, MoreHorizontal} from 'lucide-react';
 import {Method} from './Method';
 
+function highlightMatch(text, filterValue) {
+  const value = String(text || '');
+  const normalizedFilter = filterValue.trim().toLowerCase();
+  if (!normalizedFilter) return value;
+
+  const index = value.toLowerCase().indexOf(normalizedFilter);
+  if (index === -1) return value;
+
+  return (
+    <>
+      {value.slice(0, index)}
+      <mark>{value.slice(index, index + normalizedFilter.length)}</mark>
+      {value.slice(index + normalizedFilter.length)}
+    </>
+  );
+}
+
 function MoveControls({label, onMoveUp, onMoveDown}) {
   return (
     <span className="tree-move-controls" aria-label={`${label} reorder controls`}>
@@ -32,7 +49,7 @@ function MoveControls({label, onMoveUp, onMoveDown}) {
   );
 }
 
-export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollection, tabIndex, onFocus, onMoveCollection, onMoveRequest, onCollectionActions, onRequestActions}) {
+export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollection, tabIndex, onFocus, onMoveCollection, onMoveRequest, onCollectionActions, onRequestActions, filterValue = ''}) {
   if (item.type === 'collection') {
     return (
       <div
@@ -47,7 +64,7 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
       >
         <ChevronDown size={13} className={item.expanded ? '' : 'collapsed'} />
         <Folder size={14} />
-        <span className="truncate">{item.node.name}</span>
+        <span className="truncate">{highlightMatch(item.node.name, filterValue)}</span>
         <span className="tree-row-actions">
           <button
             className="tree-action-button"
@@ -85,7 +102,7 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
     >
       <span />
       <Method m={request.method} />
-      <span className="truncate">{request.name}</span>
+      <span className="truncate">{highlightMatch(request.name, filterValue)}</span>
       {request.id === activeRequestId && <span className="dirty">●</span>}
       <span className="tree-row-actions">
         <button
