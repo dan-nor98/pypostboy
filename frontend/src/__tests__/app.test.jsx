@@ -327,6 +327,49 @@ describe('App shell', () => {
     expect(root).toHaveAttribute('aria-expanded', 'true');
   });
 
+  test('keeps a collapsed collection collapsed after collections refresh', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const root = await screen.findByRole('treeitem', {name: /smoke tests/i});
+    await waitFor(() => expect(root).toHaveAttribute('aria-expanded', 'true'));
+
+    await user.click(root);
+    expect(root).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('treeitem', {name: /health check/i})).not.toBeInTheDocument();
+
+    apiClient.listCollections.mockResolvedValueOnce([
+      ...testCollections,
+      {id: 'collection-new', name: 'New Collection', requests: [], children: []},
+    ]);
+    await user.click(screen.getByRole('button', {name: /^create collection$/i}));
+    await user.type(screen.getByRole('textbox', {name: /collection name/i}), 'New Collection');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    await waitFor(() => expect(apiClient.createCollection).toHaveBeenCalledWith({name: 'New Collection'}));
+    expect(screen.getByRole('treeitem', {name: /smoke tests/i})).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('treeitem', {name: /health check/i})).not.toBeInTheDocument();
+    expect(screen.getByRole('treeitem', {name: /new collection/i})).toBeInTheDocument();
+  });
+
+  test('restores persisted collection expansion state after remount', async () => {
+    const user = userEvent.setup();
+    const {unmount} = renderApp();
+
+    const root = await screen.findByRole('treeitem', {name: /smoke tests/i});
+    await waitFor(() => expect(root).toHaveAttribute('aria-expanded', 'true'));
+
+    await user.click(root);
+    expect(localStorage.getItem('pypostboy.collections.expandedIds')).toBe(JSON.stringify(['collection-collection-2']));
+    unmount();
+
+    renderApp();
+
+    const remountedRoot = await screen.findByRole('treeitem', {name: /smoke tests/i});
+    expect(remountedRoot).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('treeitem', {name: /health check/i})).not.toBeInTheDocument();
+  });
+
   test('filters collections by request, folder, collection, and method matches', async () => {
     const user = userEvent.setup();
     renderApp();

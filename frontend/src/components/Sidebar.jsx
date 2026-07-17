@@ -3,6 +3,29 @@ import {AlertTriangle, MoreHorizontal, Plus, Search} from 'lucide-react';
 import {IconButton} from './IconButton';
 import {TreeNode} from './TreeNode';
 
+const COLLECTION_EXPANSION_STORAGE_KEY = 'pypostboy.collections.expandedIds';
+const DEFAULT_COLLECTIONS_EXPANDED = true;
+
+function storageAvailable() {
+  return typeof localStorage !== 'undefined';
+}
+
+function readStoredExpandedIds() {
+  if (!storageAvailable()) return null;
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(COLLECTION_EXPANSION_STORAGE_KEY));
+    return Array.isArray(stored) ? new Set(stored.filter((id) => typeof id === 'string')) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredExpandedIds(expandedIds) {
+  if (!storageAvailable()) return;
+  localStorage.setItem(COLLECTION_EXPANSION_STORAGE_KEY, JSON.stringify([...expandedIds]));
+}
+
 function collectVisibleItems(nodes, expandedIds, depth = 0, parentId = null) {
   return nodes.flatMap((node) => {
     const nodeId = `collection-${node.id}`;
@@ -70,7 +93,10 @@ function filterCollections(collections, filterValue) {
 
 export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection, onExportCollection, onCopyRequestCurl}) {
   const treeRef = useRef(null);
-  const [expandedIds, setExpandedIds] = useState(() => new Set());
+  const initialExpandedIdsRef = useRef(readStoredExpandedIds());
+  const knownCollectionIdsRef = useRef(null);
+  const restoringStoredExpansionRef = useRef(Boolean(initialExpandedIdsRef.current));
+  const [expandedIds, setExpandedIds] = useState(() => initialExpandedIdsRef.current || new Set());
   const [focusedItemId, setFocusedItemId] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [formValue, setFormValue] = useState('');
@@ -85,9 +111,25 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
   const collectionOptions = useMemo(() => flattenCollectionOptions(collections), [collections]);
 
   useEffect(() => {
+    const nextCollectionIds = collectionIds(collections);
+    if (restoringStoredExpansionRef.current) {
+      if (nextCollectionIds.length === 0) return;
+      knownCollectionIdsRef.current = new Set(nextCollectionIds);
+      restoringStoredExpansionRef.current = false;
+      return;
+    }
+
+    const knownCollectionIds = knownCollectionIdsRef.current;
+    knownCollectionIdsRef.current = new Set(nextCollectionIds);
+
+    if (!DEFAULT_COLLECTIONS_EXPANDED) return;
+
     setExpandedIds((current) => {
       const next = new Set(current);
-      for (const id of collectionIds(collections)) next.add(id);
+      const idsToExpand = knownCollectionIds === null
+        ? nextCollectionIds
+        : nextCollectionIds.filter((id) => !knownCollectionIds.has(id));
+      for (const id of idsToExpand) next.add(id);
       return next;
     });
   }, [collections]);
@@ -145,6 +187,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
       const next = new Set(current);
       if (expanded) next.add(id);
       else next.delete(id);
+      writeStoredExpandedIds(next);
       return next;
     });
   };
