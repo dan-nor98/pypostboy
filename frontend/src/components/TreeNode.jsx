@@ -50,6 +50,19 @@ function MoveControls({label, onMoveUp, onMoveDown}) {
 }
 
 export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollection, tabIndex, onFocus, onMoveCollection, onMoveRequest, onCollectionActions, onRequestActions, filterValue = ''}) {
+  if (item.type === 'empty') {
+    return (
+      <div
+        className="tree-row tree-empty"
+        role="presentation"
+        style={{'--depth': item.depth}}
+      >
+        <span />
+        <span className="truncate">No requests or folders</span>
+      </div>
+    );
+  }
+
   if (item.type === 'collection') {
     return (
       <div
