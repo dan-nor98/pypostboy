@@ -437,6 +437,7 @@ export function App() {
   const [requestLoadErrors, setRequestLoadErrors] = useState({});
   const [savingRequest, setSavingRequest] = useState(false);
   const [pendingDirtyCloseRequestId, setPendingDirtyCloseRequestId] = useState(null);
+  const [pendingDirtyAction, setPendingDirtyAction] = useState(null);
   const [snapshots, setSnapshots] = useState([]);
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [snapshotsError, setSnapshotsError] = useState('');
@@ -464,10 +465,24 @@ export function App() {
     );
   }, [collections, draftBodies, requestDrafts]);
   const dirtyRequestIds = useMemo(() => openRequestIds.filter(isRequestDirty), [isRequestDirty, openRequestIds]);
+  const hasDirtyRequests = dirtyRequestIds.length > 0;
 
   useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
   useEffect(() => { localStorage.setItem(PANEL_SPLIT_STORAGE_KEY, String(responsePaneRatio)); }, [responsePaneRatio]);
   useEffect(() => { localStorage.setItem('pypostboy.activeEnvironment', activeEnvironmentId); }, [activeEnvironmentId]);
+
+  useEffect(() => {
+    if (!hasDirtyRequests) return undefined;
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasDirtyRequests]);
 
   useEffect(() => {
     let cancelled = false;
@@ -570,7 +585,7 @@ export function App() {
     refreshCollections();
   }, [refreshCollections]);
 
-  const handleLogout = useCallback(async () => {
+  const executeLogout = useCallback(async () => {
     try {
       await apiClient.logout?.();
       const user = await apiClient.currentUser?.();
@@ -1061,6 +1076,49 @@ export function App() {
     closeRequestTabImmediately(requestId, [savedRequest.id]);
   }, [closeRequestTabImmediately, pendingDirtyCloseRequestId, saveRequestById]);
 
+  const runPendingDirtyAction = useCallback((action) => {
+    if (!action) return;
+    if (action.type === 'logout') executeLogout();
+    if (action.type === 'select-environment') setActiveEnvironmentId(action.environmentId);
+  }, [executeLogout]);
+
+  const requestDirtyAction = useCallback((action) => {
+    if (hasDirtyRequests) {
+      setPendingDirtyAction(action);
+      return;
+    }
+    runPendingDirtyAction(action);
+  }, [hasDirtyRequests, runPendingDirtyAction]);
+
+  const handleLogout = useCallback(() => requestDirtyAction({type: 'logout'}), [requestDirtyAction]);
+
+  const handleSelectEnvironment = useCallback((environmentId) => {
+    if (!environmentId || environmentId === activeEnvironmentId) return;
+    requestDirtyAction({type: 'select-environment', environmentId});
+  }, [activeEnvironmentId, requestDirtyAction]);
+
+  const cancelDirtyAction = useCallback(() => setPendingDirtyAction(null), []);
+
+  const discardDirtyAction = useCallback(() => {
+    const action = pendingDirtyAction;
+    if (!action) return;
+    setRequestDrafts({});
+    setDraftBodies({});
+    setPendingDirtyAction(null);
+    runPendingDirtyAction(action);
+  }, [pendingDirtyAction, runPendingDirtyAction]);
+
+  const saveDirtyAction = useCallback(async () => {
+    const action = pendingDirtyAction;
+    if (!action) return;
+    for (const requestId of dirtyRequestIds) {
+      const savedRequest = await saveRequestById(requestId, {activateSavedDraft: false});
+      if (!savedRequest) return;
+    }
+    setPendingDirtyAction(null);
+    runPendingDirtyAction(action);
+  }, [dirtyRequestIds, pendingDirtyAction, runPendingDirtyAction, saveRequestById]);
+
 
   useEffect(() => {
     if (!activeRequest.id || isDraftRequestId(activeRequest.id) || activeRequest.is_draft) {
@@ -1224,7 +1282,7 @@ export function App() {
           <EnvironmentPanel
             environments={environments}
             activeEnvironmentId={activeEnvironment.id}
-            onSelectEnvironment={setActiveEnvironmentId}
+            onSelectEnvironment={handleSelectEnvironment}
             onUpdateEnvironment={updateEnvironment}
           />
         ) : (
@@ -1409,6 +1467,21 @@ export function App() {
                 <button className="button button-primary" type="button" onClick={saveDirtyClose} disabled={savingRequest}>{savingRequest ? 'Saving…' : 'Save'}</button>
                 <button className="button" type="button" onClick={discardDirtyClose} disabled={savingRequest}>Discard</button>
                 <button className="button" type="button" onClick={cancelDirtyClose} disabled={savingRequest}>Cancel</button>
+              </div>
+            </form>
+          </dialog>
+        </div>
+      )}
+      {pendingDirtyAction && (
+        <div className="modal-backdrop" onClick={cancelDirtyAction}>
+          <dialog open className="import-dialog" aria-modal="true" aria-label="Unsaved request changes" onClick={(event) => event.stopPropagation()}>
+            <form method="dialog" onSubmit={(event) => event.preventDefault()}>
+              <div className="section-head"><span>Unsaved changes</span><button type="button" onClick={cancelDirtyAction}>Close</button></div>
+              <p role="alert">Save or discard open request changes before changing context.</p>
+              <div className="dialog-actions">
+                <button className="button button-primary" type="button" onClick={saveDirtyAction} disabled={savingRequest}>{savingRequest ? 'Saving…' : 'Save'}</button>
+                <button className="button" type="button" onClick={discardDirtyAction} disabled={savingRequest}>Discard</button>
+                <button className="button" type="button" onClick={cancelDirtyAction} disabled={savingRequest}>Cancel</button>
               </div>
             </form>
           </dialog>
