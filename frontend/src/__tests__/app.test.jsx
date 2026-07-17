@@ -276,6 +276,74 @@ describe('App shell', () => {
   });
 
 
+  test('closes an inactive request tab without selecting it or deleting it on the backend', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+    expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true');
+
+    await user.click(screen.getByRole('button', {name: /close health check/i}));
+
+    expect(screen.queryByRole('tab', {name: /^health check$/i})).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true');
+    expect(apiClient.deleteRequest).not.toHaveBeenCalled();
+  });
+
+  test('closes the active request tab and activates the next adjacent tab', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+    await user.click(screen.getByRole('tab', {name: /health check/i}));
+    await user.click(screen.getByRole('button', {name: /close health check/i}));
+
+    expect(screen.queryByRole('tab', {name: /^health check$/i})).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true');
+    expect(apiClient.deleteRequest).not.toHaveBeenCalled();
+  });
+
+  test('closes the active request tab and falls back to the previous adjacent tab', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+    await user.click(screen.getByRole('treeitem', {name: /post create widget/i}));
+    await user.click(screen.getByRole('button', {name: /close create widget/i}));
+
+    expect(screen.queryByRole('tab', {name: /^create widget$/i})).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true');
+    expect(apiClient.deleteRequest).not.toHaveBeenCalled();
+  });
+
+  test('closes the focused active request tab from the keyboard', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+    const statusTab = screen.getByRole('tab', {name: /status check/i});
+    statusTab.focus();
+
+    await user.keyboard('{Control>}w{/Control}');
+
+    expect(screen.queryByRole('tab', {name: /^status check$/i})).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: /health check/i})).toHaveAttribute('aria-selected', 'true');
+    expect(apiClient.deleteRequest).not.toHaveBeenCalled();
+  });
+
+
+  test('clears the active request when closing the only open tab', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /close health check/i}));
+
+    expect(screen.queryByRole('tablist', {name: /open requests/i})).not.toBeInTheDocument();
+    expect(screen.getByText(/no requests available/i)).toBeInTheDocument();
+    expect(apiClient.deleteRequest).not.toHaveBeenCalled();
+  });
+
+
   test('opens a sidebar request by loading full details without sending it', async () => {
     const user = userEvent.setup();
     const partialCollections = [

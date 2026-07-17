@@ -738,6 +738,21 @@ export function App() {
     }
   }, [collections, requestDetails]);
 
+
+  const closeRequestTab = useCallback((requestId) => {
+    if (!requestId) return;
+    setOpenRequestIds((currentIds) => {
+      const closedIndex = currentIds.indexOf(requestId);
+      if (closedIndex === -1) return currentIds;
+
+      const nextIds = currentIds.filter((openRequestId) => openRequestId !== requestId);
+      if (requestId === activeRequestId) {
+        setActiveRequestId(nextIds[closedIndex] || nextIds[closedIndex - 1] || null);
+      }
+      return nextIds;
+    });
+  }, [activeRequestId]);
+
   const requests = useMemo(() => flattenRequests(collections).map((request) => {
     const detail = requestDetails[request.id]?.data;
     if (!detail) return request;
@@ -750,14 +765,12 @@ export function App() {
   useEffect(() => {
     const availableRequestIds = requests.map((request) => request.id);
     setOpenRequestIds((currentIds) => {
-      const retainedIds = currentIds.filter((requestId) => availableRequestIds.includes(requestId));
-      const nextIds = retainedIds.length || !availableRequestIds[0] ? retainedIds : [availableRequestIds[0]];
+      const nextIds = currentIds.filter((requestId) => availableRequestIds.includes(requestId));
       return nextIds.length === currentIds.length && nextIds.every((requestId, index) => requestId === currentIds[index]) ? currentIds : nextIds;
     });
     setActiveRequestId((currentId) => {
-      if (currentId && availableRequestIds.includes(currentId)) return currentId;
-      const firstOpenRequestId = openRequestIds.find((requestId) => availableRequestIds.includes(requestId));
-      return firstOpenRequestId || availableRequestIds[0] || null;
+      if (currentId && availableRequestIds.includes(currentId) && openRequestIds.includes(currentId)) return currentId;
+      return openRequestIds.find((requestId) => availableRequestIds.includes(requestId)) || null;
     });
   }, [openRequestIds, requests]);
 
@@ -1110,7 +1123,7 @@ export function App() {
           ref={mainPanelRef}
           style={{gridTemplateRows: `34px minmax(240px, ${100 - responsePaneRatio}fr) 5px minmax(220px, ${responsePaneRatio}fr)`}}
         >
-          <RequestTabs requests={openedRequests} activeRequestId={activeRequest.id} dirtyRequestIds={dirtyRequestIds} onSelectRequest={openRequest} loading={collectionsLoading} error={collectionsError} />
+          <RequestTabs requests={openedRequests} activeRequestId={activeRequest.id} dirtyRequestIds={dirtyRequestIds} onSelectRequest={openRequest} onCloseRequest={closeRequestTab} loading={collectionsLoading} error={collectionsError} />
           <div
             id={requestPanelId(activeRequest.id)}
             role="tabpanel"
