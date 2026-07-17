@@ -499,6 +499,76 @@ describe('App shell', () => {
     expect(within(tree).queryByRole('button', {name: /no requests or folders/i})).not.toBeInTheDocument();
   });
 
+  test('closes collection action menus with Escape without calling mutation APIs', async () => {
+    const user = userEvent.setup();
+    const mutationCallbacks = {
+      onCreateCollection: vi.fn(),
+      onCreateRequest: vi.fn(),
+      onRenameCollection: vi.fn(),
+      onDuplicateCollection: vi.fn(),
+      onDeleteCollection: vi.fn(),
+      onExportCollection: vi.fn(),
+    };
+
+    render(<Sidebar collections={testCollections} {...mutationCallbacks} />);
+
+    await user.click(screen.getByRole('button', {name: /actions for collection smoke tests/i}));
+    expect(screen.getByRole('dialog', {name: /actions for smoke tests/i})).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', {name: /actions for smoke tests/i})).not.toBeInTheDocument();
+    for (const callback of Object.values(mutationCallbacks)) {
+      expect(callback).not.toHaveBeenCalled();
+    }
+  });
+
+  test('closes request action menus with Escape without calling mutation APIs', async () => {
+    const user = userEvent.setup();
+    const mutationCallbacks = {
+      onDuplicateRequest: vi.fn(),
+      onDeleteRequest: vi.fn(),
+      onMoveRequestToCollection: vi.fn(),
+      onCopyRequestCurl: vi.fn(),
+    };
+
+    render(<Sidebar collections={testCollections} {...mutationCallbacks} />);
+
+    await user.click(screen.getByRole('button', {name: /actions for request health check/i}));
+    expect(screen.getByRole('dialog', {name: /actions for health check/i})).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', {name: /actions for health check/i})).not.toBeInTheDocument();
+    for (const callback of Object.values(mutationCallbacks)) {
+      expect(callback).not.toHaveBeenCalled();
+    }
+  });
+
+  test('closes request confirmation dialogs with Escape without calling mutation APIs', async () => {
+    const user = userEvent.setup();
+    const mutationCallbacks = {
+      onDuplicateRequest: vi.fn(),
+      onDeleteRequest: vi.fn(),
+      onMoveRequestToCollection: vi.fn(),
+      onCopyRequestCurl: vi.fn(),
+    };
+
+    render(<Sidebar collections={testCollections} {...mutationCallbacks} />);
+
+    await user.click(screen.getByRole('button', {name: /actions for request health check/i}));
+    await user.click(screen.getByRole('button', {name: /delete request/i}));
+    expect(screen.getByRole('dialog', {name: /delete health check/i})).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', {name: /delete health check/i})).not.toBeInTheDocument();
+    for (const callback of Object.values(mutationCallbacks)) {
+      expect(callback).not.toHaveBeenCalled();
+    }
+  });
+
+
   test('keeps a collapsed collection collapsed after collections refresh', async () => {
     const user = userEvent.setup();
     renderApp();
