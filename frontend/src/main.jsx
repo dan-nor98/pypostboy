@@ -374,6 +374,7 @@ export function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [activeRequestId, setActiveRequestId] = useState(null);
+  const [openRequestIds, setOpenRequestIds] = useState([]);
   const [proxyResult, setProxyResult] = useState(null);
   const [proxyError, setProxyError] = useState('');
   const [draftBodies, setDraftBodies] = useState({});
@@ -471,7 +472,13 @@ export function App() {
           return details;
         }, {});
       });
-      const nextRequestId = preferredRequestId || activeRequestId || flattenRequests(data)[0]?.id || null;
+      const refreshedRequestIds = flattenRequests(data).map((request) => request.id);
+      const nextRequestId = preferredRequestId || (activeRequestId && refreshedRequestIds.includes(activeRequestId) ? activeRequestId : refreshedRequestIds[0]) || null;
+      setOpenRequestIds((currentIds) => {
+        const retainedIds = currentIds.filter((requestId) => refreshedRequestIds.includes(requestId));
+        const nextIds = nextRequestId && !retainedIds.includes(nextRequestId) ? [...retainedIds, nextRequestId] : retainedIds;
+        return nextIds.length === currentIds.length && nextIds.every((requestId, index) => requestId === currentIds[index]) ? currentIds : nextIds;
+      });
       setActiveRequestId(nextRequestId);
       return data;
     } catch (error) {
@@ -599,6 +606,7 @@ export function App() {
 
     setCollectionsError('');
     setCollections((currentCollections) => addRequestToCollection(currentCollections, destinationCollection.id, draftRequest));
+    setOpenRequestIds((currentIds) => (currentIds.includes(draftRequest.id) ? currentIds : [...currentIds, draftRequest.id]));
     setRequestDrafts((drafts) => ({...drafts, [draftRequest.id]: {name: draftRequest.name, method: draftRequest.method}}));
     setDraftBodies((drafts) => ({...drafts, [draftRequest.id]: draftRequest.body_content}));
     setActiveRequestId(draftRequest.id);
@@ -632,7 +640,10 @@ export function App() {
     const refreshedCollections = await refreshCollections();
     const refreshedCollection = findCollectionById(refreshedCollections || [], importedCollection?.id);
     const importedRequest = firstRequestInCollection(refreshedCollection || importedCollection);
-    if (importedRequest?.id) setActiveRequestId(importedRequest.id);
+    if (importedRequest?.id) {
+      setOpenRequestIds((currentIds) => (currentIds.includes(importedRequest.id) ? currentIds : [...currentIds, importedRequest.id]));
+      setActiveRequestId(importedRequest.id);
+    }
   }, [refreshCollections]);
 
   const closePalette = useCallback(() => {
@@ -676,7 +687,9 @@ export function App() {
               return details;
             }, {});
           });
-          setActiveRequestId((current) => current || flattenRequests(data)[0]?.id || null);
+          const firstRequestId = flattenRequests(data)[0]?.id || null;
+          setOpenRequestIds((currentIds) => (currentIds.length || !firstRequestId ? currentIds : [firstRequestId]));
+          setActiveRequestId((current) => current || firstRequestId);
         }
       } catch (error) {
         if (!cancelled) setCollectionsError(error.message);
@@ -692,6 +705,7 @@ export function App() {
   const openRequest = useCallback(async (requestId) => {
     if (!requestId) return;
 
+    setOpenRequestIds((currentIds) => (currentIds.includes(requestId) ? currentIds : [...currentIds, requestId]));
     setActiveRequestId(requestId);
     setRequestLoadErrors((errors) => {
       if (!errors[requestId]) return errors;
@@ -729,7 +743,25 @@ export function App() {
     if (!detail) return request;
     return {...request, ...detail, collection_id: detail.collection_id ?? request.collection_id};
   }), [collections, requestDetails]);
-  const activeRequest = requests.find((request) => request.id === activeRequestId) || requests[0] || defaultRequest;
+  const openedRequests = useMemo(() => openRequestIds
+    .map((requestId) => requests.find((request) => request.id === requestId))
+    .filter(Boolean), [openRequestIds, requests]);
+
+  useEffect(() => {
+    const availableRequestIds = requests.map((request) => request.id);
+    setOpenRequestIds((currentIds) => {
+      const retainedIds = currentIds.filter((requestId) => availableRequestIds.includes(requestId));
+      const nextIds = retainedIds.length || !availableRequestIds[0] ? retainedIds : [availableRequestIds[0]];
+      return nextIds.length === currentIds.length && nextIds.every((requestId, index) => requestId === currentIds[index]) ? currentIds : nextIds;
+    });
+    setActiveRequestId((currentId) => {
+      if (currentId && availableRequestIds.includes(currentId)) return currentId;
+      const firstOpenRequestId = openRequestIds.find((requestId) => availableRequestIds.includes(requestId));
+      return firstOpenRequestId || availableRequestIds[0] || null;
+    });
+  }, [openRequestIds, requests]);
+
+  const activeRequest = requests.find((request) => request.id === activeRequestId) || openedRequests[0] || defaultRequest;
   const activeRequestDraft = requestDrafts[activeRequest.id] || {};
   const editableRequest = {
     ...activeRequest,
@@ -875,7 +907,10 @@ export function App() {
       setCollections((currentCollections) => (saveDraft
         ? replaceRequestInCollections(currentCollections, activeRequest.id, nextRequest)
         : updateRequestInCollections(currentCollections, activeRequest.id, nextRequest)));
-      if (saveDraft && nextRequest.id) setActiveRequestId(nextRequest.id);
+      if (saveDraft && nextRequest.id) {
+        setOpenRequestIds((currentIds) => currentIds.map((requestId) => (requestId === activeRequest.id ? nextRequest.id : requestId)));
+        setActiveRequestId(nextRequest.id);
+      }
       setRequestDrafts((drafts) => {
         const {[activeRequest.id]: _savedDraft, ...remainingDrafts} = drafts;
         return remainingDrafts;
@@ -1075,7 +1110,7 @@ export function App() {
           ref={mainPanelRef}
           style={{gridTemplateRows: `34px minmax(240px, ${100 - responsePaneRatio}fr) 5px minmax(220px, ${responsePaneRatio}fr)`}}
         >
-          <RequestTabs requests={requests} activeRequestId={activeRequest.id} dirtyRequestIds={dirtyRequestIds} onSelectRequest={openRequest} loading={collectionsLoading} error={collectionsError} />
+          <RequestTabs requests={openedRequests} activeRequestId={activeRequest.id} dirtyRequestIds={dirtyRequestIds} onSelectRequest={openRequest} loading={collectionsLoading} error={collectionsError} />
           <div
             id={requestPanelId(activeRequest.id)}
             role="tabpanel"
