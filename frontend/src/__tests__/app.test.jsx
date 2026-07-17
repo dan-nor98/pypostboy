@@ -327,6 +327,57 @@ describe('App shell', () => {
     expect(root).toHaveAttribute('aria-expanded', 'true');
   });
 
+  test('filters collections by request, folder, collection, and method matches', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const filter = await screen.findByPlaceholderText(/filter collections/i);
+    const tree = screen.getByRole('tree', {name: /collections/i});
+
+    await user.type(filter, 'widget');
+    expect(within(tree).getByRole('treeitem', {name: /smoke tests/i})).toBeInTheDocument();
+    expect(within(tree).getByRole('treeitem', {name: /nested/i})).toBeInTheDocument();
+    expect(within(tree).getByRole('treeitem', {name: /create widget/i})).toBeInTheDocument();
+    expect(within(tree).queryByRole('treeitem', {name: /health check/i})).not.toBeInTheDocument();
+    expect(within(tree).queryByRole('treeitem', {name: /regression tests/i})).not.toBeInTheDocument();
+    expect(within(tree).getByText('Widget').tagName).toBe('MARK');
+
+    await user.clear(filter);
+    await user.type(filter, 'nested');
+    expect(within(tree).getByRole('treeitem', {name: /smoke tests/i})).toBeInTheDocument();
+    expect(within(tree).getByRole('treeitem', {name: /nested/i})).toBeInTheDocument();
+    expect(within(tree).getByRole('treeitem', {name: /create widget/i})).toBeInTheDocument();
+
+    await user.clear(filter);
+    await user.type(filter, 'regression');
+    expect(within(tree).getByRole('treeitem', {name: /regression tests/i})).toBeInTheDocument();
+    expect(within(tree).queryByRole('treeitem', {name: /smoke tests/i})).not.toBeInTheDocument();
+
+    await user.clear(filter);
+    await user.type(filter, 'post');
+    expect(within(tree).getByRole('treeitem', {name: /smoke tests/i})).toBeInTheDocument();
+    expect(within(tree).getByRole('treeitem', {name: /nested/i})).toBeInTheDocument();
+    expect(within(tree).getByRole('treeitem', {name: /create widget/i})).toBeInTheDocument();
+    expect(within(tree).queryByRole('treeitem', {name: /health check/i})).not.toBeInTheDocument();
+  });
+
+  test('clears the collection filter and shows a no-results state when nothing matches', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const filter = await screen.findByPlaceholderText(/filter collections/i);
+    await user.type(filter, 'nothing matches this tree');
+
+    expect(screen.getByText(/no matching collections or requests/i)).toBeInTheDocument();
+    expect(screen.queryByRole('treeitem', {name: /smoke tests/i})).not.toBeInTheDocument();
+
+    await user.clear(filter);
+    expect(screen.queryByText(/no matching collections or requests/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('treeitem', {name: /smoke tests/i})).toBeInTheDocument();
+    expect(screen.getByRole('treeitem', {name: /health check/i})).toBeInTheDocument();
+    expect(screen.getByRole('treeitem', {name: /regression tests/i})).toBeInTheDocument();
+  });
+
   test('reorders sibling collections optimistically', async () => {
     const user = userEvent.setup();
     renderApp();

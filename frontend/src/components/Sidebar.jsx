@@ -21,8 +21,42 @@ function collectVisibleItems(nodes, expandedIds, depth = 0, parentId = null) {
   });
 }
 
+
 function collectionIds(nodes) {
   return nodes.flatMap((node) => [`collection-${node.id}`, ...collectionIds(node.children || [])]);
+}
+
+function normalizeFilter(value) {
+  return value.trim().toLowerCase();
+}
+
+function requestMatchesFilter(request, normalizedFilter) {
+  return [request.name, request.method].some((value) => String(value || '').toLowerCase().includes(normalizedFilter));
+}
+
+function collectionMatchesFilter(collection, normalizedFilter) {
+  return String(collection.name || '').toLowerCase().includes(normalizedFilter);
+}
+
+function filterCollections(collections, filterValue) {
+  const normalizedFilter = normalizeFilter(filterValue);
+  if (!normalizedFilter) return collections;
+
+  return collections.flatMap((collection) => {
+    const matchingRequests = (collection.requests || []).filter((request) => requestMatchesFilter(request, normalizedFilter));
+    const matchingChildren = filterCollections(collection.children || [], filterValue);
+    const matched = collectionMatchesFilter(collection, normalizedFilter);
+
+    if (!matched && matchingRequests.length === 0 && matchingChildren.length === 0) return [];
+
+    return [{
+      ...collection,
+      requests: matched ? [...(collection.requests || [])] : matchingRequests,
+      children: matchingChildren,
+      filterMatched: matched,
+      filterValue,
+    }];
+  });
 }
 
 export function Sidebar({collections = [], loading = false, error = '', activeRequestId, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection, onExportCollection, onCopyRequestCurl}) {
@@ -32,8 +66,12 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
   const [dialog, setDialog] = useState(null);
   const [formValue, setFormValue] = useState('');
   const [targetCollectionId, setTargetCollectionId] = useState('');
+  const [filterValue, setFilterValue] = useState('');
 
-  const visibleItems = useMemo(() => collectVisibleItems(collections, expandedIds), [collections, expandedIds]);
+  const normalizedFilter = normalizeFilter(filterValue);
+  const filteredCollections = useMemo(() => filterCollections(collections, filterValue), [collections, filterValue]);
+  const visibleExpandedIds = useMemo(() => (normalizedFilter ? new Set(collectionIds(filteredCollections)) : expandedIds), [expandedIds, filteredCollections, normalizedFilter]);
+  const visibleItems = useMemo(() => collectVisibleItems(filteredCollections, visibleExpandedIds), [filteredCollections, visibleExpandedIds]);
   const collectionOptions = useMemo(() => visibleItems.filter((item) => item.type === 'collection').map((item) => ({id: item.rawId, name: `${'— '.repeat(item.depth)}${item.node.name}`})), [visibleItems]);
 
   useEffect(() => {
@@ -129,12 +167,13 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
         <IconButton label="Create collection" onClick={() => openDialog({action: 'createCollection', title: 'Create collection', label: 'Collection name'})}><Plus size={15} /></IconButton>
         <IconButton label="Create request" onClick={() => openDialog({action: 'createRequest', kind: 'createRequest', title: 'Create request', label: 'Request name'})}><MoreHorizontal size={15} /></IconButton>
       </div>
-      <div className="filter"><Search size={14} /><input placeholder="Filter collections" /></div>
+      <div className="filter"><Search size={14} /><input placeholder="Filter collections" value={filterValue} onChange={(event) => setFilterValue(event.target.value)} /></div>
       {error && <div className="banner error"><AlertTriangle size={14} /> {error}</div>}
       {!error && <div className="banner"><AlertTriangle size={14} /> Data synced from local API</div>}
       <div role="tree" aria-label="Collections" className="tree" ref={treeRef} onKeyDown={handleKeyDown}>
         {loading && <div className="empty-state">Loading collections…</div>}
         {!loading && !error && collections.length === 0 && <div className="empty-state">No collections yet.</div>}
+        {!loading && !error && normalizedFilter && visibleItems.length === 0 && <div className="empty-state">No matching collections or requests.</div>}
         {!loading && visibleItems.map((item) => (
           <TreeNode
             item={item}
@@ -148,6 +187,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
             onMoveRequest={onMoveRequest}
             onCollectionActions={openCollectionActions}
             onRequestActions={openRequestActions}
+            filterValue={filterValue}
           />
         ))}
       </div>
