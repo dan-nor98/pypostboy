@@ -32,6 +32,9 @@ vi.mock('../api/client', () => ({
     exportRequestCurl: vi.fn(),
     reorderCollections: vi.fn(),
     reorderRequests: vi.fn(),
+    getCsrf: vi.fn(),
+    currentUser: vi.fn(),
+    logout: vi.fn(),
   },
 }));
 
@@ -145,6 +148,9 @@ function renderApp(collections = testCollections) {
   apiClient.exportRequestCurl.mockResolvedValue({curl: 'curl https://example.test/health'});
   apiClient.reorderCollections.mockResolvedValue({});
   apiClient.reorderRequests.mockResolvedValue({});
+  apiClient.getCsrf.mockResolvedValue({});
+  apiClient.currentUser.mockResolvedValue({is_guest: false, username: 'tester'});
+  apiClient.logout.mockResolvedValue({});
   apiClient.proxyRequest.mockResolvedValue({
     status: 200,
     statusText: 'OK',
@@ -405,6 +411,48 @@ describe('App shell', () => {
     expect(apiClient.updateRequest).not.toHaveBeenCalled();
   });
 
+
+  test('registers beforeunload only while open requests have dirty changes', async () => {
+    const user = userEvent.setup();
+    const addBeforeUnload = vi.spyOn(window, 'addEventListener');
+    const removeBeforeUnload = vi.spyOn(window, 'removeEventListener');
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+    expect(addBeforeUnload).not.toHaveBeenCalledWith('beforeunload', expect.any(Function));
+
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health?dirty=true');
+
+    await waitFor(() => expect(addBeforeUnload).toHaveBeenCalledWith('beforeunload', expect.any(Function)));
+    const beforeUnloadHandler = addBeforeUnload.mock.calls.find(([eventName]) => eventName === 'beforeunload')[1];
+    const event = new Event('beforeunload', {cancelable: true});
+    beforeUnloadHandler(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(event.returnValue).toBe(false);
+
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health');
+
+    await waitFor(() => expect(removeBeforeUnload).toHaveBeenCalledWith('beforeunload', beforeUnloadHandler));
+  });
+
+  test('cancels logout when dirty requests exist', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('button', {name: /logout/i})).toBeInTheDocument());
+    await user.type(screen.getByRole('textbox', {name: /request url/i}), '/logout-cancelled');
+    await user.click(screen.getByRole('button', {name: /logout/i}));
+
+    expect(screen.getByRole('dialog', {name: /unsaved request changes/i})).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog', {name: /unsaved request changes/i})).getByRole('button', {name: /^cancel$/i}));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', {name: /unsaved request changes/i})).not.toBeInTheDocument());
+    expect(apiClient.logout).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health/logout-cancelled');
+  });
 
   test('removes the unsaved indicator when an edited URL is reverted', async () => {
     const user = userEvent.setup();
