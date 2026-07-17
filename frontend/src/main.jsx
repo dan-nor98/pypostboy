@@ -30,6 +30,28 @@ const DEFAULT_RESPONSE_PANE_RATIO = 40;
 const MIN_RESPONSE_PANE_RATIO = 25;
 const MAX_RESPONSE_PANE_RATIO = 75;
 const PANEL_SPLIT_KEYBOARD_STEP = 5;
+const BODY_TYPES = [
+  {value: 'application/json', label: 'JSON'},
+  {value: 'text/plain', label: 'Raw'},
+];
+
+function bodyTypeLabel(value) {
+  return BODY_TYPES.find((type) => type.value === value)?.label || value || 'Raw';
+}
+
+function isJsonBodyType(value) {
+  return String(value || '').toLowerCase().includes('json');
+}
+
+function validateJsonBody(body, bodyType) {
+  if (!isJsonBodyType(bodyType) || !String(body || '').trim()) return '';
+  try {
+    JSON.parse(body);
+    return '';
+  } catch (error) {
+    return `Body is not valid JSON: ${error.message}`;
+  }
+}
 
 function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -1115,6 +1137,7 @@ export function App() {
   };
   const requestBody = draftBodies[activeRequest.id] ?? activeRequest.body_content ?? activeRequest.body_raw ?? '';
   const requestLoadError = requestLoadErrors[activeRequest.id] || '';
+  const bodyValidationError = validateJsonBody(requestBody, editableRequest.body_raw_type);
   const unresolvedVariableHints = useMemo(() => {
     const variables = environmentVariables(activeEnvironment);
     const names = [
@@ -1239,6 +1262,12 @@ export function App() {
       return;
     }
 
+    if (bodyValidationError) {
+      setProxyError(bodyValidationError);
+      selectConfigTab('body');
+      return;
+    }
+
     setSending(true);
     setProxyError('');
     setProxyResult(null);
@@ -1281,11 +1310,15 @@ export function App() {
     } finally {
       setSending(false);
     }
-  }, [activeEnvironment, editableRequest, requestBody]);
+  }, [activeEnvironment, bodyValidationError, editableRequest, requestBody, selectConfigTab]);
 
 
   const updateRequestDraft = useCallback((field, value) => {
     setComparableRequestDraftField(activeRequest.id, field, value, activeRequest);
+  }, [activeRequest, setComparableRequestDraftField]);
+
+  const updateBodyType = useCallback((event) => {
+    setComparableRequestDraftField(activeRequest.id, 'body_raw_type', event.target.value, activeRequest);
   }, [activeRequest, setComparableRequestDraftField]);
 
   const updateBodyDraft = useCallback((nextBody) => {
@@ -1802,17 +1835,27 @@ export function App() {
               hidden={activeConfigTab !== 'body'}
             >
               <section>
-                <div className="section-head"><span>Request Body</span></div>
+                <div className="section-head">
+                  <span>Request Body</span>
+                  <label className="body-type-selector">
+                    <span>Body type</span>
+                    <select aria-label="Body type" value={editableRequest.body_raw_type || 'application/json'} onChange={updateBodyType}>
+                      {BODY_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </select>
+                  </label>
+                </div>
+                {bodyValidationError ? <div className="body-validation-error" role="alert">{bodyValidationError}</div> : null}
                 <CodeEditor
                   value={requestBody}
                   onChange={updateBodyDraft}
                   wordWrap
-                  label="Request JSON body editor"
+                  label={`Request ${bodyTypeLabel(editableRequest.body_raw_type)} body editor`}
                 />
               </section>
               <aside className="inspector">
                 <h3>Body</h3>
-                <p className="hint">Editing {activeRequest.body_raw_type || 'application/json'} content for this request.</p>
+                <p className="hint">Editing {bodyTypeLabel(editableRequest.body_raw_type)} content for this request.</p>
+                <p className="hint">Switching body type keeps the current body content intact.</p>
               </aside>
             </div>
             <div

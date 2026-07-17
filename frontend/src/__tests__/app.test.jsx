@@ -1763,6 +1763,80 @@ describe('App shell', () => {
 
 
 
+  test('blocks invalid JSON body send until raw mode is selected', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /post create widget/i}));
+    await user.click(within(screen.getByRole('tablist', {name: /request configuration tabs/i})).getByRole('tab', {name: 'Body'}));
+
+    const editor = screen.getByRole('textbox', {name: /request json body editor/i});
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{invalid json');
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/body is not valid json/i);
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    expect(apiClient.proxyRequest).not.toHaveBeenCalled();
+
+    await user.selectOptions(screen.getByRole('combobox', {name: /body type/i}), 'text/plain');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({
+      body: '{invalid json',
+      contentType: 'text/plain',
+    }));
+  });
+
+  test('persists selected body type without discarding body content', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /post create widget/i}));
+    await user.click(screen.getByRole('tab', {name: 'Body'}));
+
+    const bodyType = screen.getByRole('combobox', {name: /body type/i});
+    const editor = screen.getByRole('textbox', {name: /request json body editor/i});
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{"kept":true}');
+    await user.selectOptions(bodyType, 'text/plain');
+
+    expect(screen.getByRole('textbox', {name: /request raw body editor/i})).toHaveTextContent('{"kept":true}');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalledWith('request-2', expect.objectContaining({
+      body_content: '{"kept":true}',
+      body_raw_type: 'text/plain',
+    })));
+  });
+
+  test('switches body modes without data loss and regenerates Content-Type on send', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /post create widget/i}));
+    await user.click(screen.getByRole('tab', {name: 'Body'}));
+
+    const bodyType = screen.getByRole('combobox', {name: /body type/i});
+    const editor = screen.getByRole('textbox', {name: /request json body editor/i});
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{"mode":"json"}');
+    await user.selectOptions(bodyType, 'text/plain');
+    expect(screen.getByRole('textbox', {name: /request raw body editor/i})).toHaveTextContent('{"mode":"json"}');
+    await user.selectOptions(bodyType, 'application/json');
+    expect(screen.getByRole('textbox', {name: /request json body editor/i})).toHaveTextContent('{"mode":"json"}');
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({contentType: 'application/json'}));
+  });
+
+
+
   test('applies bearer authorization before proxy transmission and masks it in history', async () => {
     const user = userEvent.setup();
     renderApp();
