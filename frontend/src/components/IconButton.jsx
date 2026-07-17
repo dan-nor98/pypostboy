@@ -1,8 +1,8 @@
-import React from 'react';
-export function IconButton({label, children, ...props}) {
+import React, {forwardRef} from 'react';
+export const IconButton = forwardRef(function IconButton({label, children, ...props}, ref) {
   return (
-    <button className="icon-button" title={label} aria-label={label} {...props}>
+    <button ref={ref} className="icon-button" title={label} aria-label={label} {...props}>
       {children}
     </button>
   );
-}
+});
