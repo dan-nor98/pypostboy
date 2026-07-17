@@ -335,3 +335,97 @@ def test_collections_endpoint_accepts_trailing_slash(client, user_a_headers):
     assert response.status_code == 200
     payload = response.get_json()
     assert payload['success'] is True
+
+
+def test_create_rejects_duplicate_root_collection_names(client, user_a_headers):
+    assert_success(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "Shared"}
+        ),
+        201,
+    )
+
+    assert_error(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "Shared"}
+        ),
+        409,
+        "Collection name already exists in this folder",
+    )
+
+
+def test_create_and_update_reject_duplicate_sibling_folder_names(client, user_a_headers):
+    root = assert_success(
+        client.post("/api/collections", headers=user_a_headers, json={"name": "Root"}),
+        201,
+    )
+    assert_success(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "Folder", "parent_id": root["id"]},
+        ),
+        201,
+    )
+    sibling = assert_success(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "Other", "parent_id": root["id"]},
+        ),
+        201,
+    )
+
+    assert_error(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "Folder", "parent_id": root["id"]},
+        ),
+        409,
+        "Collection name already exists in this folder",
+    )
+    assert_error(
+        client.put(
+            f"/api/collections/{sibling['id']}",
+            headers=user_a_headers,
+            json={"name": "Folder"},
+        ),
+        409,
+        "Collection name already exists in this folder",
+    )
+
+
+def test_same_name_collections_are_allowed_under_different_parents(client, user_a_headers):
+    parent_one = assert_success(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "Parent one"}
+        ),
+        201,
+    )
+    parent_two = assert_success(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "Parent two"}
+        ),
+        201,
+    )
+
+    first = assert_success(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "Shared", "parent_id": parent_one["id"]},
+        ),
+        201,
+    )
+    second = assert_success(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "Shared", "parent_id": parent_two["id"]},
+        ),
+        201,
+    )
+
+    assert first["name"] == second["name"] == "Shared"
+    assert first["parent_id"] != second["parent_id"]

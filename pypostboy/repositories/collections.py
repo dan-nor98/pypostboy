@@ -15,6 +15,10 @@ from pypostboy.apps.core.models import Collection, Request
 MAX_COLLECTION_NESTING_DEPTH = None
 
 
+class DuplicateCollectionNameError(ValueError):
+    """Raised when a collection name duplicates a sibling for the same user."""
+
+
 class Collections:
     connection = None
     use_orm_reads = True
@@ -32,6 +36,36 @@ class Collections:
         return (
             int(user_id) if user_id is not None else Collections._default_user_id(conn)
         )
+
+    @staticmethod
+    def _duplicate_name_exists(conn, user_id, parent_id, name, exclude_id=None):
+        # Duplicate-name policy: collection/folder names must be unique among
+        # siblings for the same user and parent. The same name is allowed under
+        # different parents and for different users.
+        params = [user_id, name]
+        exclude_clause = ""
+        if exclude_id is not None:
+            exclude_clause = " AND id != ?"
+            params.append(exclude_id)
+
+        if parent_id is None:
+            query = f"""SELECT id FROM collections
+                        WHERE user_id = ? AND name = ? AND parent_id IS NULL{exclude_clause}
+                        LIMIT 1"""
+        else:
+            query = f"""SELECT id FROM collections
+                        WHERE user_id = ? AND name = ? AND parent_id = ?{exclude_clause}
+                        LIMIT 1"""
+            params.insert(2, parent_id)
+
+        return db_execute(conn, query, tuple(params)).fetchone() is not None
+
+    @staticmethod
+    def _validate_unique_sibling_name(conn, user_id, parent_id, name, exclude_id=None):
+        if Collections._duplicate_name_exists(conn, user_id, parent_id, name, exclude_id):
+            raise DuplicateCollectionNameError(
+                "Collection name already exists in this folder"
+            )
 
     @staticmethod
     def get_all(user_id=None):
@@ -133,6 +167,8 @@ class Collections:
         if not name:
             raise ValueError("Collection name is required")
         parent_id = data.get("parent_id", None)
+        if parent_id is not None:
+            parent_id = int(parent_id)
         description = data.get("description", "")
 
         if parent_id is not None:
@@ -143,6 +179,8 @@ class Collections:
             ).fetchone()
             if not parent:
                 raise ValueError("Parent collection not found")
+
+        Collections._validate_unique_sibling_name(conn, user_id, parent_id, name)
 
         if parent_id is not None:
             max_order_row = db_execute(
@@ -187,28 +225,38 @@ class Collections:
 
         updates = []
         params = []
+        next_name = col["name"]
+        next_parent_id = col["parent_id"]
 
         if "name" in data:
-            name = str(data["name"]).strip()
-            if not name:
+            next_name = str(data["name"]).strip()
+            if not next_name:
                 raise ValueError("Collection name is required")
+        if "parent_id" in data:
+            next_parent_id = data["parent_id"] or None
+            if next_parent_id is not None:
+                next_parent_id = int(next_parent_id)
+                parent = db_execute(
+                    conn,
+                    "SELECT id FROM collections WHERE id = ? AND user_id = ?",
+                    (next_parent_id, user_id),
+                ).fetchone()
+                if not parent:
+                    raise ValueError("Parent collection not found")
+
+        Collections._validate_unique_sibling_name(
+            conn, user_id, next_parent_id, next_name, exclude_id=id
+        )
+
+        if "name" in data:
             updates.append("name = ?")
-            params.append(name)
+            params.append(next_name)
         if "description" in data:
             updates.append("description = ?")
             params.append(data["description"])
         if "parent_id" in data:
-            parent_id = data["parent_id"] or None
-            if parent_id is not None:
-                parent = db_execute(
-                    conn,
-                    "SELECT id FROM collections WHERE id = ? AND user_id = ?",
-                    (parent_id, user_id),
-                ).fetchone()
-                if not parent:
-                    raise ValueError("Parent collection not found")
             updates.append("parent_id = ?")
-            params.append(parent_id)
+            params.append(next_parent_id)
         if "sort_order" in data:
             updates.append("sort_order = ?")
             params.append(data["sort_order"])
