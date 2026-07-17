@@ -225,6 +225,30 @@ function parseQueryParams(url) {
   return [...new URLSearchParams(query).entries()].map(([key, value]) => objectToGridRow({enabled: true, key, value}));
 }
 
+function trimUrlValue(url) {
+  return String(url || '').trim();
+}
+
+function validateProxyUrl(url) {
+  const trimmedUrl = trimUrlValue(url);
+  if (!trimmedUrl) {
+    throw new Error('Enter a URL before sending.');
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(trimmedUrl);
+  } catch {
+    throw new Error('Enter a valid absolute URL including http:// or https://.');
+  }
+
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw new Error('URL must use the http:// or https:// scheme.');
+  }
+
+  return trimmedUrl;
+}
+
 function updateUrlQueryParams(url, rows) {
   const enabledRows = rows.map(rowArrayToObject).filter((row) => row.enabled !== false && row.key);
   const urlText = String(url || '');
@@ -1086,6 +1110,7 @@ export function App() {
       };
       const scriptedRequest = runPreRequestScript(editableRequest.pre_request_script, baseRequest);
       const outboundRequest = applyAuthorization(scriptedRequest, editableRequest.auth_type, editableRequest.auth_data);
+      outboundRequest.url = validateProxyUrl(outboundRequest.url);
       let result;
       try {
         result = await apiClient.proxyRequest(outboundRequest);
@@ -1135,7 +1160,7 @@ export function App() {
         ...request,
         name: requestDraft.name ?? request.name ?? 'Untitled Request',
         method: requestDraft.method ?? request.method ?? 'GET',
-        url: requestDraft.url ?? request.url ?? '',
+        url: trimUrlValue(requestDraft.url ?? request.url ?? ''),
         headers: requestDraft.headers ?? request.headers ?? [],
         body_content: draftBodies[requestId] ?? request.body_content ?? request.body_raw ?? '',
         body_raw_type: requestDraft.body_raw_type ?? request.body_raw_type ?? 'application/json',
