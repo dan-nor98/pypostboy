@@ -1569,6 +1569,60 @@ describe('App shell', () => {
 
 
 
+  test('applies bearer authorization before proxy transmission and masks it in history', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: 'Authorization'}));
+    await user.selectOptions(screen.getByRole('combobox', {name: /authorization type/i}), 'bearer');
+    await user.type(screen.getByLabelText(/bearer token/i), 'secret-token');
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({
+      headers: expect.objectContaining({Authorization: 'Bearer secret-token'}),
+    }));
+    await waitFor(() => expect(apiClient.createRequestInstance).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      headers: expect.arrayContaining([expect.objectContaining({key: 'Authorization', value: 'se••••en'})]),
+      response_status: 200,
+    })));
+  });
+
+  test('runs pre-request script before authorization and proxy transmission', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: 'Scripts'}));
+    const scriptEditor = screen.getByRole('textbox', {name: /pre-request script editor/i});
+    await user.click(scriptEditor);
+    await user.paste("pb.setHeader('X-Script', 'before'); pb.addQueryParam('fromScript', 'yes');");
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://example.test/health?fromScript=yes',
+      headers: expect.objectContaining({'X-Script': 'before'}),
+    }));
+  });
+
+  test('records failed transmissions to request history', async () => {
+    const user = userEvent.setup();
+    apiClient.proxyRequest.mockRejectedValueOnce(new Error('Gateway timeout'));
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /send/i}));
+
+    expect(await screen.findByText(/gateway timeout/i)).toBeInTheDocument();
+    await waitFor(() => expect(apiClient.createRequestInstance).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      method: 'GET',
+      url: 'https://example.test/health',
+      response_status: null,
+      response_status_text: 'Error',
+      response_body: {error: 'Gateway timeout'},
+    })));
+  });
 
 
   test('resolves environment variables before sending a request', async () => {
@@ -1636,6 +1690,7 @@ describe('App shell', () => {
     await waitFor(() => expect(screen.getByText('Saved success')).toBeInTheDocument());
     await user.click(screen.getByRole('button', {name: /send/i}));
     await waitFor(() => expect(screen.getByText('200 OK')).toBeInTheDocument());
+    apiClient.createRequestInstance.mockClear();
 
     await user.click(screen.getByRole('button', {name: /save snapshot/i}));
 

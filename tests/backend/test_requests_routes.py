@@ -35,12 +35,18 @@ def test_requests_crud_duplicate_move_and_reorder_contract(
                 "headers": [{"key": "Content-Type", "value": "application/json"}],
                 "body_type": "json",
                 "body_content": '{"name":"Ada"}',
+                "auth_type": "bearer",
+                "auth_data": {"token": "secret-token"},
+                "pre_request_script": "pb.setHeader('X-Test', 'yes')",
             },
         ),
         201,
     )
     assert created["method"] == "POST"
     assert created["headers"] == [{"key": "Content-Type", "value": "application/json"}]
+    assert created["auth_type"] == "bearer"
+    assert created["auth_data"] == {"token": "secret-token"}
+    assert created["pre_request_script"] == "pb.setHeader('X-Test', 'yes')"
 
     second = assert_success(
         client.post(
@@ -67,11 +73,12 @@ def test_requests_crud_duplicate_move_and_reorder_contract(
         client.put(
             f"/api/requests/{created['id']}",
             headers=user_a_headers,
-            json={"method": "patch", "name": "Patch widget"},
+            json={"method": "patch", "name": "Patch widget", "pre_request_script": "pb.setBody('updated')"},
         )
     )
     assert updated["method"] == "PATCH"
     assert updated["name"] == "Patch widget"
+    assert updated["pre_request_script"] == "pb.setBody('updated')"
 
     listed = assert_success(
         client.get(

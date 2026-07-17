@@ -56,6 +56,7 @@ class Request(models.Model):
     form_data = models.TextField(default='[]')
     auth_type = models.TextField(default='none')
     auth_data = models.TextField(default='{}')
+    pre_request_script = models.TextField(default='')
     sort_order = models.IntegerField(default=0)
     created_at = models.TextField()
     updated_at = models.TextField()

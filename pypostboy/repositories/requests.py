@@ -37,6 +37,7 @@ class Requests:
         result["headers"] = safe_parse(result["headers"], [])
         result["form_data"] = safe_parse(result["form_data"], [])
         result["auth_data"] = safe_parse(result["auth_data"], {})
+        result["pre_request_script"] = result.get("pre_request_script", "")
         return result
 
     @staticmethod
@@ -104,8 +105,8 @@ class Requests:
             """INSERT INTO requests (
                 user_id, collection_id, name, method, url, headers,
                 body_type, body_content, body_raw_type, form_data,
-                auth_type, auth_data, sort_order, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                auth_type, auth_data, pre_request_script, sort_order, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user_id,
                 data["collection_id"],
@@ -119,6 +120,7 @@ class Requests:
                 safe_stringify(data.get("form_data"), "[]"),
                 data.get("auth_type", "none"),
                 safe_stringify(data.get("auth_data"), "{}"),
+                data.get("pre_request_script", ""),
                 max_order + 1,
                 now,
                 now,
@@ -165,6 +167,7 @@ class Requests:
             "body_raw_type": "body_raw_type",
             "sort_order": "sort_order",
             "auth_type": "auth_type",
+            "pre_request_script": "pre_request_script",
         }
 
         for key, db_field in field_mapping.items():
@@ -296,6 +299,7 @@ class Requests:
                 "form_data": original["form_data"],
                 "auth_type": original["auth_type"],
                 "auth_data": original["auth_data"],
+                "pre_request_script": original.get("pre_request_script", ""),
             },
         )
 

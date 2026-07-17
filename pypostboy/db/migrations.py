@@ -13,6 +13,10 @@ REQUEST_INSTANCE_COLUMN_MIGRATIONS = {
     'response_time_ms': 'INTEGER',
     'response_size': "TEXT DEFAULT ''",
 }
+REQUEST_COLUMN_MIGRATIONS = {
+    'pre_request_script': "TEXT DEFAULT ''",
+}
+
 USER_RECOVERY_COLUMN_MIGRATIONS = {
     'recovery_key_hash': 'TEXT',
     'recovery_key_created_at': 'TEXT',
@@ -69,6 +73,14 @@ def table_columns(cursor, table_name):
         row['name']: row
         for row in cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
     }
+
+
+def migrate_requests(cursor):
+    """Add request columns introduced after initial SQLite releases."""
+    existing_columns = table_columns(cursor, 'requests')
+    for column, definition in REQUEST_COLUMN_MIGRATIONS.items():
+        if column not in existing_columns:
+            cursor.execute(f"ALTER TABLE requests ADD COLUMN {column} {definition}")
 
 
 def migrate_request_instances(cursor):
@@ -332,6 +344,7 @@ def _rebuild_requests(cursor, default_user_id):
             form_data TEXT DEFAULT '[]',
             auth_type TEXT DEFAULT 'none',
             auth_data TEXT DEFAULT '{}',
+            pre_request_script TEXT DEFAULT '',
             sort_order INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -347,11 +360,11 @@ def _rebuild_requests(cursor, default_user_id):
         INSERT INTO requests (
             id, user_id, collection_id, name, method, url, headers,
             body_type, body_content, body_raw_type, form_data,
-            auth_type, auth_data, sort_order, created_at, updated_at
+            auth_type, auth_data, pre_request_script, sort_order, created_at, updated_at
         )
         SELECT id, {user_id_expr}, collection_id, name, method, url, headers,
                body_type, body_content, body_raw_type, form_data,
-               auth_type, auth_data, sort_order, created_at, updated_at
+               auth_type, auth_data, COALESCE(pre_request_script, ''), sort_order, created_at, updated_at
         FROM requests_old_ownership
     """)
     cursor.execute("DROP TABLE requests_old_ownership")
