@@ -1145,9 +1145,10 @@ export function App() {
       };
       const saveDraft = isDraftRequestId(request.id) || request.is_draft;
       const {_temporaryId, id: _draftId, is_draft: _isDraft, ...createPayload} = payload;
+      const updatePayload = saveDraft ? payload : {...payload, expected_updated_at: request.updated_at};
       const savedRequest = saveDraft
         ? await apiClient.createRequest({...createPayload, collection_id: request.collection_id})
-        : await apiClient.updateRequest(request.id, payload);
+        : await apiClient.updateRequest(request.id, updatePayload);
       const nextRequest = {...payload, ...(savedRequest || {}), is_draft: false};
       setCollections((currentCollections) => (saveDraft
         ? replaceRequestInCollections(currentCollections, request.id, nextRequest)
@@ -1166,9 +1167,11 @@ export function App() {
       });
       return nextRequest;
     } catch (error) {
-      setProxyError(isDraftRequestId(request.id) || request.is_draft
+      const isDraftSave = isDraftRequestId(request.id) || request.is_draft;
+      const conflictMessage = 'Could not save request because it changed elsewhere. Your local edits are still here; refresh or resolve the conflict before saving again.';
+      setProxyError(isDraftSave
         ? `Could not save draft request. ${error.message || 'Check the destination collection and try Save again.'}`
-        : error.message);
+        : error.status === 409 ? conflictMessage : error.message);
       return null;
     } finally {
       setSavingRequest(false);
