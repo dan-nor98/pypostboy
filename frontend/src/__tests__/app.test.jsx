@@ -267,6 +267,45 @@ describe('App shell', () => {
     expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true');
   });
 
+  test('switches opened request tabs from the keyboard and keeps focus on the active tab', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+
+    const healthTab = screen.getByRole('tab', {name: /health check/i});
+    const statusTab = screen.getByRole('tab', {name: /status check/i});
+    healthTab.focus();
+
+    await user.keyboard('{ArrowRight}');
+
+    expect(statusTab).toHaveAttribute('aria-selected', 'true');
+    expect(healthTab).toHaveAttribute('aria-selected', 'false');
+    expect(statusTab).toHaveFocus();
+    expect(screen.getByRole('tabpanel', {name: /status check/i})).toBeInTheDocument();
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/status');
+
+    await user.keyboard('{ArrowLeft}');
+
+    expect(healthTab).toHaveAttribute('aria-selected', 'true');
+    expect(statusTab).toHaveAttribute('aria-selected', 'false');
+    expect(healthTab).toHaveFocus();
+    expect(screen.getByRole('tabpanel', {name: /health check/i})).toBeInTheDocument();
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health');
+
+    await user.keyboard('{End}');
+
+    expect(statusTab).toHaveAttribute('aria-selected', 'true');
+    expect(statusTab).toHaveFocus();
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/status');
+
+    await user.keyboard('{Home}');
+
+    expect(healthTab).toHaveAttribute('aria-selected', 'true');
+    expect(healthTab).toHaveFocus();
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health');
+  });
+
   test('renders all opened request tabs when more than six requests are open', async () => {
     const user = userEvent.setup();
     const requests = Array.from({length: 8}, (_, index) => ({
