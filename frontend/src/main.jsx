@@ -215,6 +215,27 @@ function objectToGridRow(row = {}) {
   return [row.enabled === false ? '' : '✓', row.key || '', row.value || '', row.description || ''];
 }
 
+function normalizeQueryParams(rows = []) {
+  return (rows || []).map(rowArrayToObject).filter((row) => row.key || row.value || row.description).map((row) => ({
+    enabled: row.enabled !== false,
+    key: row.key || '',
+    value: row.value || '',
+    description: row.description || '',
+  }));
+}
+
+function queryParamsToGridRows(queryParams = []) {
+  return normalizeQueryParams(queryParams).map(objectToGridRow);
+}
+
+function queryParamsEqual(left = [], right = []) {
+  return JSON.stringify(normalizeQueryParams(left)) === JSON.stringify(normalizeQueryParams(right));
+}
+
+function hasStructuredQueryMetadata(rows = []) {
+  return normalizeQueryParams(rows).some((row) => row.enabled === false || row.description);
+}
+
 function parseQueryParams(url) {
   if (!url) return [];
   const queryStart = url.indexOf('?');
@@ -222,7 +243,7 @@ function parseQueryParams(url) {
   const hashStart = url.indexOf('#', queryStart);
   const query = url.slice(queryStart + 1, hashStart === -1 ? undefined : hashStart);
   if (!query) return [];
-  return [...new URLSearchParams(query).entries()].map(([key, value]) => objectToGridRow({enabled: true, key, value}));
+  return [...new URLSearchParams(query).entries()].map(([key, value]) => ({enabled: true, key, value, description: ''}));
 }
 
 function trimUrlValue(url) {
@@ -250,7 +271,7 @@ function validateProxyUrl(url) {
 }
 
 function updateUrlQueryParams(url, rows) {
-  const enabledRows = rows.map(rowArrayToObject).filter((row) => row.enabled !== false && row.key);
+  const enabledRows = normalizeQueryParams(rows).filter((row) => row.enabled !== false && row.key);
   const urlText = String(url || '');
   const hashIndex = urlText.indexOf('#');
   const withoutHash = hashIndex === -1 ? urlText : urlText.slice(0, hashIndex);
@@ -288,6 +309,7 @@ function requestFieldValue(request = {}, field) {
   if (field === 'body_content') return request.body_content ?? request.body_raw ?? '';
   if (field === 'body_raw_type') return request.body_raw_type ?? 'application/json';
   if (field === 'headers') return request.headers ?? [];
+  if (field === 'query_params') return request.query_params ?? [];
   if (field === 'auth_type') return request.auth_type ?? 'none';
   if (field === 'auth_data') return request.auth_data ?? {};
   if (field === 'pre_request_script') return request.pre_request_script ?? '';
@@ -300,6 +322,7 @@ function requestFieldValue(request = {}, field) {
 function requestFieldEquals(field, value, sourceRequest = {}) {
   const sourceValue = requestFieldValue(sourceRequest, field);
   if (field === 'headers') return headersEqual(value, sourceValue);
+  if (field === 'query_params') return queryParamsEqual(value, sourceValue);
   if (field === 'auth_data') return JSON.stringify(value || {}) === JSON.stringify(sourceValue || {});
   return (value ?? '') === (sourceValue ?? '');
 }
@@ -307,7 +330,7 @@ function requestFieldEquals(field, value, sourceRequest = {}) {
 function getRequestDirtyFields(requestId, draft = {}, bodyDraft, sourceRequest = {}) {
   if (!requestId) return {};
   const dirtyFields = {};
-  ['name', 'method', 'url', 'headers', 'body_raw_type', 'auth_type', 'auth_data', 'pre_request_script'].forEach((field) => {
+  ['name', 'method', 'url', 'query_params', 'headers', 'body_raw_type', 'auth_type', 'auth_data', 'pre_request_script'].forEach((field) => {
     if (Object.prototype.hasOwnProperty.call(draft, field) && !requestFieldEquals(field, draft[field], sourceRequest)) {
       dirtyFields[field] = true;
     }
@@ -1004,11 +1027,14 @@ export function App() {
 
   const activeRequest = requests.find((request) => request.id === activeRequestId) || openedRequests[0] || defaultRequest;
   const activeRequestDraft = requestDrafts[activeRequest.id] || {};
+  const editableQueryParams = activeRequestDraft.query_params ?? activeRequest.query_params ?? parseQueryParams(activeRequestDraft.url ?? activeRequest.url ?? '');
+  const editableUrl = updateUrlQueryParams(activeRequestDraft.url ?? activeRequest.url ?? '', editableQueryParams);
   const editableRequest = {
     ...activeRequest,
     name: activeRequestDraft.name ?? activeRequest.name ?? 'Untitled Request',
     method: activeRequestDraft.method ?? activeRequest.method ?? 'GET',
-    url: activeRequestDraft.url ?? activeRequest.url ?? '',
+    url: editableUrl,
+    query_params: editableQueryParams,
     headers: activeRequestDraft.headers ?? activeRequest.headers ?? [],
     body_raw_type: activeRequestDraft.body_raw_type ?? activeRequest.body_raw_type ?? 'application/json',
     auth_type: activeRequestDraft.auth_type ?? activeRequest.auth_type ?? 'none',
@@ -1038,7 +1064,7 @@ export function App() {
     {id: 'tests', label: 'Tests'},
   ], []);
 
-  const parameterRows = useMemo(() => parseQueryParams(editableRequest.url), [editableRequest.url]);
+  const parameterRows = useMemo(() => queryParamsToGridRows(editableRequest.query_params), [editableRequest.query_params]);
   const headerRows = useMemo(() => headersToGridRows(editableRequest.headers), [editableRequest.headers]);
 
   const setComparableRequestDraftField = useCallback((requestId, field, value, sourceRequest) => {
@@ -1057,9 +1083,21 @@ export function App() {
   }, [draftBodies]);
 
   const handleParameterRowsChange = useCallback((nextRows) => {
-    const url = updateUrlQueryParams(editableRequest.url, nextRows);
+    const queryParams = normalizeQueryParams(nextRows);
+    const url = updateUrlQueryParams(editableRequest.url, queryParams);
+    setComparableRequestDraftField(activeRequest.id, 'query_params', queryParams, activeRequest);
     setComparableRequestDraftField(activeRequest.id, 'url', url, activeRequest);
   }, [activeRequest, editableRequest.url, setComparableRequestDraftField]);
+
+  const handleUrlChange = useCallback((url) => {
+    setComparableRequestDraftField(activeRequest.id, 'url', url, activeRequest);
+    const existingParams = editableRequest.query_params || [];
+    // URL text cannot represent disabled rows or descriptions. Preserve existing
+    // structured metadata in that conflict case instead of silently discarding it.
+    if (!hasStructuredQueryMetadata(existingParams)) {
+      setComparableRequestDraftField(activeRequest.id, 'query_params', parseQueryParams(url), activeRequest);
+    }
+  }, [activeRequest, editableRequest.query_params, setComparableRequestDraftField]);
 
   const handleHeaderRowsChange = useCallback((nextRows) => {
     const headers = gridRowsToHeaders(nextRows);
@@ -1178,7 +1216,8 @@ export function App() {
         ...request,
         name: requestDraft.name ?? request.name ?? 'Untitled Request',
         method: requestDraft.method ?? request.method ?? 'GET',
-        url: trimUrlValue(requestDraft.url ?? request.url ?? ''),
+        url: trimUrlValue(updateUrlQueryParams(requestDraft.url ?? request.url ?? '', requestDraft.query_params ?? request.query_params ?? [])),
+        query_params: requestDraft.query_params ?? request.query_params ?? [],
         headers: requestDraft.headers ?? request.headers ?? [],
         body_content: draftBodies[requestId] ?? request.body_content ?? request.body_raw ?? '',
         body_raw_type: requestDraft.body_raw_type ?? request.body_raw_type ?? 'application/json',
@@ -1228,7 +1267,8 @@ export function App() {
     ...activeRequest,
     name: editableRequest.name || 'Untitled Request',
     method: editableRequest.method || 'GET',
-    url: trimUrlValue(editableRequest.url || ''),
+    url: trimUrlValue(updateUrlQueryParams(editableRequest.url || '', editableRequest.query_params || [])),
+    query_params: editableRequest.query_params || [],
     headers: editableRequest.headers || [],
     body_content: requestBody || '',
     body_raw_type: editableRequest.body_raw_type || 'application/json',
@@ -1413,6 +1453,7 @@ export function App() {
     const restoredDraft = {
       method: snapshot.method || 'GET',
       url: snapshot.url || '',
+      query_params: snapshot.query_params || [],
       headers: snapshot.headers || [],
       body_raw_type: snapshot.body_raw_type || 'application/json',
     };
@@ -1561,7 +1602,7 @@ export function App() {
               request={editableRequest}
               disabled={!editableRequest.url}
               onMethodChange={(method) => updateRequestDraft('method', method)}
-              onUrlChange={(url) => updateRequestDraft('url', url)}
+              onUrlChange={handleUrlChange}
               onSave={saveRequest}
               saving={savingRequest}
               saveDisabled={!activeRequest.id}

@@ -43,6 +43,7 @@ class RequestInstances:
 
         result = dict(row) if isinstance(row, dict) else dict(row_to_mapping(row))
         result["headers"] = safe_parse(result["headers"], [])
+        result["query_params"] = safe_parse(result.get("query_params"), [])
         result["form_data"] = safe_parse(result["form_data"], [])
         result["auth_data"] = safe_parse(result["auth_data"], {})
         result["response_headers"] = parse_json_or_text(
@@ -100,12 +101,12 @@ class RequestInstances:
         instance_id = insert_and_get_id(
             conn,
             """INSERT INTO request_instances (
-                user_id, request_id, name, method, url, headers,
+                user_id, request_id, name, method, url, headers, query_params,
                 body_type, body_content, body_raw_type, form_data,
                 auth_type, auth_data, response_status, response_status_text,
                 response_headers, response_body, response_time_ms, response_size,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user_id,
                 request_id,
@@ -114,6 +115,9 @@ class RequestInstances:
                 data.get("url", request_obj.get("url", "")),
                 safe_stringify(
                     data.get("headers", request_obj.get("headers", [])), "[]"
+                ),
+                safe_stringify(
+                    data.get("query_params", request_obj.get("query_params", [])), "[]"
                 ),
                 data.get("body_type", request_obj.get("body_type", "none")),
                 data.get(
@@ -184,6 +188,9 @@ class RequestInstances:
         if "headers" in data:
             updates.append("headers = ?")
             params.append(safe_stringify(data["headers"], "[]"))
+        if "query_params" in data:
+            updates.append("query_params = ?")
+            params.append(safe_stringify(data["query_params"], "[]"))
         if "form_data" in data:
             updates.append("form_data = ?")
             params.append(safe_stringify(data["form_data"], "[]"))

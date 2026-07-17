@@ -2154,3 +2154,62 @@ describe('Sidebar synchronization status', () => {
     expect(screen.getByText('Conflict: request 42')).toBeInTheDocument();
   });
 });
+
+describe('structured query parameters', () => {
+  test('saves disabled rows, descriptions, duplicate keys, and empty values from params grid', async () => {
+    const user = userEvent.setup();
+    renderApp([{...testCollections[0], requests: [{...testCollections[0].requests[0], query_params: []}], children: []}]);
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+    await user.type(screen.getByRole('textbox', {name: /new parameter key/i}), 'tag');
+    await user.type(screen.getByRole('textbox', {name: /parameter row 1 value/i}), 'one');
+    await user.type(screen.getByRole('textbox', {name: /parameter row 1 description/i}), 'first tag');
+    await user.type(screen.getByRole('textbox', {name: /new parameter key/i}), 'tag');
+    await user.type(screen.getByRole('textbox', {name: /parameter row 2 value/i}), 'two');
+    await user.click(screen.getByRole('checkbox', {name: /parameter row 2 enabled/i}));
+    await user.type(screen.getByRole('textbox', {name: /new parameter key/i}), 'empty');
+
+    await user.click(screen.getByRole('button', {name: /^save$/i}));
+
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalled());
+    const payload = apiClient.updateRequest.mock.calls.at(-1)[1];
+    expect(payload.query_params).toEqual([
+      {enabled: true, key: 'tag', value: 'one', description: 'first tag'},
+      {enabled: false, key: 'tag', value: 'two', description: ''},
+      {enabled: true, key: 'empty', value: '', description: ''},
+    ]);
+    expect(payload.url).toBe('https://example.test/health?tag=one&empty=');
+  });
+
+  test('parses URL edits into structured rows when no row metadata would be lost', async () => {
+    const user = userEvent.setup();
+    renderApp([{...testCollections[0], requests: [{...testCollections[0].requests[0], query_params: []}], children: []}]);
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health?tag=one&tag=two&empty=');
+    await user.click(screen.getByRole('button', {name: /^save$/i}));
+
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalled());
+    expect(apiClient.updateRequest.mock.calls.at(-1)[1].query_params).toEqual([
+      {enabled: true, key: 'tag', value: 'one', description: ''},
+      {enabled: true, key: 'tag', value: 'two', description: ''},
+      {enabled: true, key: 'empty', value: '', description: ''},
+    ]);
+  });
+
+  test('keeps disabled or described rows dirty when URL text cannot represent them', async () => {
+    const user = userEvent.setup();
+    renderApp([{...testCollections[0], requests: [{...testCollections[0].requests[0], query_params: [{enabled: false, key: 'debug', value: '1', description: 'local only'}]}], children: []}]);
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+    expect(screen.getByRole('textbox', {name: /parameter row 1 description/i})).toHaveValue('local only');
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health?debug=1');
+
+    expect(screen.getByRole('textbox', {name: /parameter row 1 description/i})).toHaveValue('local only');
+    await waitFor(() => expect(screen.getByRole('tab', {name: /health check unsaved/i})).toBeInTheDocument());
+  });
+});

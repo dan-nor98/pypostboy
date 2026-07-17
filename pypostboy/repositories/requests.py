@@ -35,6 +35,7 @@ class Requests:
             return None
         result = dict(row) if isinstance(row, dict) else dict(row_to_mapping(row))
         result["headers"] = safe_parse(result["headers"], [])
+        result["query_params"] = safe_parse(result.get("query_params"), [])
         result["form_data"] = safe_parse(result["form_data"], [])
         result["auth_data"] = safe_parse(result["auth_data"], {})
         result["pre_request_script"] = result.get("pre_request_script", "")
@@ -103,10 +104,10 @@ class Requests:
         request_id = insert_and_get_id(
             conn,
             """INSERT INTO requests (
-                user_id, collection_id, name, method, url, headers,
+                user_id, collection_id, name, method, url, headers, query_params,
                 body_type, body_content, body_raw_type, form_data,
                 auth_type, auth_data, pre_request_script, sort_order, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user_id,
                 data["collection_id"],
@@ -114,6 +115,7 @@ class Requests:
                 data.get("method", "GET").upper(),
                 data.get("url", ""),
                 safe_stringify(data.get("headers"), "[]"),
+                safe_stringify(data.get("query_params"), "[]"),
                 data.get("body_type", "none"),
                 data.get("body_content", data.get("body_raw", "")),
                 data.get("body_raw_type", "application/json"),
@@ -181,6 +183,9 @@ class Requests:
         if "headers" in data:
             updates.append("headers = ?")
             params.append(safe_stringify(data["headers"], "[]"))
+        if "query_params" in data:
+            updates.append("query_params = ?")
+            params.append(safe_stringify(data["query_params"], "[]"))
         if "form_data" in data:
             updates.append("form_data = ?")
             params.append(safe_stringify(data["form_data"], "[]"))
@@ -293,6 +298,7 @@ class Requests:
                 "method": original["method"],
                 "url": original["url"],
                 "headers": original["headers"],
+                "query_params": original.get("query_params", []),
                 "body_type": original["body_type"],
                 "body_content": original["body_content"],
                 "body_raw_type": original["body_raw_type"],
