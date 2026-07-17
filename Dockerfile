@@ -54,7 +54,9 @@ COPY --chown=postboy:postboy pypostboy ./pypostboy
 COPY --from=frontend-builder --chown=postboy:postboy /app/frontend/dist ./frontend/dist
 RUN chmod +x docker-entrypoint.sh
 
-USER postboy
+# Keep the entrypoint as root so it can repair ownership on mounted database volumes,
+# then it drops privileges to the unprivileged postboy user before startup.
+USER root
 
 EXPOSE 3001
 
