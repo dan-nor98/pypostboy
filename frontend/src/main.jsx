@@ -382,6 +382,7 @@ export function App() {
   const [requestDetails, setRequestDetails] = useState({});
   const [requestLoadErrors, setRequestLoadErrors] = useState({});
   const [savingRequest, setSavingRequest] = useState(false);
+  const [pendingDirtyCloseRequestId, setPendingDirtyCloseRequestId] = useState(null);
   const [snapshots, setSnapshots] = useState([]);
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [snapshotsError, setSnapshotsError] = useState('');
@@ -398,7 +399,17 @@ export function App() {
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
   const activeEnvironment = environments.find((environment) => environment.id === activeEnvironmentId) || environments[0] || defaultEnvironments[0];
-  const dirtyRequestIds = useMemo(() => [...new Set([...Object.keys(requestDrafts), ...Object.keys(draftBodies)])], [draftBodies, requestDrafts]);
+  const isRequestDirty = useCallback((requestId) => {
+    if (!requestId) return false;
+    const request = flattenRequests(collections).find((candidate) => candidate.id === requestId);
+    return Boolean(
+      Object.prototype.hasOwnProperty.call(requestDrafts, requestId)
+      || Object.prototype.hasOwnProperty.call(draftBodies, requestId)
+      || isDraftRequestId(requestId)
+      || request?.is_draft
+    );
+  }, [collections, draftBodies, requestDrafts]);
+  const dirtyRequestIds = useMemo(() => openRequestIds.filter(isRequestDirty), [isRequestDirty, openRequestIds]);
 
   useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
   useEffect(() => { localStorage.setItem(PANEL_SPLIT_STORAGE_KEY, String(responsePaneRatio)); }, [responsePaneRatio]);
@@ -739,19 +750,30 @@ export function App() {
   }, [collections, requestDetails]);
 
 
-  const closeRequestTab = useCallback((requestId) => {
-    if (!requestId) return;
+  const closeRequestTabImmediately = useCallback((requestId, additionalRequestIds = []) => {
+    const requestIdsToClose = new Set([requestId, ...additionalRequestIds].filter(Boolean));
+    if (!requestIdsToClose.size) return;
+
     setOpenRequestIds((currentIds) => {
-      const closedIndex = currentIds.indexOf(requestId);
+      const closedIndex = currentIds.findIndex((openRequestId) => requestIdsToClose.has(openRequestId));
       if (closedIndex === -1) return currentIds;
 
-      const nextIds = currentIds.filter((openRequestId) => openRequestId !== requestId);
-      if (requestId === activeRequestId) {
+      const nextIds = currentIds.filter((openRequestId) => !requestIdsToClose.has(openRequestId));
+      if (requestIdsToClose.has(activeRequestId)) {
         setActiveRequestId(nextIds[closedIndex] || nextIds[closedIndex - 1] || null);
       }
       return nextIds;
     });
   }, [activeRequestId]);
+
+  const closeRequestTab = useCallback((requestId) => {
+    if (!requestId) return;
+    if (isRequestDirty(requestId)) {
+      setPendingDirtyCloseRequestId(requestId);
+      return;
+    }
+    closeRequestTabImmediately(requestId);
+  }, [closeRequestTabImmediately, isRequestDirty]);
 
   const requests = useMemo(() => flattenRequests(collections).map((request) => {
     const detail = requestDetails[request.id]?.data;
@@ -897,49 +919,82 @@ export function App() {
     }));
   }, [activeRequest.id]);
 
-  const saveRequest = useCallback(async () => {
-    if (!activeRequest.id) return;
+  const saveRequestById = useCallback(async (requestId, {activateSavedDraft = true} = {}) => {
+    const request = requests.find((candidate) => candidate.id === requestId);
+    if (!request?.id) return null;
 
     setSavingRequest(true);
     setProxyError('');
     try {
+      const requestDraft = requestDrafts[requestId] || {};
       const payload = {
-        ...activeRequest,
-        method: editableRequest.method || 'GET',
-        url: editableRequest.url,
-        headers: editableRequest.headers,
-        body_content: requestBody,
-        body_raw_type: editableRequest.body_raw_type || 'application/json',
+        ...request,
+        name: requestDraft.name ?? request.name ?? 'Untitled Request',
+        method: requestDraft.method ?? request.method ?? 'GET',
+        url: requestDraft.url ?? request.url ?? '',
+        headers: requestDraft.headers ?? request.headers ?? [],
+        body_content: draftBodies[requestId] ?? request.body_content ?? request.body_raw ?? '',
+        body_raw_type: requestDraft.body_raw_type ?? request.body_raw_type ?? 'application/json',
       };
-      const saveDraft = isDraftRequestId(activeRequest.id) || activeRequest.is_draft;
+      const saveDraft = isDraftRequestId(request.id) || request.is_draft;
       const {_temporaryId, id: _draftId, is_draft: _isDraft, ...createPayload} = payload;
       const savedRequest = saveDraft
-        ? await apiClient.createRequest({...createPayload, collection_id: activeRequest.collection_id})
-        : await apiClient.updateRequest(activeRequest.id, payload);
+        ? await apiClient.createRequest({...createPayload, collection_id: request.collection_id})
+        : await apiClient.updateRequest(request.id, payload);
       const nextRequest = {...payload, ...(savedRequest || {}), is_draft: false};
       setCollections((currentCollections) => (saveDraft
-        ? replaceRequestInCollections(currentCollections, activeRequest.id, nextRequest)
-        : updateRequestInCollections(currentCollections, activeRequest.id, nextRequest)));
+        ? replaceRequestInCollections(currentCollections, request.id, nextRequest)
+        : updateRequestInCollections(currentCollections, request.id, nextRequest)));
       if (saveDraft && nextRequest.id) {
-        setOpenRequestIds((currentIds) => currentIds.map((requestId) => (requestId === activeRequest.id ? nextRequest.id : requestId)));
-        setActiveRequestId(nextRequest.id);
+        setOpenRequestIds((currentIds) => currentIds.map((openRequestId) => (openRequestId === request.id ? nextRequest.id : openRequestId)));
+        if (activateSavedDraft) setActiveRequestId(nextRequest.id);
       }
       setRequestDrafts((drafts) => {
-        const {[activeRequest.id]: _savedDraft, ...remainingDrafts} = drafts;
+        const {[request.id]: _savedDraft, ...remainingDrafts} = drafts;
         return remainingDrafts;
       });
       setDraftBodies((drafts) => {
-        const {[activeRequest.id]: _savedBody, ...remainingDrafts} = drafts;
+        const {[request.id]: _savedBody, ...remainingDrafts} = drafts;
         return remainingDrafts;
       });
+      return nextRequest;
     } catch (error) {
-      setProxyError(isDraftRequestId(activeRequest.id) || activeRequest.is_draft
+      setProxyError(isDraftRequestId(request.id) || request.is_draft
         ? `Could not save draft request. ${error.message || 'Check the destination collection and try Save again.'}`
         : error.message);
+      return null;
     } finally {
       setSavingRequest(false);
     }
-  }, [activeRequest, editableRequest, requestBody]);
+  }, [draftBodies, requestDrafts, requests]);
+
+  const saveRequest = useCallback(() => saveRequestById(activeRequest.id), [activeRequest.id, saveRequestById]);
+
+  const discardDirtyClose = useCallback(() => {
+    const requestId = pendingDirtyCloseRequestId;
+    if (!requestId) return;
+    setRequestDrafts((drafts) => {
+      const {[requestId]: _discardedDraft, ...remainingDrafts} = drafts;
+      return remainingDrafts;
+    });
+    setDraftBodies((drafts) => {
+      const {[requestId]: _discardedBody, ...remainingDrafts} = drafts;
+      return remainingDrafts;
+    });
+    setPendingDirtyCloseRequestId(null);
+    closeRequestTabImmediately(requestId);
+  }, [closeRequestTabImmediately, pendingDirtyCloseRequestId]);
+
+  const cancelDirtyClose = useCallback(() => setPendingDirtyCloseRequestId(null), []);
+
+  const saveDirtyClose = useCallback(async () => {
+    const requestId = pendingDirtyCloseRequestId;
+    if (!requestId) return;
+    const savedRequest = await saveRequestById(requestId, {activateSavedDraft: false});
+    if (!savedRequest) return;
+    setPendingDirtyCloseRequestId(null);
+    closeRequestTabImmediately(requestId, [savedRequest.id]);
+  }, [closeRequestTabImmediately, pendingDirtyCloseRequestId, saveRequestById]);
 
 
   useEffect(() => {
@@ -1264,6 +1319,21 @@ export function App() {
 
       <StatusBar />
       {palette && <CommandPalette onClose={closePalette} onImportCurl={() => { closePalette(); setImportCurlOpen(true); }} onImportPostman={() => { closePalette(); setImportPostmanOpen(true); }} />}
+      {pendingDirtyCloseRequestId && (
+        <div className="modal-backdrop" onClick={cancelDirtyClose}>
+          <dialog open className="import-dialog" aria-modal="true" aria-label="Unsaved request changes" onClick={(event) => event.stopPropagation()}>
+            <form method="dialog" onSubmit={(event) => event.preventDefault()}>
+              <div className="section-head"><span>Unsaved changes</span><button type="button" onClick={cancelDirtyClose}>Close</button></div>
+              <p role="alert">Save or discard this request before closing its tab.</p>
+              <div className="dialog-actions">
+                <button className="button button-primary" type="button" onClick={saveDirtyClose} disabled={savingRequest}>{savingRequest ? 'Saving…' : 'Save'}</button>
+                <button className="button" type="button" onClick={discardDirtyClose} disabled={savingRequest}>Discard</button>
+                <button className="button" type="button" onClick={cancelDirtyClose} disabled={savingRequest}>Cancel</button>
+              </div>
+            </form>
+          </dialog>
+        </div>
+      )}
       {importCurlOpen && <ImportCurlDialog collections={collections} onClose={() => setImportCurlOpen(false)} onCreated={handleImportedRequestCreated} />}
       {importPostmanOpen && <ImportPostmanDialog onClose={() => setImportPostmanOpen(false)} onImported={handlePostmanImported} />}
       {authOpen && (
