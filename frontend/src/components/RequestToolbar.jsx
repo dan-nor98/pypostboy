@@ -22,7 +22,7 @@ export function RequestToolbar({
         value={request?.method || 'GET'}
         onChange={(event) => onMethodChange?.(event.target.value)}
       >
-        <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+        <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
       </select>
       <input
         aria-label="Request URL"
