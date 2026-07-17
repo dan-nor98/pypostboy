@@ -6,6 +6,7 @@ import {App} from '../main.jsx';
 import {CodeEditor} from '../components/CodeEditor.jsx';
 import {Sidebar} from '../components/Sidebar.jsx';
 import {RequestToolbar} from '../components/RequestToolbar.jsx';
+import {EditableGrid} from '../components/EditableGrid.jsx';
 import {apiClient} from '../api/client';
 
 vi.mock('../api/client', () => ({
@@ -186,6 +187,77 @@ describe('CodeEditor', () => {
   });
 });
 
+
+
+describe('EditableGrid row actions', () => {
+  test('duplicates and removes only the selected header row while preserving order and values', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const headerRows = [
+      {enabled: true, key: 'Accept', value: 'application/json', description: 'response format'},
+      {enabled: false, key: 'X-Trace', value: 'abc', description: 'debug id'},
+      {enabled: true, key: 'Cache-Control', value: 'no-cache', description: 'cache policy'},
+    ];
+    const {rerender} = render(<EditableGrid rows={headerRows} type="header" onChange={onChange} />);
+
+    await user.click(screen.getByRole('textbox', {name: /header row 2 key/i}));
+    await user.click(screen.getByRole('button', {name: /duplicate header row 2/i}));
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      ['✓', 'Accept', 'application/json', 'response format'],
+      ['', 'X-Trace', 'abc', 'debug id'],
+      ['', 'X-Trace', 'abc', 'debug id'],
+      ['✓', 'Cache-Control', 'no-cache', 'cache policy'],
+    ]);
+
+    const duplicatedRows = onChange.mock.calls.at(-1)[0];
+    rerender(<EditableGrid rows={duplicatedRows} type="header" onChange={onChange} />);
+    await waitFor(() => expect(screen.getByRole('textbox', {name: /header row 3 key/i})).toHaveFocus());
+
+    await user.click(screen.getByRole('button', {name: /remove header row 3/i}));
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      ['✓', 'Accept', 'application/json', 'response format'],
+      ['', 'X-Trace', 'abc', 'debug id'],
+      ['✓', 'Cache-Control', 'no-cache', 'cache policy'],
+    ]);
+  });
+
+  test('supports keyboard duplicate and remove controls with focus moving to the affected header row', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const initialRows = [
+      ['✓', 'Accept', 'application/json', 'response format'],
+      ['✓', 'Authorization', 'Bearer token', 'auth header'],
+    ];
+    const {rerender} = render(<EditableGrid rows={initialRows} type="header" onChange={onChange} />);
+
+    screen.getByRole('button', {name: /duplicate header row 1/i}).focus();
+    await user.keyboard('{Enter}');
+
+    const duplicatedRows = onChange.mock.calls.at(-1)[0];
+    expect(duplicatedRows).toEqual([
+      ['✓', 'Accept', 'application/json', 'response format'],
+      ['✓', 'Accept', 'application/json', 'response format'],
+      ['✓', 'Authorization', 'Bearer token', 'auth header'],
+    ]);
+
+    rerender(<EditableGrid rows={duplicatedRows} type="header" onChange={onChange} />);
+    await waitFor(() => expect(screen.getByRole('textbox', {name: /header row 2 key/i})).toHaveFocus());
+
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole('button', {name: /remove header row 2/i})).toHaveFocus();
+    await user.keyboard(' ');
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      ['✓', 'Accept', 'application/json', 'response format'],
+      ['✓', 'Authorization', 'Bearer token', 'auth header'],
+    ]);
+  });
+});
 
 describe('RequestToolbar actions menu', () => {
   test('opens with keyboard, navigates actions, and invokes a non-destructive action', async () => {
