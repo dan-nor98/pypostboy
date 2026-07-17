@@ -344,6 +344,67 @@ describe('App shell', () => {
   });
 
 
+
+  test('saves a dirty existing request before closing its tab', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/health/saved-before-close');
+
+    await user.click(screen.getByRole('button', {name: /close health check/i}));
+
+    expect(screen.getByRole('dialog', {name: /unsaved request changes/i})).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog', {name: /unsaved request changes/i})).getByRole('button', {name: /^save$/i}));
+
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      url: 'https://example.test/health/saved-before-close',
+    })));
+    await waitFor(() => expect(screen.queryByRole('dialog', {name: /unsaved request changes/i})).not.toBeInTheDocument());
+    expect(screen.queryByRole('tab', {name: /^health check$/i})).not.toBeInTheDocument();
+  });
+
+  test('discards a dirty local draft request before closing its tab', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /^create request$/i}));
+    await user.type(screen.getByRole('textbox', {name: /request name/i}), 'Throw Away');
+    await user.selectOptions(screen.getByRole('combobox'), 'collection-3');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    expect(screen.getByRole('tab', {name: /throw away unsaved/i})).toHaveAttribute('aria-selected', 'true');
+    await user.type(screen.getByRole('textbox', {name: /request url/i}), 'https://example.test/discard');
+    await user.click(screen.getByRole('button', {name: /close throw away/i}));
+
+    expect(screen.getByRole('dialog', {name: /unsaved request changes/i})).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog', {name: /unsaved request changes/i})).getByRole('button', {name: /^discard$/i}));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', {name: /unsaved request changes/i})).not.toBeInTheDocument());
+    expect(screen.queryByRole('tab', {name: /throw away/i})).not.toBeInTheDocument();
+    expect(apiClient.createRequest).not.toHaveBeenCalled();
+    expect(apiClient.updateRequest).not.toHaveBeenCalled();
+  });
+
+  test('cancels a dirty request tab close without changing the active tab', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+    await user.type(screen.getByRole('textbox', {name: /request url/i}), '/cancelled');
+    await user.click(screen.getByRole('button', {name: /close health check/i}));
+
+    expect(screen.getByRole('dialog', {name: /unsaved request changes/i})).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog', {name: /unsaved request changes/i})).getByRole('button', {name: /^cancel$/i}));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', {name: /unsaved request changes/i})).not.toBeInTheDocument());
+    expect(screen.getByRole('tab', {name: /health check/i})).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health/cancelled');
+    expect(apiClient.updateRequest).not.toHaveBeenCalled();
+  });
+
   test('opens a sidebar request by loading full details without sending it', async () => {
     const user = userEvent.setup();
     const partialCollections = [
