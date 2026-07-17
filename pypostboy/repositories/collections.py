@@ -189,8 +189,11 @@ class Collections:
         params = []
 
         if "name" in data:
+            name = str(data["name"]).strip()
+            if not name:
+                raise ValueError("Collection name is required")
             updates.append("name = ?")
-            params.append(data["name"])
+            params.append(name)
         if "description" in data:
             updates.append("description = ?")
             params.append(data["description"])

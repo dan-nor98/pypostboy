@@ -96,6 +96,54 @@ def test_collections_crud_duplicate_and_reorder_contract(client, user_a_headers)
     )
 
 
+def test_create_collection_normalizes_name_and_rejects_blank_name(client, user_a_headers):
+    created = assert_success(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "  Root  "},
+        ),
+        201,
+    )
+    assert created["name"] == "Root"
+
+    assert_error(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "   "}
+        ),
+        400,
+        "Collection name is required",
+    )
+
+
+def test_rename_collection_normalizes_name_and_rejects_blank_name(client, user_a_headers):
+    created = assert_success(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "Original"}
+        ),
+        201,
+    )
+
+    renamed = assert_success(
+        client.put(
+            f"/api/collections/{created['id']}",
+            headers=user_a_headers,
+            json={"name": "  Renamed  "},
+        )
+    )
+    assert renamed["name"] == "Renamed"
+
+    assert_error(
+        client.put(
+            f"/api/collections/{created['id']}",
+            headers=user_a_headers,
+            json={"name": "   "},
+        ),
+        400,
+        "Collection name is required",
+    )
+
+
 def test_create_nested_collection_rejects_blank_names_and_preserves_requests(
     client, user_a_headers
 ):
