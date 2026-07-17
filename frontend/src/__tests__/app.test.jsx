@@ -462,6 +462,44 @@ describe('App shell', () => {
     await waitFor(() => expect(apiClient.createRequest).toHaveBeenCalledWith(expect.objectContaining({collection_id: 'collection-3', name: 'New Request'})));
   });
 
+  test('creates a nested folder from the collection action menu and keeps existing requests unchanged', async () => {
+    const user = userEvent.setup();
+    const initialRequests = testCollections[0].requests.map((request) => ({...request}));
+    apiClient.listCollections
+      .mockResolvedValueOnce(testCollections)
+      .mockResolvedValueOnce([{...testCollections[0], requests: initialRequests, children: [...testCollections[0].children, {id: 'collection-folder', name: 'New Folder', parent_id: 'collection-1', requests: [], children: []}]}, testCollections[1]]);
+    apiClient.createCollection.mockResolvedValueOnce({id: 'collection-folder', name: 'New Folder', parent_id: 'collection-1', requests: [], children: []});
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', {name: /actions for collection smoke tests/i}));
+    await user.click(screen.getByRole('button', {name: /create folder/i}));
+
+    expect(screen.getByRole('dialog', {name: /create folder in smoke tests/i})).toBeInTheDocument();
+    expect(screen.getByText(/destination: smoke tests/i)).toBeInTheDocument();
+    expect(screen.getByText(/folder nesting: unlimited/i)).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', {name: /folder name/i}), 'New Folder');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    await waitFor(() => expect(apiClient.createCollection).toHaveBeenCalledWith({name: 'New Folder', parent_id: 'collection-1'}));
+    expect(apiClient.createRequest).not.toHaveBeenCalled();
+    expect(apiClient.updateRequest).not.toHaveBeenCalled();
+    expect(testCollections[0].requests).toEqual(initialRequests);
+  });
+
+  test('rejects blank nested folder names before calling the API', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /actions for collection smoke tests/i}));
+    await user.click(screen.getByRole('button', {name: /create folder/i}));
+    await user.type(screen.getByRole('textbox', {name: /folder name/i}), '   ');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/folder name is required/i);
+    expect(apiClient.createCollection).not.toHaveBeenCalled();
+  });
+
   test('renames, duplicates, and deletes a collection from its action menu', async () => {
     const user = userEvent.setup();
     renderApp();

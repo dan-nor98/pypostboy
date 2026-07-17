@@ -12,6 +12,9 @@ from pypostboy.db.serializers import safe_parse, timestamp
 from pypostboy.apps.core.models import Collection, Request
 
 
+MAX_COLLECTION_NESTING_DEPTH = None
+
+
 class Collections:
     connection = None
     use_orm_reads = True
@@ -126,7 +129,9 @@ class Collections:
             user_id = data.get("user_id")
         data = data or {}
         user_id = Collections._resolve_user_id(conn, user_id)
-        name = data.get("name", "New Collection")
+        name = str(data.get("name", "New Collection")).strip()
+        if not name:
+            raise ValueError("Collection name is required")
         parent_id = data.get("parent_id", None)
         description = data.get("description", "")
 

@@ -96,6 +96,58 @@ def test_collections_crud_duplicate_and_reorder_contract(client, user_a_headers)
     )
 
 
+def test_create_nested_collection_rejects_blank_names_and_preserves_requests(
+    client, user_a_headers
+):
+    root = assert_success(
+        client.post(
+            "/api/collections", headers=user_a_headers, json={"name": "Root"}
+        ),
+        201,
+    )
+    request = assert_success(
+        client.post(
+            "/api/requests",
+            headers=user_a_headers,
+            json={"collection_id": root["id"], "name": "Keep me"},
+        ),
+        201,
+    )
+
+    assert_error(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "   ", "parent_id": root["id"]},
+        ),
+        400,
+        "Collection name is required",
+    )
+
+    child = assert_success(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "Child", "parent_id": root["id"]},
+        ),
+        201,
+    )
+    grandchild = assert_success(
+        client.post(
+            "/api/collections",
+            headers=user_a_headers,
+            json={"name": "Grandchild", "parent_id": child["id"]},
+        ),
+        201,
+    )
+
+    collections = assert_success(client.get("/api/collections", headers=user_a_headers))
+    assert collections[0]["id"] == root["id"]
+    assert collections[0]["children"][0]["id"] == child["id"]
+    assert collections[0]["children"][0]["children"][0]["id"] == grandchild["id"]
+    assert [item["id"] for item in collections[0]["requests"]] == [request["id"]]
+    assert collections[0]["children"][0]["requests"] == []
+
 def test_collection_create_and_update_reject_malformed_json(client, user_a_headers):
     assert_error(
         client.post(
