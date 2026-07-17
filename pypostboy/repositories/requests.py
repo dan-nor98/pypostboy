@@ -9,6 +9,7 @@ from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import safe_parse, safe_stringify, timestamp
 from pypostboy.apps.core.models import Collection, Request
+from pypostboy.services.sync_status import assert_expected_version
 
 
 class Requests:
@@ -137,6 +138,7 @@ class Requests:
         req = Requests.get_by_id(id, user_id)
         if not req:
             raise ValueError("Request not found")
+        assert_expected_version("request", req, data.get("expected_updated_at"))
 
         updates = []
         params = []

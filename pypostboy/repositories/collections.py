@@ -10,6 +10,7 @@ from pypostboy.db.connection import get_connection
 from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import safe_parse, timestamp
 from pypostboy.apps.core.models import Collection, Request
+from pypostboy.services.sync_status import assert_expected_version
 
 
 MAX_COLLECTION_NESTING_DEPTH = None
@@ -222,6 +223,7 @@ class Collections:
         col = Collections.get_by_id(id, user_id)
         if not col:
             raise ValueError("Collection not found")
+        assert_expected_version("collection", col, data.get("expected_updated_at"))
 
         updates = []
         params = []

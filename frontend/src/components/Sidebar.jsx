@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {AlertTriangle, MoreHorizontal, Plus, Search} from 'lucide-react';
+import {AlertCircle, AlertTriangle, CheckCircle2, CloudOff, Loader2, MoreHorizontal, Plus, RefreshCw, Search} from 'lucide-react';
 import {IconButton} from './IconButton';
 import {TreeNode} from './TreeNode';
 
@@ -95,7 +95,33 @@ function filterCollections(collections, filterValue) {
   });
 }
 
-export function Sidebar({collections = [], loading = false, error = '', activeRequestId, dirtyRequestIds = [], onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection, onExportCollection, onCopyRequestCurl}) {
+const STATUS_CONFIG = {
+  synchronized: {label: 'Synchronized', icon: CheckCircle2},
+  synchronizing: {label: 'Synchronizing', icon: Loader2},
+  offline: {label: 'Offline', icon: CloudOff},
+  failed: {label: 'Sync failed', icon: AlertCircle},
+};
+
+function SyncStatus({syncStatus, onRetrySync}) {
+  const status = syncStatus?.status || 'synchronized';
+  const config = STATUS_CONFIG[status] || STATUS_CONFIG.failed;
+  const Icon = config.icon;
+  const diagnostics = syncStatus?.diagnostics || [];
+  const conflicts = syncStatus?.conflicts || [];
+  return (
+    <div className={`banner sync-status sync-status-${status}`} role="status">
+      <Icon size={14} className={status === 'synchronizing' ? 'spin' : ''} />
+      <div className="sync-status-body">
+        <strong>{syncStatus?.label || config.label}</strong>
+        {diagnostics.map((item) => <span key={item}>{item}</span>)}
+        {conflicts.map((conflict) => <span key={`${conflict.resource_type}-${conflict.resource_id}`}>Conflict: {conflict.resource_type} {conflict.resource_id}</span>)}
+      </div>
+      {syncStatus?.retryable && <button type="button" className="button button-ghost sync-retry" onClick={onRetrySync}><RefreshCw size={13} /> Retry</button>}
+    </div>
+  );
+}
+
+export function Sidebar({collections = [], loading = false, error = '', syncStatus, activeRequestId, dirtyRequestIds = [], onRetrySync, onSelectRequest, onImportCurl, onImportPostman, onMoveCollection, onMoveRequest, onCreateCollection, onCreateRequest, onRenameCollection, onDuplicateCollection, onDeleteCollection, onDuplicateRequest, onDeleteRequest, onMoveRequestToCollection, onExportCollection, onCopyRequestCurl}) {
   const treeRef = useRef(null);
   const initialExpandedIdsRef = useRef(readStoredExpandedIds());
   const knownCollectionIdsRef = useRef(null);
@@ -235,7 +261,7 @@ export function Sidebar({collections = [], loading = false, error = '', activeRe
       </div>
       <div className="filter"><Search size={14} /><input placeholder="Filter collections" value={filterValue} onChange={(event) => setFilterValue(event.target.value)} /></div>
       {error && <div className="banner error"><AlertTriangle size={14} /> {error}</div>}
-      {!error && <div className="banner"><AlertTriangle size={14} /> Data synced from local API</div>}
+      {!error && <SyncStatus syncStatus={syncStatus} onRetrySync={onRetrySync} />}
       <div role="tree" aria-label="Collections" className="tree" ref={treeRef} onKeyDown={handleKeyDown}>
         {loading && <div className="empty-state">Loading collections…</div>}
         {!loading && !error && collections.length === 0 && <div className="empty-state">No collections yet.</div>}

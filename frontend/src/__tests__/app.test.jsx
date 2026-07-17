@@ -10,6 +10,8 @@ import {apiClient} from '../api/client';
 vi.mock('../api/client', () => ({
   apiClient: {
     listCollections: vi.fn(),
+    getSyncStatus: vi.fn(),
+    retrySync: vi.fn(),
     getRequest: vi.fn(),
     proxyRequest: vi.fn(),
     updateRequest: vi.fn(),
@@ -94,6 +96,8 @@ function flattenTestRequests(collections) {
 
 function renderApp(collections = testCollections) {
   apiClient.listCollections.mockResolvedValue(collections);
+  apiClient.getSyncStatus.mockResolvedValue({status: 'synchronized', label: 'Synchronized', diagnostics: [], conflicts: [], retryable: false});
+  apiClient.retrySync.mockResolvedValue({status: 'synchronizing', label: 'Synchronizing', diagnostics: ['Retry requested by client'], conflicts: [], retryable: false});
   apiClient.getRequest.mockImplementation((id) => Promise.resolve(flattenTestRequests(testCollections).find((request) => request.id === id)));
   apiClient.updateRequest.mockImplementation((id, data) => Promise.resolve({...data, id}));
   apiClient.listRequestInstances.mockResolvedValue([
@@ -1330,5 +1334,58 @@ describe('App shell', () => {
 
     fireEvent.keyDown(window, {key: 'p', metaKey: true, shiftKey: true});
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('Sidebar synchronization status', () => {
+  test.each([
+    ['synchronized', 'Synchronized'],
+    ['synchronizing', 'Synchronizing'],
+    ['offline', 'Offline'],
+    ['failed', 'Sync failed'],
+  ])('renders %s status label and diagnostics', (status, label) => {
+    render(
+      <Sidebar
+        collections={[]}
+        syncStatus={{status, label, diagnostics: ['diagnostic detail'], conflicts: [], retryable: false}}
+      />,
+    );
+
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.getByText('diagnostic detail')).toBeInTheDocument();
+  });
+
+  test('renders retry control for retryable failed status', async () => {
+    const user = userEvent.setup();
+    const onRetrySync = vi.fn();
+    render(
+      <Sidebar
+        collections={[]}
+        syncStatus={{status: 'failed', label: 'Sync failed', diagnostics: ['token expired'], conflicts: [], retryable: true}}
+        onRetrySync={onRetrySync}
+      />,
+    );
+
+    expect(screen.getByText('token expired')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /retry/i}));
+    expect(onRetrySync).toHaveBeenCalledTimes(1);
+  });
+
+  test('renders conflict metadata without hiding diagnostics', () => {
+    render(
+      <Sidebar
+        collections={[]}
+        syncStatus={{
+          status: 'failed',
+          label: 'Sync failed',
+          diagnostics: ['merge required'],
+          conflicts: [{resource_type: 'request', resource_id: 42}],
+          retryable: true,
+        }}
+      />,
+    );
+
+    expect(screen.getByText('merge required')).toBeInTheDocument();
+    expect(screen.getByText('Conflict: request 42')).toBeInTheDocument();
   });
 });
