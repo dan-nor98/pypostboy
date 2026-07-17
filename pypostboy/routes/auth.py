@@ -1,210 +1,42 @@
 """Authentication API views for PostBoy."""
-import hashlib
-import hmac
-import sqlite3
-
-from django.contrib.auth import authenticate, login as django_login, logout as django_logout
-from django.contrib.auth.hashers import check_password, make_password
-from django.contrib.sessions.models import Session
-from django.core.cache import cache
-from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.contrib.auth import login as django_login, logout as django_logout
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
-from pypostboy.apps.core.models import User
 from pypostboy.auth import AuthenticationError, api_token_max_age_seconds, get_current_user, issue_api_token
-from pypostboy.db.migrations import DEFAULT_LOCAL_USERNAME
-from pypostboy.db.serializers import timestamp
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
-from pypostboy.services.auth_service import (
-    initiate_recovery,
-    issue_recovery_key,
-    rotate_recovery_key,
-)
+from pypostboy.services import auth_service
 
-GENERIC_RECOVERY_ERROR = "Invalid recovery credentials"
-RECOVERY_MAX_ATTEMPTS = 5
-RECOVERY_WINDOW_SECONDS = 300
-AUTH_MAX_FAILED_ATTEMPTS = 5
-AUTH_WINDOW_SECONDS = 300
-GENERIC_AUTH_RATE_LIMIT_ERROR = "Too many authentication attempts, try again later"
+RECOVERY_REQUEST_RESPONSE = {
+    "recovery_requested": True,
+    "message": (
+        "If the account exists, recovery instructions have been prepared. "
+        "PyPostBoy is local-first and does not send email unless a notification adapter is configured."
+    ),
+}
+AUTH_BACKEND = "pypostboy.djangoapp.auth_backend.PostBoyAuthBackend"
 
 
-def _user_value(user, key):
-    if user is None:
-        return None
-    if isinstance(user, dict):
-        return user.get(key)
-    if key == "password_hash":
-        return user.password
-    return getattr(user, key, None)
+def _remote_addr(request):
+    return request.META.get("REMOTE_ADDR")
 
 
-def _user_to_mapping(user):
-    """Return the user model as the dict shape used by repository callers."""
-    if user is None:
-        return None
-    if isinstance(user, dict):
-        return user
-    return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "password_hash": user.password,
-        "auth_provider": user.auth_provider,
-        "auth_subject": user.auth_subject,
-        "recovery_key_hash": user.recovery_key_hash,
-        "recovery_key_created_at": user.recovery_key_created_at,
-        "recovery_key_rotated_at": user.recovery_key_rotated_at,
-        "credentials_updated_at": user.credentials_updated_at,
-        "created_at": user.created_at,
-        "updated_at": user.updated_at,
-        "last_login": user.last_login,
-        "is_superuser": user.is_superuser,
-        "is_staff": user.is_staff,
-        "is_active": user.is_active,
-    }
+def _service_error_response(exc):
+    return error(exc.message, exc.status_code)
 
 
-def _public_user(user):
-    """Return a client-safe user representation."""
-    if not user:
-        return None
-    username = _user_value(user, "username")
-    return {
-        "id": _user_value(user, "id"),
-        "username": username,
-        "email": _user_value(user, "email"),
-        "auth_provider": _user_value(user, "auth_provider"),
-        "is_guest": username == DEFAULT_LOCAL_USERNAME
-        and not _user_value(user, "password_hash"),
-    }
-
-
-def _normalize_credentials(payload):
-    username = (payload.get("username") or "").strip()
-    password = payload.get("password") or ""
-    email = (payload.get("email") or "").strip() or None
-    return username, password, email
-
-
-def _normalize_auth_identity(payload):
-    identity = (payload.get("identity") or "").strip()
-    username = (payload.get("username") or "").strip()
-    email = (payload.get("email") or "").strip()
-    return identity or username or email, payload.get("password") or ""
-
-
-def _normalize_recovery_identity(payload):
-    username = (payload.get("username") or "").strip()
-    email = (payload.get("email") or "").strip()
-    return username, email
-
-
-def _validate_password_policy(password):
-    return len(password or "") >= 8
-
-
-def _issue_recovery_key():
-    return issue_recovery_key()
-
-
-def _hash_recovery_key(recovery_key):
-    return make_password(recovery_key)
-
-
-def _legacy_recovery_key_hash(recovery_key):
-    return hashlib.sha256((recovery_key or "").encode("utf-8")).hexdigest()
-
-
-def _is_legacy_recovery_key_hash(expected_hash):
-    return (
-        isinstance(expected_hash, str)
-        and len(expected_hash) == 64
-        and all(char in "0123456789abcdefABCDEF" for char in expected_hash)
-    )
-
-
-def _constant_time_recovery_match(recovery_key, expected_hash):
-    if not expected_hash:
-        return False
-    if _is_legacy_recovery_key_hash(expected_hash):
-        return hmac.compare_digest(_legacy_recovery_key_hash(recovery_key), expected_hash)
-    return check_password(recovery_key, expected_hash)
-
-
-def _rehash_legacy_recovery_key(user, recovery_key):
-    if not _is_legacy_recovery_key_hash(user.recovery_key_hash):
-        return
-    user.recovery_key_hash = _hash_recovery_key(recovery_key)
-    user.updated_at = timestamp()
-    user.save(update_fields=["recovery_key_hash", "updated_at"])
-
-
-def _hashed_identity(identity):
-    normalized = (identity or "unknown").strip().lower()
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-
-
-def _hashed_recovery_identity(identity):
-    return _hashed_identity(identity)
-
-
-def _hashed_remote_addr(request):
-    remote_addr = (request.META.get("REMOTE_ADDR") or "unknown").strip()
-    return hashlib.sha256(remote_addr.encode("utf-8")).hexdigest()
-
-
-def _recovery_rate_limit_key(request, identity):
-    return f"recover_rate_limit::{_hashed_remote_addr(request)}::{_hashed_recovery_identity(identity)}"
-
-
-def _is_recovery_rate_limited(request, identity):
-    current = cache.get(_recovery_rate_limit_key(request, identity))
-    return current is not None and current >= RECOVERY_MAX_ATTEMPTS
-
-
-def _record_recovery_failure(request, identity):
-    key = _recovery_rate_limit_key(request, identity)
-    current = cache.get(key)
-    if current is None:
-        cache.add(key, 1, timeout=RECOVERY_WINDOW_SECONDS)
-        return
-    cache.incr(key)
-
-
-def _reset_recovery_failures(request, identity):
-    cache.delete(_recovery_rate_limit_key(request, identity))
-
-
-def _auth_rate_limit_key(request, username):
-    return f"auth_rate_limit::{_hashed_remote_addr(request)}::{_hashed_identity(username)}"
-
-
-def _is_auth_rate_limited(request, username):
-    current = cache.get(_auth_rate_limit_key(request, username))
-    return current is not None and current >= AUTH_MAX_FAILED_ATTEMPTS
-
-
-def _record_auth_failure(request, username):
-    key = _auth_rate_limit_key(request, username)
-    current = cache.get(key)
-    if current is None:
-        cache.add(key, 1, timeout=AUTH_WINDOW_SECONDS)
-        return
-    cache.incr(key)
-
-
-def _reset_auth_failures(request, username):
-    cache.delete(_auth_rate_limit_key(request, username))
+def _payload_or_error(request):
+    try:
+        return json_body(request, allow_blank=False), None
+    except BadJsonBody:
+        return None, error("Invalid JSON request body", 400)
 
 
 def current_user(request):
     """Return the current session/header/cookie resolved user."""
     try:
-        return ok(_public_user(get_current_user(request)))
+        return ok(auth_service.public_user(get_current_user(request)))
     except AuthenticationError as err:
         return error(err, 401)
 
@@ -215,229 +47,73 @@ def csrf_token(request):
     return ok({"csrf_token": get_token(request)})
 
 
-def _is_unique_constraint_error(exc):
-    """Return True if the exception represents a uniqueness constraint violation."""
-
-    def _matches(candidate):
-        if isinstance(candidate, (IntegrityError, sqlite3.IntegrityError)):
-            return True
-        if getattr(candidate, "sqlstate", None) == "23505":
-            return True
-        if getattr(candidate, "pgcode", None) == "23505":
-            return True
-        if candidate.__class__.__name__ == "UniqueViolation":
-            return True
-        return False
-
-    current = exc
-    while current is not None:
-        if _matches(current):
-            return True
-        current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
-    return False
-
-
-def _registration_conflict_query(username, email):
-    """Return the legacy conflict-query tuple for backwards-compatible tests."""
-    if email is None:
-        return "SELECT id FROM users WHERE username = ?", (username,)
-    return "SELECT id FROM users WHERE username = ? OR email = ?", (username, email)
-
-
-def _registration_conflict_filter(username, email):
-    """Return an ORM filter for conflicting register identities."""
-    if email is None:
-        return Q(username=username)
-    return Q(username=username) | Q(email=email)
-
-
-def insert_and_get_id(**fields):
-    """Create a user through the ORM and return its id.
-
-    The function name is retained for older tests that monkeypatch the user
-    creation step to force database-level uniqueness errors.
-    """
-    return User.objects.create(**fields).id
-
-
 def login(request):
     """Start a session for a username/password user."""
+    payload, response = _payload_or_error(request)
+    if response:
+        return response
     try:
-        identity, password = _normalize_auth_identity(
-            json_body(request, allow_blank=False)
-        )
-    except BadJsonBody:
-        return error("Invalid JSON request body", 400)
-    if not identity or not password:
-        return error("Username and password are required", 400)
-    if _is_auth_rate_limited(request, identity):
-        return error(GENERIC_AUTH_RATE_LIMIT_ERROR, 429)
+        user = auth_service.authenticate_with_rate_limit(payload, _remote_addr(request), request=request)
+    except auth_service.AuthServiceError as exc:
+        return _service_error_response(exc)
 
-    user = authenticate(request, username=identity, password=password)
-    if not user:
-        _record_auth_failure(request, identity)
-        return error("Invalid username or password", 401)
-
-    _reset_auth_failures(request, identity)
-    django_login(request, user, backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend")
-    request.current_user = _user_to_mapping(user)
-    return ok(_public_user(user))
+    django_login(request, user, backend=AUTH_BACKEND)
+    request.current_user = auth_service.user_to_mapping(user)
+    return ok(auth_service.public_user(user))
 
 
 def register(request):
     """Create a local username/password user and start a session."""
+    payload, response = _payload_or_error(request)
+    if response:
+        return response
     try:
-        username, password, email = _normalize_credentials(
-            json_body(request, allow_blank=False)
+        registration = auth_service.register_user(payload)
+        user = auth_service.authenticate_with_rate_limit(
+            {"username": registration.user.username, "password": payload.get("password") or ""},
+            _remote_addr(request),
+            request=request,
         )
-    except BadJsonBody:
-        return error("Invalid JSON request body", 400)
-    if not username or not password:
-        return error("Username and password are required", 400)
-    if not _validate_password_policy(password):
-        return error("Password must be at least 8 characters", 400)
+    except auth_service.AuthServiceError as exc:
+        return _service_error_response(exc)
 
-    if User.objects.filter(_registration_conflict_filter(username, email)).exists():
-        return error("Username or email already exists", 409)
-
-    now = timestamp()
-    recovery_key = _issue_recovery_key()
-    recovery_key_hash = _hash_recovery_key(recovery_key)
-    try:
-        with transaction.atomic():
-            user_id = insert_and_get_id(
-                username=username,
-                email=email,
-                password=make_password(password),
-                auth_provider="local",
-                auth_subject=None,
-                recovery_key_hash=recovery_key_hash,
-                recovery_key_created_at=now,
-                recovery_key_rotated_at=None,
-                credentials_updated_at=now,
-                created_at=now,
-                updated_at=now,
-            )
-            user = User.objects.get(pk=user_id)
-    except Exception as exc:
-        if _is_unique_constraint_error(exc):
-            return error("Username or email already exists", 409)
-        raise
-
-    django_login(
-        request,
-        authenticate(request, username=username, password=password),
-        backend="pypostboy.djangoapp.auth_backend.PostBoyAuthBackend",
-    )
-    request.current_user = _user_to_mapping(user)
-    return created({"user": _public_user(user), "recovery_key": recovery_key})
-
-
-def _delete_sessions_for_user(user_id):
-    """Delete every server-side browser session authenticated as the user."""
-    user_id = str(user_id)
-    for session in Session.objects.all():
-        if str(session.get_decoded().get("_auth_user_id")) == user_id:
-            session.delete()
-
-
-def _find_user_for_recovery(username, email):
-    if username:
-        return User.objects.filter(username=username).first()
-    if email:
-        return User.objects.filter(email=email).first()
-    return None
+    django_login(request, user, backend=AUTH_BACKEND)
+    request.current_user = auth_service.user_to_mapping(registration.user)
+    return created({
+        "user": auth_service.public_user(registration.user),
+        "recovery_key": registration.recovery_key,
+    })
 
 
 def recover_request(request):
     """Initiate forgot-password recovery without revealing account existence."""
-    generic_response = {
-        "recovery_requested": True,
-        "message": (
-            "If the account exists, recovery instructions have been prepared. "
-            "PyPostBoy is local-first and does not send email unless a notification adapter is configured."
-        ),
-    }
-    try:
-        payload = json_body(request, allow_blank=False)
-    except BadJsonBody:
-        return error("Invalid JSON request body", 400)
+    payload, response = _payload_or_error(request)
+    if response:
+        return response
+    auth_service.request_recovery(payload)
+    return ok(RECOVERY_REQUEST_RESPONSE)
 
-    username, email = _normalize_recovery_identity(payload)
-    if username or email:
-        user = _find_user_for_recovery(username, email)
-        if user:
-            initiate_recovery(user)
-    return ok(generic_response)
 
 def recover_verify(request):
+    payload, response = _payload_or_error(request)
+    if response:
+        return response
     try:
-        payload = json_body(request, allow_blank=False)
-    except BadJsonBody:
-        return error("Invalid JSON request body", 400)
-
-    username, email = _normalize_recovery_identity(payload)
-    identity = username or email
-    if _is_recovery_rate_limited(request, identity):
-        return error("Too many recovery attempts, try again later", 429)
-
-    recovery_key = payload.get("recovery_key") or ""
-    if (not username and not email) or not recovery_key:
-        return error(GENERIC_RECOVERY_ERROR, 401)
-
-    user = _find_user_for_recovery(username, email)
-    if (
-        not user
-        or not user.recovery_key_hash
-        or not _constant_time_recovery_match(recovery_key, user.recovery_key_hash)
-    ):
-        _record_recovery_failure(request, identity)
-        return error(GENERIC_RECOVERY_ERROR, 401)
-
-    _rehash_legacy_recovery_key(user, recovery_key)
-    _reset_recovery_failures(request, identity)
+        auth_service.verify_recovery(payload, _remote_addr(request))
+    except auth_service.AuthServiceError as exc:
+        return _service_error_response(exc)
     return ok({"valid": True})
 
 
 def recover_reset(request):
+    payload, response = _payload_or_error(request)
+    if response:
+        return response
     try:
-        payload = json_body(request, allow_blank=False)
-    except BadJsonBody:
-        return error("Invalid JSON request body", 400)
+        new_recovery_key = auth_service.reset_password_with_recovery(payload, _remote_addr(request))
+    except auth_service.AuthServiceError as exc:
+        return _service_error_response(exc)
 
-    username, email = _normalize_recovery_identity(payload)
-    identity = username or email
-    if _is_recovery_rate_limited(request, identity):
-        return error("Too many recovery attempts, try again later", 429)
-
-    recovery_key = payload.get("recovery_key") or ""
-    new_password = payload.get("new_password") or ""
-    if (not username and not email) or not recovery_key or not _validate_password_policy(new_password):
-        return error(GENERIC_RECOVERY_ERROR, 401)
-
-    user = _find_user_for_recovery(username, email)
-    if (
-        not user
-        or not user.recovery_key_hash
-        or not _constant_time_recovery_match(recovery_key, user.recovery_key_hash)
-    ):
-        _record_recovery_failure(request, identity)
-        return error(GENERIC_RECOVERY_ERROR, 401)
-
-    _rehash_legacy_recovery_key(user, recovery_key)
-
-    now = timestamp()
-    user.password = make_password(new_password)
-    user.credentials_updated_at = now
-    user.updated_at = now
-    user.save(update_fields=[
-        "password",
-        "credentials_updated_at",
-        "updated_at",
-    ])
-    new_recovery_key = rotate_recovery_key(user)
-    _reset_recovery_failures(request, identity)
-    _delete_sessions_for_user(user.id)
     if hasattr(request, "current_user"):
         delattr(request, "current_user")
     return ok({"password_reset": True, "recovery_key": new_recovery_key})
@@ -448,23 +124,14 @@ def token(request):
     """Issue a short-lived bearer token for non-browser API clients."""
     if request.method != "POST":
         return error("Method not allowed", 405)
+    payload, response = _payload_or_error(request)
+    if response:
+        return response
     try:
-        identity, password = _normalize_auth_identity(
-            json_body(request, allow_blank=False)
-        )
-    except BadJsonBody:
-        return error("Invalid JSON request body", 400)
-    if not identity or not password:
-        return error("Username and password are required", 400)
-    if _is_auth_rate_limited(request, identity):
-        return error(GENERIC_AUTH_RATE_LIMIT_ERROR, 429)
+        user = auth_service.authenticate_with_rate_limit(payload, _remote_addr(request), request=request)
+    except auth_service.AuthServiceError as exc:
+        return _service_error_response(exc)
 
-    user = authenticate(request, username=identity, password=password)
-    if not user:
-        _record_auth_failure(request, identity)
-        return error("Invalid username or password", 401)
-
-    _reset_auth_failures(request, identity)
     return ok({
         "token": issue_api_token(user.id),
         "token_type": "Bearer",
@@ -477,4 +144,4 @@ def logout(request):
     django_logout(request)
     if hasattr(request, "current_user"):
         delattr(request, "current_user")
-    return ok(_public_user(get_current_user(request)))
+    return ok(auth_service.public_user(get_current_user(request)))

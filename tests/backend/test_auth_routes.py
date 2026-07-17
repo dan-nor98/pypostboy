@@ -734,18 +734,18 @@ def test_stale_cookie_does_not_override_session(client, user_b):
 
 def test_registration_conflict_query_omits_nullable_email_parameter_when_absent():
     """PostgreSQL cannot infer a standalone NULL parameter in IS NOT NULL."""
-    from pypostboy.routes.auth import _registration_conflict_query
+    from pypostboy.services.auth_service import registration_conflict_query
 
-    sql, params = _registration_conflict_query("new-user", None)
+    sql, params = registration_conflict_query("new-user", None)
 
     assert sql == "SELECT id FROM users WHERE username = ?"
     assert params == ("new-user",)
 
 
 def test_registration_conflict_query_checks_email_when_provided():
-    from pypostboy.routes.auth import _registration_conflict_query
+    from pypostboy.services.auth_service import registration_conflict_query
 
-    sql, params = _registration_conflict_query("new-user", "new-user@example.test")
+    sql, params = registration_conflict_query("new-user", "new-user@example.test")
 
     assert sql == "SELECT id FROM users WHERE username = ? OR email = ?"
     assert params == ("new-user", "new-user@example.test")
@@ -755,12 +755,12 @@ def test_registration_conflict_query_checks_email_when_provided():
 def test_register_returns_conflict_when_insert_raises_sqlite_integrity_error(client, monkeypatch):
     import sqlite3
 
-    from pypostboy.routes import auth
+    from pypostboy.services import auth_service
 
     def _raise_unique(*_args, **_kwargs):
         raise sqlite3.IntegrityError("UNIQUE constraint failed: users.username")
 
-    monkeypatch.setattr(auth, "insert_and_get_id", _raise_unique)
+    monkeypatch.setattr(auth_service, "insert_and_get_id", _raise_unique)
 
     response = client.post(
         "/api/auth/register",
@@ -771,7 +771,7 @@ def test_register_returns_conflict_when_insert_raises_sqlite_integrity_error(cli
 
 
 def test_register_returns_conflict_when_insert_raises_postgres_unique_violation(client, monkeypatch):
-    from pypostboy.routes import auth
+    from pypostboy.services import auth_service
 
     class FakeUniqueViolation(Exception):
         sqlstate = "23505"
@@ -779,7 +779,7 @@ def test_register_returns_conflict_when_insert_raises_postgres_unique_violation(
     def _raise_unique(*_args, **_kwargs):
         raise FakeUniqueViolation("duplicate key value violates unique constraint")
 
-    monkeypatch.setattr(auth, "insert_and_get_id", _raise_unique)
+    monkeypatch.setattr(auth_service, "insert_and_get_id", _raise_unique)
 
     response = client.post(
         "/api/auth/register",
@@ -1080,12 +1080,8 @@ def test_recovery_rate_limit_enforces_threshold(client):
     )
 
 
-def test_recovery_rate_limit_resets_after_window_expiry(client, monkeypatch):
-    import time
-
-    from pypostboy.routes import auth
-
-    monkeypatch.setattr(auth, "RECOVERY_WINDOW_SECONDS", 1)
+def test_recovery_rate_limit_allows_success_after_cache_expiry(client):
+    from pypostboy.services import auth_service
     registration = assert_success(
         client.post(
             "/api/auth/register",
@@ -1113,7 +1109,7 @@ def test_recovery_rate_limit_resets_after_window_expiry(client, monkeypatch):
         "Too many recovery attempts, try again later",
     )
 
-    time.sleep(1.1)
+    auth_service.cache.clear()
     verified = assert_success(
         client.post(
             "/api/auth/recover/verify",
