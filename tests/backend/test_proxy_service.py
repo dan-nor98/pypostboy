@@ -83,6 +83,79 @@ def test_proxy_http_request_does_not_forward_unsafe_transport_headers(monkeypatc
     }
 
 
+def test_proxy_http_request_combines_comma_safe_duplicate_header_rows(monkeypatch):
+    calls = []
+
+    def fake_request(**kwargs):
+        calls.append(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", fake_request)
+
+    proxy_http_request(
+        {
+            "url": "https://api.example.test/widgets",
+            "method": "GET",
+            "headers": [
+                {"enabled": True, "key": "Accept", "value": "application/json"},
+                {"enabled": True, "key": "Accept", "value": "text/plain"},
+            ],
+        }
+    )
+
+    assert calls[0]["headers"] == {
+        "Accept": "application/json, text/plain",
+        "Accept-Encoding": "identity",
+    }
+
+
+def test_proxy_http_request_rejects_non_combinable_duplicate_header_rows(monkeypatch):
+    def fake_request(**kwargs):
+        return FakeResponse()
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", fake_request)
+
+    with pytest.raises(ValueError, match="Duplicate header Set-Cookie is not supported"):
+        proxy_http_request(
+            {
+                "url": "https://api.example.test/widgets",
+                "method": "GET",
+                "headers": [
+                    {"enabled": True, "key": "Set-Cookie", "value": "a=1"},
+                    {"enabled": True, "key": "Set-Cookie", "value": "b=2"},
+                ],
+            }
+        )
+
+
+def test_proxy_http_request_skips_disabled_empty_and_restricted_header_rows(monkeypatch):
+    calls = []
+
+    def fake_request(**kwargs):
+        calls.append(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", fake_request)
+
+    proxy_http_request(
+        {
+            "url": "https://api.example.test/widgets",
+            "method": "GET",
+            "headers": [
+                {"enabled": False, "key": "X-Disabled", "value": "skip"},
+                {"enabled": True, "key": "X-Empty", "value": ""},
+                {"enabled": True, "key": "Host", "value": "evil.example"},
+                {"enabled": True, "key": "X-Tenant", "value": "acme"},
+            ],
+        }
+    )
+
+    assert calls[0]["headers"] == {
+        "X-Tenant": "acme",
+        "Accept-Encoding": "identity",
+    }
+
+
 def test_proxy_http_request_requires_url():
     with pytest.raises(ValueError, match="URL is required"):
         proxy_http_request({"method": "GET"})

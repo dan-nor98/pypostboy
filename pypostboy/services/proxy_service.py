@@ -32,6 +32,24 @@ REQUEST_CONTROLLED_HEADERS = HOP_BY_HOP_HEADERS | {
     'host',
 }
 
+# RFC 9110 allows recipients to combine duplicate field lines with commas only
+# when the field's grammar uses list syntax. Set-Cookie is the common explicit
+# exception and is response-only for this client, so duplicate outbound rows for
+# non-list fields are rejected instead of being collapsed unsafely.
+NON_COMBINABLE_REQUEST_HEADERS = {
+    'authorization',
+    'content-type',
+    'cookie',
+    'if-match',
+    'if-none-match',
+    'if-modified-since',
+    'if-unmodified-since',
+    'range',
+    'referer',
+    'set-cookie',
+    'user-agent',
+}
+
 LOOPBACK_HOSTNAMES = {'localhost', '127.0.0.1', '::1'}
 
 
@@ -134,17 +152,7 @@ def proxy_http_request(body):
 
     url = _rewrite_loopback_url_for_host(url)
 
-    fetch_headers = {}
-    skipped_headers_count = 0
-    if isinstance(headers, dict):
-        for k, v in headers.items():
-            header_name = str(k).strip() if k else ''
-            if not header_name or not v:
-                continue
-            if header_name.lower() in REQUEST_CONTROLLED_HEADERS:
-                skipped_headers_count += 1
-                continue
-            fetch_headers[header_name] = v
+    fetch_headers, skipped_headers_count = _prepare_outbound_headers(headers)
 
     # Do not forward client-provided compression preferences. If an imported
     # cURL/browser request includes ``Accept-Encoding: gzip, deflate, br, zstd``,
@@ -294,6 +302,56 @@ def _is_multipart_form_data(content_type):
     """Return whether a content type identifies multipart form data."""
     media_type = str(content_type or '').split(';', 1)[0].strip().lower()
     return media_type == 'multipart/form-data'
+
+
+def _prepare_outbound_headers(headers):
+    """Return requests-compatible headers after applying duplicate rules."""
+    fetch_headers = {}
+    header_names_by_lower = {}
+    skipped_headers_count = 0
+
+    for header_name, header_value in _iter_header_rows(headers):
+        lower_name = header_name.lower()
+        if lower_name in REQUEST_CONTROLLED_HEADERS:
+            skipped_headers_count += 1
+            continue
+        existing_name = header_names_by_lower.get(lower_name)
+        if existing_name:
+            if lower_name in NON_COMBINABLE_REQUEST_HEADERS:
+                raise ValueError(
+                    f'Duplicate header {header_name} is not supported; HTTP does not define safe comma-combining for this field'
+                )
+            fetch_headers[existing_name] = f'{fetch_headers[existing_name]}, {header_value}'
+            continue
+        header_names_by_lower[lower_name] = header_name
+        fetch_headers[header_name] = header_value
+
+    return fetch_headers, skipped_headers_count
+
+
+def _iter_header_rows(headers):
+    """Yield enabled, non-empty outbound header rows in user order."""
+    if isinstance(headers, dict):
+        iterable = ({'enabled': True, 'key': key, 'value': value} for key, value in headers.items())
+    elif isinstance(headers, list):
+        iterable = headers
+    else:
+        return
+
+    for header in iterable:
+        if isinstance(header, (list, tuple)):
+            enabled, key, value = (header if len(header) > 2 else (True, header[0] if header else '', header[1] if len(header) > 1 else ''))
+        elif isinstance(header, dict):
+            enabled = header.get('enabled', True)
+            key = header.get('key', '')
+            value = header.get('value', '')
+        else:
+            continue
+        header_name = str(key).strip() if key else ''
+        header_value = '' if value is None else str(value)
+        if enabled is False or not header_name or not header_value:
+            continue
+        yield header_name, header_value
 
 
 def _remove_header(headers, header_name):
