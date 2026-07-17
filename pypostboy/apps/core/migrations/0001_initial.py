@@ -45,7 +45,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.TextField()),('method', models.TextField(default='GET')),('url', models.TextField(default='')),
-                ('headers', models.TextField(default='[]')),('body_type', models.TextField(default='none')),
+                ('headers', models.TextField(default='[]')),('query_params', models.TextField(default='[]')),('body_type', models.TextField(default='none')),
                 ('body_content', models.TextField(default='')),('body_raw_type', models.TextField(default='application/json')),
                 ('form_data', models.TextField(default='[]')),('auth_type', models.TextField(default='none')),
                 ('auth_data', models.TextField(default='{}')),('sort_order', models.IntegerField(default=0)),
@@ -58,7 +58,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.TextField()),('method', models.TextField(default='GET')),('url', models.TextField(default='')),
-                ('headers', models.TextField(default='[]')),('body_type', models.TextField(default='none')),
+                ('headers', models.TextField(default='[]')),('query_params', models.TextField(default='[]')),('body_type', models.TextField(default='none')),
                 ('body_content', models.TextField(default='')),('body_raw_type', models.TextField(default='application/json')),
                 ('form_data', models.TextField(default='[]')),('auth_type', models.TextField(default='none')),
                 ('auth_data', models.TextField(default='{}')),('response_status', models.IntegerField(null=True)),

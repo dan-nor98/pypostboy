@@ -6,6 +6,7 @@ DEFAULT_LOCAL_USERNAME = 'local_user'
 DEFAULT_LOCAL_EMAIL = 'local@pypostboy.invalid'
 
 REQUEST_INSTANCE_COLUMN_MIGRATIONS = {
+    'query_params': "TEXT DEFAULT '[]'",
     'response_status': 'INTEGER',
     'response_status_text': "TEXT DEFAULT ''",
     'response_headers': "TEXT DEFAULT '{}'",
@@ -15,6 +16,7 @@ REQUEST_INSTANCE_COLUMN_MIGRATIONS = {
 }
 REQUEST_COLUMN_MIGRATIONS = {
     'pre_request_script': "TEXT DEFAULT ''",
+    'query_params': "TEXT DEFAULT '[]'",
 }
 
 USER_RECOVERY_COLUMN_MIGRATIONS = {
@@ -338,6 +340,7 @@ def _rebuild_requests(cursor, default_user_id):
             method TEXT NOT NULL DEFAULT 'GET',
             url TEXT DEFAULT '',
             headers TEXT DEFAULT '[]',
+            query_params TEXT DEFAULT '[]',
             body_type TEXT DEFAULT 'none',
             body_content TEXT DEFAULT '',
             body_raw_type TEXT DEFAULT 'application/json',
@@ -358,11 +361,11 @@ def _rebuild_requests(cursor, default_user_id):
     user_id_expr = _user_id_expression(columns, fallback)
     cursor.execute(f"""
         INSERT INTO requests (
-            id, user_id, collection_id, name, method, url, headers,
+            id, user_id, collection_id, name, method, url, headers, query_params,
             body_type, body_content, body_raw_type, form_data,
             auth_type, auth_data, pre_request_script, sort_order, created_at, updated_at
         )
-        SELECT id, {user_id_expr}, collection_id, name, method, url, headers,
+        SELECT id, {user_id_expr}, collection_id, name, method, url, headers, COALESCE(query_params, '[]'),
                body_type, body_content, body_raw_type, form_data,
                auth_type, auth_data, COALESCE(pre_request_script, ''), sort_order, created_at, updated_at
         FROM requests_old_ownership
@@ -385,6 +388,7 @@ def _rebuild_request_instances(cursor, default_user_id):
             method TEXT NOT NULL DEFAULT 'GET',
             url TEXT DEFAULT '',
             headers TEXT DEFAULT '[]',
+            query_params TEXT DEFAULT '[]',
             body_type TEXT DEFAULT 'none',
             body_content TEXT DEFAULT '',
             body_raw_type TEXT DEFAULT 'application/json',
