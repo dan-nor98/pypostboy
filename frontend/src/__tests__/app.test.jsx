@@ -328,6 +328,37 @@ describe('App shell', () => {
     expect(root).toHaveAttribute('aria-expanded', 'true');
   });
 
+  test('exposes full long collection and request names to assistive technology and title tooltips', () => {
+    const longCollectionName = 'Extremely Long Collection Name That Should Stay Visually Truncated But Remain Fully Available';
+    const longRequestName = 'Extremely Long Request Name That Should Stay Visually Truncated But Remain Fully Available';
+
+    render(
+      <Sidebar
+        collections={[{
+          id: 'long-collection',
+          name: longCollectionName,
+          requests: [{
+            id: 'long-request',
+            name: longRequestName,
+            method: 'PATCH',
+            url: 'https://example.test/very/long/request',
+            headers: [],
+            body_content: '',
+            body_raw_type: 'application/json',
+          }],
+          children: [],
+        }]}
+      />,
+    );
+
+    const tree = screen.getByRole('tree', {name: /collections/i});
+    const collectionItem = within(tree).getByRole('treeitem', {name: longCollectionName});
+    const requestItem = within(tree).getByRole('treeitem', {name: `PATCH ${longRequestName}`});
+
+    expect(within(collectionItem).getByText(longCollectionName)).toHaveAttribute('title', longCollectionName);
+    expect(within(requestItem).getByText(longRequestName)).toHaveAttribute('title', longRequestName);
+    expect(requestItem).toHaveAttribute('aria-label', `PATCH ${longRequestName}`);
+  });
 
 
   test('shows a non-actionable empty row for an expanded root collection', () => {
@@ -357,6 +388,8 @@ describe('App shell', () => {
     expect(within(tree).getByText('No requests or folders')).toBeInTheDocument();
     expect(within(tree).queryByRole('treeitem', {name: /no requests or folders/i})).not.toBeInTheDocument();
     expect(within(tree).queryByRole('button', {name: /no requests or folders/i})).not.toBeInTheDocument();
+  });
+
   test('keeps a collapsed collection collapsed after collections refresh', async () => {
     const user = userEvent.setup();
     renderApp();

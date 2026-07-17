@@ -77,7 +77,7 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
       >
         <ChevronDown size={13} className={item.expanded ? '' : 'collapsed'} />
         <Folder size={14} />
-        <span className="truncate">{highlightMatch(item.node.name, filterValue)}</span>
+        <span className="truncate" title={item.node.name}>{highlightMatch(item.node.name, filterValue)}</span>
         <span className="tree-row-actions">
           <button
             className="tree-action-button"
@@ -106,6 +106,7 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
       className={`tree-row tree-button ${request.id === activeRequestId ? 'selected' : ''}`}
       key={request.id}
       role="treeitem"
+      aria-label={`${request.method} ${request.name}`}
       aria-selected={request.id === activeRequestId}
       data-tree-id={item.id}
       tabIndex={tabIndex}
@@ -115,7 +116,7 @@ export function TreeNode({item, activeRequestId, onSelectRequest, onToggleCollec
     >
       <span />
       <Method m={request.method} />
-      <span className="truncate">{highlightMatch(request.name, filterValue)}</span>
+      <span className="truncate" title={request.name}>{highlightMatch(request.name, filterValue)}</span>
       {request.id === activeRequestId && <span className="dirty">●</span>}
       <span className="tree-row-actions">
         <button
