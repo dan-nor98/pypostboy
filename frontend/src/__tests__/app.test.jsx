@@ -2212,4 +2212,105 @@ describe('structured query parameters', () => {
     expect(screen.getByRole('textbox', {name: /parameter row 1 description/i})).toHaveValue('local only');
     await waitFor(() => expect(screen.getByRole('tab', {name: /health check unsaved/i})).toBeInTheDocument());
   });
+  test('round-trips query parameters through bulk edit with duplicate keys and descriptions', async () => {
+    const user = userEvent.setup();
+    renderApp([{
+      ...testCollections[0],
+      requests: [{
+        ...testCollections[0].requests[0],
+        url: 'https://example.test/search?tag=one&tag=two',
+        query_params: [
+          {enabled: true, key: 'tag', value: 'one', description: 'first tag'},
+          {enabled: true, key: 'tag', value: 'two', description: 'second tag'},
+        ],
+      }],
+      children: [],
+    }]);
+
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', {name: /bulk edit/i}));
+
+    const bulkEditor = screen.getByRole('textbox', {name: /bulk query parameters/i});
+    expect(bulkEditor).toHaveValue('tag=one # first tag\ntag=two # second tag');
+
+    await user.click(screen.getByRole('button', {name: /structured edit/i}));
+
+    expect(screen.getByRole('textbox', {name: /parameter row 1 key/i})).toHaveValue('tag');
+    expect(screen.getByRole('textbox', {name: /parameter row 1 value/i})).toHaveValue('one');
+    expect(screen.getByRole('textbox', {name: /parameter row 1 description/i})).toHaveValue('first tag');
+    expect(screen.getByRole('textbox', {name: /parameter row 2 key/i})).toHaveValue('tag');
+    expect(screen.getByRole('textbox', {name: /parameter row 2 value/i})).toHaveValue('two');
+  });
+
+  test('parses bulk query parameter text while ignoring empty rows', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', {name: /bulk edit/i}));
+
+    const bulkEditor = screen.getByRole('textbox', {name: /bulk query parameters/i});
+    await user.clear(bulkEditor);
+    await user.type(bulkEditor, 'alpha=1\n\nspace=hello%20world # greeting');
+    await user.click(screen.getByRole('button', {name: /structured edit/i}));
+
+    expect(screen.getByRole('textbox', {name: /parameter row 1 key/i})).toHaveValue('alpha');
+    expect(screen.getByRole('textbox', {name: /parameter row 1 value/i})).toHaveValue('1');
+    expect(screen.getByRole('textbox', {name: /parameter row 2 key/i})).toHaveValue('space');
+    expect(screen.getByRole('textbox', {name: /parameter row 2 value/i})).toHaveValue('hello world');
+    expect(screen.getByRole('textbox', {name: /parameter row 2 description/i})).toHaveValue('greeting');
+  });
+
+  test('shows invalid bulk query parameter lines and preserves bulk text until fixed', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', {name: /bulk edit/i}));
+
+    const bulkEditor = screen.getByRole('textbox', {name: /bulk query parameters/i});
+    await user.clear(bulkEditor);
+    await user.type(bulkEditor, 'valid=yes\nmissing equals');
+    await user.click(screen.getByRole('button', {name: /structured edit/i}));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/invalid parameter lines: 2/i);
+    expect(screen.getByRole('textbox', {name: /bulk query parameters/i})).toHaveValue('valid=yes\nmissing equals');
+
+    await user.clear(bulkEditor);
+    await user.type(bulkEditor, 'valid=yes\nfixed=true');
+    await user.click(screen.getByRole('button', {name: /structured edit/i}));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', {name: /parameter row 2 key/i})).toHaveValue('fixed');
+  });
+
+  test('documents and round-trips disabled query parameter rows in bulk edit', async () => {
+    const user = userEvent.setup();
+    renderApp([{
+      ...testCollections[0],
+      requests: [{
+        ...testCollections[0].requests[0],
+        url: 'https://example.test/health?enabled=yes',
+        query_params: [
+          {enabled: true, key: 'enabled', value: 'yes', description: ''},
+          {enabled: false, key: 'disabled', value: 'no', description: 'kept off'},
+        ],
+      }],
+      children: [],
+    }]);
+
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', {name: /bulk edit/i}));
+
+    expect(screen.getByText(/disabled rows are represented as/i)).toHaveTextContent('# key=value');
+    expect(screen.getByRole('textbox', {name: /bulk query parameters/i})).toHaveValue('enabled=yes\n# disabled=no # kept off');
+
+    await user.click(screen.getByRole('button', {name: /structured edit/i}));
+
+    expect(screen.getByRole('checkbox', {name: /parameter row 1 enabled/i})).toBeChecked();
+    expect(screen.getByRole('checkbox', {name: /parameter row 2 enabled/i})).not.toBeChecked();
+    expect(screen.getByRole('textbox', {name: /parameter row 2 key/i})).toHaveValue('disabled');
+    expect(screen.getByRole('textbox', {name: /parameter row 2 description/i})).toHaveValue('kept off');
+  });
+
 });

@@ -228,6 +228,61 @@ function queryParamsToGridRows(queryParams = []) {
   return normalizeQueryParams(queryParams).map(objectToGridRow);
 }
 
+
+const DISABLED_QUERY_PARAM_PREFIX = '# ';
+
+function encodeQueryParamPart(value = '') {
+  return encodeURIComponent(String(value));
+}
+
+function decodeQueryParamPart(value = '') {
+  try {
+    return decodeURIComponent(String(value).replace(/\+/g, '%20'));
+  } catch {
+    return String(value);
+  }
+}
+
+function queryParamsToBulkText(rows = []) {
+  return normalizeQueryParams(rows).map((row) => {
+    const prefix = row.enabled === false ? DISABLED_QUERY_PARAM_PREFIX : '';
+    const keyValue = `${encodeQueryParamPart(row.key)}=${encodeQueryParamPart(row.value)}`;
+    return row.description ? `${prefix}${keyValue} # ${row.description}` : `${prefix}${keyValue}`;
+  }).join('\n');
+}
+
+function parseQueryParamsBulkText(text = '') {
+  const rows = [];
+  const invalidLines = [];
+
+  String(text).split(/\r?\n/).forEach((rawLine, index) => {
+    const lineNumber = index + 1;
+    const line = rawLine.trim();
+    if (!line) return;
+
+    const enabled = !line.startsWith(DISABLED_QUERY_PARAM_PREFIX);
+    const content = enabled ? line : line.slice(DISABLED_QUERY_PARAM_PREFIX.length).trimStart();
+    const descriptionIndex = content.indexOf(' # ');
+    const keyValueText = descriptionIndex === -1 ? content : content.slice(0, descriptionIndex).trimEnd();
+    const description = descriptionIndex === -1 ? '' : content.slice(descriptionIndex + 3);
+    const equalsIndex = keyValueText.indexOf('=');
+
+    if (equalsIndex === -1 || equalsIndex === 0) {
+      invalidLines.push({lineNumber, text: rawLine});
+      return;
+    }
+
+    rows.push({
+      enabled,
+      key: decodeQueryParamPart(keyValueText.slice(0, equalsIndex)),
+      value: decodeQueryParamPart(keyValueText.slice(equalsIndex + 1)),
+      description,
+    });
+  });
+
+  return {rows, invalidLines};
+}
+
 function queryParamsEqual(left = [], right = []) {
   return JSON.stringify(normalizeQueryParams(left)) === JSON.stringify(normalizeQueryParams(right));
 }
@@ -1064,6 +1119,9 @@ export function App() {
     {id: 'tests', label: 'Tests'},
   ], []);
 
+  const [paramsEditMode, setParamsEditMode] = useState('structured');
+  const [paramsBulkText, setParamsBulkText] = useState('');
+  const [paramsBulkInvalidLines, setParamsBulkInvalidLines] = useState([]);
   const parameterRows = useMemo(() => queryParamsToGridRows(editableRequest.query_params), [editableRequest.query_params]);
   const headerRows = useMemo(() => headersToGridRows(editableRequest.headers), [editableRequest.headers]);
 
@@ -1082,12 +1140,35 @@ export function App() {
     setDraftBodies((drafts) => removeRequestBodyDraftIfClean(drafts, requestId, sourceRequest));
   }, [draftBodies]);
 
-  const handleParameterRowsChange = useCallback((nextRows) => {
-    const queryParams = normalizeQueryParams(nextRows);
+  const applyQueryParams = useCallback((queryParams) => {
     const url = updateUrlQueryParams(editableRequest.url, queryParams);
     setComparableRequestDraftField(activeRequest.id, 'query_params', queryParams, activeRequest);
     setComparableRequestDraftField(activeRequest.id, 'url', url, activeRequest);
   }, [activeRequest, editableRequest.url, setComparableRequestDraftField]);
+
+  const handleParameterRowsChange = useCallback((nextRows) => {
+    applyQueryParams(normalizeQueryParams(nextRows));
+  }, [applyQueryParams]);
+
+  const switchParamsToBulk = useCallback(() => {
+    setParamsBulkText(queryParamsToBulkText(editableRequest.query_params));
+    setParamsBulkInvalidLines([]);
+    setParamsEditMode('bulk');
+  }, [editableRequest.query_params]);
+
+  const switchParamsToStructured = useCallback(() => {
+    const parsed = parseQueryParamsBulkText(paramsBulkText);
+    setParamsBulkInvalidLines(parsed.invalidLines);
+    if (parsed.invalidLines.length) return;
+    applyQueryParams(parsed.rows);
+    setParamsEditMode('structured');
+  }, [applyQueryParams, paramsBulkText]);
+
+  const handleParamsBulkTextChange = useCallback((event) => {
+    const nextText = event.target.value;
+    setParamsBulkText(nextText);
+    setParamsBulkInvalidLines(parseQueryParamsBulkText(nextText).invalidLines);
+  }, []);
 
   const handleUrlChange = useCallback((url) => {
     setComparableRequestDraftField(activeRequest.id, 'url', url, activeRequest);
@@ -1649,8 +1730,34 @@ export function App() {
               hidden={activeConfigTab !== 'params'}
             >
               <section>
-                <div className="section-head"><span>Query Parameters</span><button>Bulk Edit</button></div>
-                {requests.length ? <EditableGrid rows={parameterRows} onChange={handleParameterRowsChange} type="parameter" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
+                <div className="section-head">
+                  <span>Query Parameters</span>
+                  {paramsEditMode === 'structured' ? (
+                    <button type="button" onClick={switchParamsToBulk}>Bulk Edit</button>
+                  ) : (
+                    <button type="button" onClick={switchParamsToStructured}>Structured Edit</button>
+                  )}
+                </div>
+                {requests.length ? (
+                  paramsEditMode === 'structured' ? (
+                    <EditableGrid rows={parameterRows} onChange={handleParameterRowsChange} type="parameter" />
+                  ) : (
+                    <div className="field-stack params-bulk-editor">
+                      <p className="hint">Use one <code>key=value</code> per line. Add descriptions with <code> # description</code>. Disabled rows are represented as <code># key=value</code>.</p>
+                      <textarea
+                        aria-label="Bulk query parameters"
+                        rows={12}
+                        value={paramsBulkText}
+                        onChange={handleParamsBulkTextChange}
+                      />
+                      {paramsBulkInvalidLines.length > 0 && (
+                        <div className="inline-error" role="alert">
+                          Invalid parameter lines: {paramsBulkInvalidLines.map((line) => line.lineNumber).join(', ')}. Add a key and an equals sign before switching back.
+                        </div>
+                      )}
+                    </div>
+                  )
+                ) : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
               </section>
               <aside className="inspector">
                 <h3>Request</h3>
