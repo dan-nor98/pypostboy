@@ -10,6 +10,7 @@ from pypostboy.auth import require_current_user
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
 from pypostboy.services.export_service import export_collection as export_collection_data
+from pypostboy.services.sync_status import SyncConflictError, build_sync_status
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ def _current_user_id(request):
 
 
 def _status_for_error(err):
-    if isinstance(err, DuplicateCollectionNameError):
+    if isinstance(err, (DuplicateCollectionNameError, SyncConflictError)):
         return 409
     return 404 if 'not found' in str(err).lower() else 400
 
@@ -49,7 +50,7 @@ def _log_exception(route_name, request, **context):
 def get_collections(request):
     """List all collections (tree structure)."""
     try:
-        return ok(Collections.get_all(_current_user_id(request)))
+        return ok(Collections.get_all(_current_user_id(request)), sync_status=build_sync_status())
     except Exception as err:
         _log_exception('get_collections', request)
         return error(err, 500)
@@ -106,6 +107,8 @@ def update_collection(request, id):
         return ok(col)
     except BadJsonBody:
         return error('Invalid JSON request body', 400)
+    except SyncConflictError as err:
+        return error(err, 409, conflict=err.metadata)
     except Exception as err:
         _log_exception('update_collection', request, collection_id=id)
         return error(err, _status_for_error(err))

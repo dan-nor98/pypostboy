@@ -9,6 +9,7 @@ from pypostboy.auth import require_current_user
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
 from pypostboy.services.export_service import export_request_curl as export_request_curl_data
+from pypostboy.services.sync_status import SyncConflictError
 
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,8 @@ def _current_user_id(request):
 
 
 def _status_for_error(err):
+    if isinstance(err, SyncConflictError):
+        return 409
     return 404 if 'not found' in str(err).lower() else 400
 
 
@@ -108,6 +111,8 @@ def update_request(request, id):
         return ok(req)
     except BadJsonBody:
         return error('Invalid JSON request body', 400)
+    except SyncConflictError as err:
+        return error(err, 409, conflict=err.metadata)
     except Exception as err:
         _log_exception('update_request', request, request_id=id)
         return error(err, _status_for_error(err))

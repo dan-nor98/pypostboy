@@ -73,6 +73,11 @@ function flattenRequests(collections) {
   ]);
 }
 
+function normalizeCollectionsPayload(payload) {
+  if (Array.isArray(payload)) return {collections: payload, syncStatus: null};
+  return {collections: payload?.collections || [], syncStatus: payload?.sync_status || null};
+}
+
 function updateRequestInCollections(collections, requestId, nextRequest) {
   return collections.map((collection) => ({
     ...collection,
@@ -338,6 +343,7 @@ export function App() {
   const [theme, setTheme] = useState('dark');
   const [sending, setSending] = useState(false);
   const [collections, setCollections] = useState([]);
+  const [syncStatus, setSyncStatus] = useState({status: 'synchronized', label: 'Synchronized', diagnostics: [], conflicts: [], retryable: false});
   const [collectionsLoading, setCollectionsLoading] = useState(true);
   const [collectionsError, setCollectionsError] = useState('');
   const [authMode, setAuthMode] = useState('login');
@@ -429,8 +435,10 @@ export function App() {
     setCollectionsLoading(true);
     setCollectionsError('');
     try {
-      const data = await apiClient.listCollections();
+      const [payload, fetchedSyncStatus] = await Promise.all([apiClient.listCollections(), apiClient.getSyncStatus?.()]);
+      const {collections: data, syncStatus: nextSyncStatus} = normalizeCollectionsPayload(payload);
       setCollections(data);
+      if (fetchedSyncStatus || nextSyncStatus) setSyncStatus(fetchedSyncStatus || nextSyncStatus);
       setRequestDetails((currentDetails) => {
         const refreshedRequests = flattenRequests(data);
         return refreshedRequests.reduce((details, request) => {
@@ -449,6 +457,16 @@ export function App() {
       setCollectionsLoading(false);
     }
   }, [activeRequestId]);
+
+  const retrySync = useCallback(async () => {
+    try {
+      const nextStatus = await apiClient.retrySync?.();
+      if (nextStatus) setSyncStatus(nextStatus);
+      await refreshCollections();
+    } catch (error) {
+      setSyncStatus({status: 'failed', label: 'Sync failed', diagnostics: [error.message], conflicts: [], retryable: true});
+    }
+  }, [refreshCollections]);
 
   const handleAuthenticated = useCallback((user, options = {}) => {
     setCurrentUser(user);
@@ -607,9 +625,11 @@ export function App() {
       setCollectionsLoading(true);
       setCollectionsError('');
       try {
-        const data = await apiClient.listCollections();
+        const [payload, fetchedSyncStatus] = await Promise.all([apiClient.listCollections(), apiClient.getSyncStatus?.()]);
+        const {collections: data, syncStatus: nextSyncStatus} = normalizeCollectionsPayload(payload);
         if (!cancelled) {
           setCollections(data);
+          if (fetchedSyncStatus || nextSyncStatus) setSyncStatus(fetchedSyncStatus || nextSyncStatus);
           setRequestDetails((currentDetails) => {
             const refreshedRequests = flattenRequests(data);
             return refreshedRequests.reduce((details, request) => {
@@ -991,6 +1011,8 @@ export function App() {
           collections={collections}
           loading={collectionsLoading}
           error={collectionsError}
+          syncStatus={syncStatus}
+          onRetrySync={retrySync}
           activeRequestId={activeRequest.id}
           dirtyRequestIds={dirtyRequestIds}
           onSelectRequest={openRequest}

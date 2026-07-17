@@ -28,6 +28,7 @@ async function request(path, options = {}) {
     if (payload && typeof payload === 'object') {
       error.errors = payload.errors || [];
       error.warnings = payload.warnings || [];
+      error.conflict = payload.conflict;
     }
     throw error;
   }
@@ -41,6 +42,8 @@ async function request(path, options = {}) {
 
 export const apiClient = {
   listCollections: () => request('/api/collections'),
+  getSyncStatus: () => request('/api/sync/status'),
+  retrySync: () => request('/api/sync/retry', {method: 'POST'}),
   getCollection: (id) => request(`/api/collections/${id}`),
   createCollection: (data) => request('/api/collections', {method: 'POST', body: JSON.stringify(data)}),
   updateCollection: (id, data) => request(`/api/collections/${id}`, {method: 'PUT', body: JSON.stringify(data)}),
