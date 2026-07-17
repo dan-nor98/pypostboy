@@ -1551,7 +1551,7 @@ describe('App shell', () => {
       {
         ...testCollections[0],
         requests: [
-          {...testCollections[0].requests[0], url: 'https://example.test/health?status=ok&limit=10#top'},
+          {...testCollections[0].requests[0], url: 'https://example.test/health?status=ok&status=stale&limit=10#top'},
           ...testCollections[0].requests.slice(1),
         ],
       },
@@ -1560,14 +1560,42 @@ describe('App shell', () => {
 
     render(<App />);
 
+    const requestUrl = screen.getByRole('textbox', {name: /request url/i});
     const statusValue = await screen.findByRole('textbox', {name: /parameter row 1 value/i});
     expect(screen.getByRole('textbox', {name: /parameter row 1 key/i})).toHaveValue('status');
     expect(statusValue).toHaveValue('ok');
+    expect(screen.getByRole('textbox', {name: /parameter row 2 key/i})).toHaveValue('status');
+    expect(screen.getByRole('textbox', {name: /parameter row 2 value/i})).toHaveValue('stale');
 
     await user.clear(statusValue);
     await user.type(statusValue, 'healthy');
 
-    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/health?status=healthy&limit=10#top');
+    expect(requestUrl).toHaveValue('https://example.test/health?status=healthy&status=stale&limit=10#top');
+    expect([...new URL(requestUrl.value).searchParams.entries()]).toEqual([
+      ['status', 'healthy'],
+      ['status', 'stale'],
+      ['limit', '10'],
+    ]);
+
+    await user.type(screen.getByRole('textbox', {name: /new parameter key/i}), 'page');
+    await user.type(screen.getByRole('textbox', {name: /parameter row 4 value/i}), '1');
+
+    expect([...new URL(requestUrl.value).searchParams.entries()]).toEqual([
+      ['status', 'healthy'],
+      ['status', 'stale'],
+      ['limit', '10'],
+      ['page', '1'],
+    ]);
+
+    await user.click(screen.getByRole('checkbox', {name: /parameter row 3 enabled/i}));
+    await user.type(screen.getByRole('textbox', {name: /new parameter value/i}), 'orphaned');
+
+    expect([...new URL(requestUrl.value).searchParams.entries()]).toEqual([
+      ['status', 'healthy'],
+      ['status', 'stale'],
+      ['page', '1'],
+    ]);
+    expect(requestUrl).toHaveValue('https://example.test/health?status=healthy&status=stale&page=1#top');
   });
 
   test('renders active request headers and updates the header draft when headers are edited', async () => {
