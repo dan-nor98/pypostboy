@@ -29,6 +29,7 @@ async function request(path, options = {}) {
       error.errors = payload.errors || [];
       error.warnings = payload.warnings || [];
       error.conflict = payload.conflict;
+      error.status = response.status;
     }
     throw error;
   }

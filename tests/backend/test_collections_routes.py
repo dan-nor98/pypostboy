@@ -14,6 +14,10 @@ def assert_error(response, status, message):
     assert payload["success"] is False
     assert message in payload["error"]
 
+
+def reorder_token(items):
+    return "|".join(f"{item['id']}:{item['updated_at']}" for item in items)
+
 def test_collections_crud_duplicate_and_reorder_contract(client, user_a_headers):
     created = assert_success(
         client.post(
@@ -60,11 +64,16 @@ def test_collections_crud_duplicate_and_reorder_contract(client, user_a_headers)
     )
     assert updated["name"] == "Renamed"
 
+    root_siblings = assert_success(client.get("/api/collections", headers=user_a_headers))
     reordered = assert_success(
         client.put(
             "/api/collections/reorder",
             headers=user_a_headers,
-            json={"parent_id": None, "ordered_ids": [sibling["id"], created["id"]]},
+            json={
+                "parent_id": None,
+                "ordered_ids": [sibling["id"], created["id"]],
+                "reorder_token": reorder_token(root_siblings),
+            },
         )
     )
     assert reordered == {"updated": 2}
@@ -240,7 +249,7 @@ def test_collections_error_contracts(client, user_a_headers):
         client.put(
             "/api/collections/reorder",
             headers=user_a_headers,
-            json={"ordered_ids": [1, 1]},
+            json={"ordered_ids": [1, 1], "reorder_token": "1:stale"},
         ),
         400,
         "duplicates",
@@ -322,6 +331,7 @@ def test_user_cannot_reorder_collections_with_other_users_ids(
             json={
                 "parent_id": None,
                 "ordered_ids": [user_a_collection["id"], user_b_collection["id"]],
+                "reorder_token": f"{user_a_collection['id']}:{user_a_collection['updated_at']}",
             },
         ),
         400,
@@ -429,3 +439,34 @@ def test_same_name_collections_are_allowed_under_different_parents(client, user_
 
     assert first["name"] == second["name"] == "Shared"
     assert first["parent_id"] != second["parent_id"]
+
+
+def test_reorder_collections_rejects_stale_token(client, user_a_headers):
+    first = assert_success(
+        client.post("/api/collections", headers=user_a_headers, json={"name": "First"}),
+        201,
+    )
+    second = assert_success(
+        client.post("/api/collections", headers=user_a_headers, json={"name": "Second"}),
+        201,
+    )
+
+    assert_error(
+        client.put(
+            "/api/collections/reorder",
+            headers=user_a_headers,
+            json={
+                "parent_id": None,
+                "ordered_ids": [second["id"], first["id"]],
+                "reorder_token": "stale",
+            },
+        ),
+        409,
+        "stale",
+    )
+    assert [
+        item["id"]
+        for item in assert_success(
+            client.get("/api/collections", headers=user_a_headers)
+        )
+    ] == [first["id"], second["id"]]

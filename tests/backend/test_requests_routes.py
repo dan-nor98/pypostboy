@@ -16,6 +16,10 @@ def assert_error(response, status, message):
     assert payload["success"] is False
     assert message in payload["error"]
 
+
+def reorder_token(items):
+    return "|".join(f"{item['id']}:{item['updated_at']}" for item in items)
+
 def test_requests_crud_duplicate_move_and_reorder_contract(
     client, collection, user_a, user_a_headers
 ):
@@ -69,6 +73,11 @@ def test_requests_crud_duplicate_move_and_reorder_contract(
     assert updated["method"] == "PATCH"
     assert updated["name"] == "Patch widget"
 
+    listed = assert_success(
+        client.get(
+            f"/api/collections/{collection['id']}/requests", headers=user_a_headers
+        )
+    )
     reordered = assert_success(
         client.put(
             "/api/requests/reorder",
@@ -76,6 +85,7 @@ def test_requests_crud_duplicate_move_and_reorder_contract(
             json={
                 "collection_id": collection["id"],
                 "ordered_ids": [second["id"], created["id"]],
+                "reorder_token": reorder_token(listed),
             },
         )
     )
@@ -245,6 +255,7 @@ def test_user_cannot_reorder_requests_with_other_users_ids(
             json={
                 "collection_id": user_a_collection["id"],
                 "ordered_ids": [user_a_request["id"], user_b_request["id"]],
+                "reorder_token": f"{user_a_request['id']}:{user_a_request['updated_at']}",
             },
         ),
         400,
@@ -262,7 +273,10 @@ def test_request_repository_move_and_reorder_validation(collection, user_a):
     )
 
     assert Requests.reorder(
-        collection["id"], user_a["id"], [second["id"], first["id"]]
+        collection["id"],
+        user_a["id"],
+        [second["id"], first["id"]],
+        reorder_token([first, second]),
     ) == {"updated": 2}
     assert [
         item["id"]
@@ -278,3 +292,42 @@ def test_request_repository_move_and_reorder_validation(collection, user_a):
         assert "duplicates" in str(err)
     else:
         raise AssertionError("Expected duplicate request IDs to fail")
+
+
+def test_reorder_requests_rejects_stale_token(client, collection, user_a_headers):
+    first = assert_success(
+        client.post(
+            "/api/requests",
+            headers=user_a_headers,
+            json={"collection_id": collection["id"], "name": "First"},
+        ),
+        201,
+    )
+    second = assert_success(
+        client.post(
+            "/api/requests",
+            headers=user_a_headers,
+            json={"collection_id": collection["id"], "name": "Second"},
+        ),
+        201,
+    )
+
+    assert_error(
+        client.put(
+            "/api/requests/reorder",
+            headers=user_a_headers,
+            json={
+                "collection_id": collection["id"],
+                "ordered_ids": [second["id"], first["id"]],
+                "reorder_token": "stale",
+            },
+        ),
+        409,
+        "stale",
+    )
+    listed = assert_success(
+        client.get(
+            f"/api/collections/{collection['id']}/requests", headers=user_a_headers
+        )
+    )
+    assert [item["id"] for item in listed] == [first["id"], second["id"]]

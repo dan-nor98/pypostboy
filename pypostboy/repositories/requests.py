@@ -10,6 +10,7 @@ from pypostboy.db.migrations import ensure_default_local_user
 from pypostboy.db.serializers import safe_parse, safe_stringify, timestamp
 from pypostboy.apps.core.models import Collection, Request
 from pypostboy.services.sync_status import assert_expected_version
+from pypostboy.repositories.collections import ReorderTokenConflictError
 
 
 class Requests:
@@ -198,7 +199,11 @@ class Requests:
         return Requests.get_by_id(id, user_id)
 
     @staticmethod
-    def reorder(collection_id, user_id=None, ordered_ids=None):
+    def _reorder_token(rows):
+        return "|".join(f"{row['id']}:{row['updated_at']}" for row in rows)
+
+    @staticmethod
+    def reorder(collection_id, user_id=None, ordered_ids=None, reorder_token=None):
         """Reorder user-owned requests within a user-owned collection."""
         conn = Requests._conn()
         if ordered_ids is None:
@@ -219,6 +224,13 @@ class Requests:
 
         sibling_requests = Requests.get_by_collection(collection_id, user_id)
         sibling_ids = [request["id"] for request in sibling_requests]
+        expected_token = Requests._reorder_token(sibling_requests)
+        if not reorder_token:
+            raise ValueError("reorder_token required")
+        if reorder_token != expected_token:
+            raise ReorderTokenConflictError(
+                "Request reorder token is stale; refresh collections and try again"
+            )
 
         if set(normalized_ids) != set(sibling_ids):
             raise ValueError(
