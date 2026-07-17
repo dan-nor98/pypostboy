@@ -238,6 +238,44 @@ describe('App shell', () => {
   });
 
 
+  test('opens only the initial active request as one tab', async () => {
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /health check/i})).toBeInTheDocument());
+
+    const requestTabs = within(screen.getByRole('tablist', {name: /open requests/i})).getAllByRole('tab');
+    expect(requestTabs).toHaveLength(1);
+    expect(requestTabs[0]).toHaveAccessibleName('Health Check');
+    expect(requestTabs[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('selecting a second request adds a second open tab', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+
+    const requestTabs = within(screen.getByRole('tablist', {name: /open requests/i})).getAllByRole('tab');
+    expect(requestTabs).toHaveLength(2);
+    expect(requestTabs.map((tab) => tab.getAttribute('aria-label'))).toEqual(['Health Check', 'Status Check']);
+    expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('selecting an already-open request activates its tab without duplicating it', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+    await user.click(screen.getByRole('treeitem', {name: /get health check/i}));
+    await user.click(screen.getByRole('treeitem', {name: /get status check/i}));
+
+    const requestTabs = within(screen.getByRole('tablist', {name: /open requests/i})).getAllByRole('tab');
+    expect(requestTabs).toHaveLength(2);
+    expect(screen.getAllByRole('tab', {name: /status check/i})).toHaveLength(1);
+    expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true');
+  });
+
+
   test('opens a sidebar request by loading full details without sending it', async () => {
     const user = userEvent.setup();
     const partialCollections = [
@@ -279,7 +317,7 @@ describe('App shell', () => {
     });
     renderApp();
 
-    await user.click(await screen.findByRole('tab', {name: /status check/i}));
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
     await waitFor(() => expect(apiClient.getRequest).toHaveBeenCalledTimes(1));
     await user.click(screen.getByRole('tab', {name: /health check/i}));
     await user.click(screen.getByRole('tab', {name: /status check loaded/i}));
@@ -302,7 +340,7 @@ describe('App shell', () => {
     });
     renderApp();
 
-    await user.click(await screen.findByRole('tab', {name: /create widget/i}));
+    await user.click(await screen.findByRole('treeitem', {name: /post create widget/i}));
 
     await waitFor(() => expect(screen.getByRole('combobox', {name: /http method/i})).toHaveValue('PUT'));
     expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/widgets/42?expand=true');
@@ -318,7 +356,7 @@ describe('App shell', () => {
     apiClient.getRequest.mockRejectedValueOnce(new Error('Unable to load request details'));
     renderApp();
 
-    await user.click(await screen.findByRole('tab', {name: /status check/i}));
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
 
     expect(await screen.findByText(/unable to load request details/i)).toBeInTheDocument();
     expect(apiClient.proxyRequest).not.toHaveBeenCalled();
@@ -1145,7 +1183,7 @@ describe('App shell', () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole('tab', {name: /create widget/i}));
+    await user.click(await screen.findByRole('treeitem', {name: /post create widget/i}));
     await user.click(within(screen.getByRole('tablist', {name: /request configuration tabs/i})).getByRole('tab', {name: 'Body'}));
 
     const editor = screen.getByRole('textbox', {name: /request json body editor/i});
