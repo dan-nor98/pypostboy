@@ -431,6 +431,24 @@ function headersArrayToObject(headers = []) {
 }
 
 
+
+function shellQuote(value) {
+  const text = String(value ?? '');
+  if (!text) return "''";
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function requestToCurl(request = {}) {
+  const parts = ['curl', '-X', request.method || 'GET'];
+  Object.entries(headersArrayToObject(request.headers || [])).forEach(([key, value]) => {
+    parts.push('-H', shellQuote(`${key}: ${value}`));
+  });
+  const body = request.body_content ?? request.body_raw ?? '';
+  if (body) parts.push('--data-raw', shellQuote(body));
+  parts.push(shellQuote(request.url || ''));
+  return parts.join(' ');
+}
+
 function AuthPanel({mode, onModeChange, onAuthenticated, onClose}) {
   const [form, setForm] = useState({username: '', email: '', password: '', recovery_key: '', new_password: ''});
   const [message, setMessage] = useState('');
@@ -1205,6 +1223,65 @@ export function App() {
 
   const saveRequest = useCallback(() => saveRequestById(activeRequest.id), [activeRequest.id, saveRequestById]);
 
+
+  const activeRequestPayload = useCallback((overrides = {}) => ({
+    ...activeRequest,
+    name: editableRequest.name || 'Untitled Request',
+    method: editableRequest.method || 'GET',
+    url: trimUrlValue(editableRequest.url || ''),
+    headers: editableRequest.headers || [],
+    body_content: requestBody || '',
+    body_raw_type: editableRequest.body_raw_type || 'application/json',
+    auth_type: editableRequest.auth_type || 'none',
+    auth_data: editableRequest.auth_data || {},
+    pre_request_script: editableRequest.pre_request_script || '',
+    ...overrides,
+  }), [activeRequest, editableRequest, requestBody]);
+
+  const createRequestFromActiveDraft = useCallback((overrides = {}) => {
+    if (!activeRequest.collection_id) {
+      setCollectionsError('Choose a destination collection before saving this request.');
+      return null;
+    }
+    const {id: _id, updated_at: _updatedAt, is_draft: _isDraft, ...payload} = activeRequestPayload(overrides);
+    return runCollectionMutation(() => apiClient.createRequest({...payload, collection_id: overrides.collection_id || activeRequest.collection_id}));
+  }, [activeRequest.collection_id, activeRequestPayload, runCollectionMutation]);
+
+  const renameActiveRequest = useCallback(() => {
+    const nextName = window.prompt('Request name', editableRequest.name || 'Untitled Request');
+    if (!nextName?.trim()) return;
+    updateRequestDraft('name', nextName.trim());
+  }, [editableRequest.name, updateRequestDraft]);
+
+  const saveActiveRequestAs = useCallback(() => {
+    const nextName = window.prompt('Save request as', `${editableRequest.name || 'Untitled Request'} Copy`);
+    if (!nextName?.trim()) return null;
+    return createRequestFromActiveDraft({name: nextName.trim()});
+  }, [createRequestFromActiveDraft, editableRequest.name]);
+
+  const duplicateActiveRequest = useCallback(() => createRequestFromActiveDraft({name: `${editableRequest.name || 'Untitled Request'} Copy`}), [createRequestFromActiveDraft, editableRequest.name]);
+
+  const moveActiveRequestToCollection = useCallback(() => {
+    const options = flattenCollectionOptions(collections);
+    const targetId = window.prompt('Move request to collection id', activeRequest.collection_id || options[0]?.id || '');
+    if (!targetId || targetId === activeRequest.collection_id) return null;
+    return moveSidebarRequest(activeRequest.id, targetId);
+  }, [activeRequest.collection_id, activeRequest.id, collections, moveSidebarRequest]);
+
+  const copyActiveRequestCurl = useCallback(async () => {
+    setCollectionsError('');
+    try {
+      const curl = isRequestDirty(activeRequest.id)
+        ? requestToCurl(activeRequestPayload())
+        : (await apiClient.exportRequestCurl(activeRequest.id)).curl;
+      await navigator.clipboard.writeText(curl);
+    } catch (error) {
+      setCollectionsError(error.message);
+    }
+  }, [activeRequest.id, activeRequestPayload, isRequestDirty]);
+
+  const deleteActiveRequest = useCallback(() => deleteSidebarRequest(activeRequest.id), [activeRequest.id, deleteSidebarRequest]);
+
   const discardDirtyClose = useCallback(() => {
     const requestId = pendingDirtyCloseRequestId;
     if (!requestId) return;
@@ -1488,6 +1565,13 @@ export function App() {
               onSave={saveRequest}
               saving={savingRequest}
               saveDisabled={!activeRequest.id}
+              onSaveAs={saveActiveRequestAs}
+              onDuplicate={duplicateActiveRequest}
+              onRename={renameActiveRequest}
+              onMove={moveActiveRequestToCollection}
+              onExport={copyActiveRequestCurl}
+              onGenerateCode={copyActiveRequestCurl}
+              onDelete={deleteActiveRequest}
             />
             {(environmentWarnings.length > 0 || unresolvedVariableHints.length > 0 || findVariableTokens(editableRequest.url).length > 0) && (
               <div className={(environmentWarnings.length || unresolvedVariableHints.length) ? "environment-warning" : "environment-hint"}>

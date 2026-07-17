@@ -5,6 +5,7 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {App} from '../main.jsx';
 import {CodeEditor} from '../components/CodeEditor.jsx';
 import {Sidebar} from '../components/Sidebar.jsx';
+import {RequestToolbar} from '../components/RequestToolbar.jsx';
 import {apiClient} from '../api/client';
 
 vi.mock('../api/client', () => ({
@@ -182,6 +183,58 @@ describe('CodeEditor', () => {
 
     expect(screen.getByRole('textbox', {name: /request json body editor/i})).toHaveFocus();
     expect(screen.getByRole('textbox', {name: /request json body editor/i})).toHaveTextContent('{"name":"demo"}');
+  });
+});
+
+
+describe('RequestToolbar actions menu', () => {
+  test('opens with keyboard, navigates actions, and invokes a non-destructive action', async () => {
+    const user = userEvent.setup();
+    const onDuplicate = vi.fn();
+    render(<RequestToolbar request={{id: 'request-1', name: 'Health Check', method: 'GET', url: 'https://example.test'}} onDuplicate={onDuplicate} onDelete={vi.fn()} />);
+
+    const trigger = screen.getByRole('button', {name: /more request actions/i});
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+
+    const menu = screen.getByRole('menu', {name: /request actions/i});
+    expect(menu).toBeInTheDocument();
+    await waitFor(() => expect(within(menu).getByRole('menuitem', {name: /duplicate request/i})).toHaveFocus());
+
+    await user.keyboard('{ArrowDown}');
+    expect(within(menu).getByRole('menuitem', {name: /delete request/i})).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(within(menu).getByRole('menuitem', {name: /duplicate request/i})).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(onDuplicate).toHaveBeenCalledWith(expect.objectContaining({id: 'request-1'}));
+  });
+
+  test('requires confirmation before invoking a destructive action', async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    render(<RequestToolbar request={{id: 'request-1', name: 'Health Check', method: 'GET', url: 'https://example.test'}} onDelete={onDelete} />);
+
+    await user.click(screen.getByRole('button', {name: /more request actions/i}));
+    await user.click(screen.getByRole('menuitem', {name: /delete request/i}));
+    expect(confirm).toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', {name: /more request actions/i}));
+    await user.click(screen.getByRole('menuitem', {name: /delete request/i}));
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({id: 'request-1'}));
+  });
+
+  test('omits saved-only actions for unsaved drafts', async () => {
+    const user = userEvent.setup();
+    render(<RequestToolbar request={{id: 'draft-request-1', is_draft: true, name: 'Draft', method: 'GET', url: 'https://example.test'}} onDuplicate={vi.fn()} onExport={vi.fn()} onDelete={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', {name: /more request actions/i}));
+
+    expect(screen.getByRole('menuitem', {name: /duplicate request/i})).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', {name: /copy as curl/i})).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', {name: /delete request/i})).not.toBeInTheDocument();
   });
 });
 
@@ -1299,6 +1352,21 @@ describe('App shell', () => {
 
     await waitFor(() => expect(apiClient.exportRequestCurl).toHaveBeenCalledWith('request-1'));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('curl https://example.test/health');
+  });
+
+  test('copies cURL from the toolbar without dropping unsaved URL edits', async () => {
+    const user = userEvent.setup();
+    Object.assign(navigator, {clipboard: {writeText: vi.fn().mockResolvedValue()}});
+    renderApp();
+
+    const urlInput = await screen.findByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/unsaved');
+    await user.click(screen.getByRole('button', {name: /more request actions/i}));
+    await user.click(screen.getByRole('menuitem', {name: /copy as curl/i}));
+
+    expect(apiClient.exportRequestCurl).not.toHaveBeenCalled();
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("curl -X GET 'https://example.test/unsaved'");
   });
 
 

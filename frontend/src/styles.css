@@ -111,3 +111,4 @@
   color: var(--text);
   padding: 8px 10px;
 }
+.request-actions-menu{position:relative;display:inline-flex}.request-actions-popover{position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:180px;padding:4px;border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-bg-elevated);box-shadow:0 8px 24px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.25)}.request-actions-popover button{width:100%;height:30px;padding:0 8px;border:0;border-radius:var(--radius-sm);background:transparent;color:inherit;text-align:left}.request-actions-popover button:hover,.request-actions-popover button:focus{background:var(--color-bg-hover)}.request-actions-popover button.danger{color:var(--color-error)}
