@@ -20,6 +20,10 @@ class DuplicateCollectionNameError(ValueError):
     """Raised when a collection name duplicates a sibling for the same user."""
 
 
+class ReorderTokenConflictError(ValueError):
+    """Raised when a reorder token does not match current sibling metadata."""
+
+
 class Collections:
     connection = None
     use_orm_reads = True
@@ -277,7 +281,11 @@ class Collections:
         return Collections.get_by_id(id, user_id)
 
     @staticmethod
-    def reorder(parent_id, user_id=None, ordered_ids=None):
+    def _reorder_token(rows):
+        return "|".join(f"{row['id']}:{row['updated_at']}" for row in rows)
+
+    @staticmethod
+    def reorder(parent_id, user_id=None, ordered_ids=None, reorder_token=None):
         """Reorder sibling collections owned by a user under a parent."""
         conn = Collections._conn()
         if ordered_ids is None:
@@ -306,7 +314,7 @@ class Collections:
                 raise ValueError("Parent collection not found")
             sibling_rows = db_execute(
                 conn,
-                """SELECT id FROM collections
+                """SELECT id, updated_at FROM collections
                    WHERE parent_id = ? AND user_id = ?
                    ORDER BY sort_order ASC, id ASC""",
                 (parent_id, user_id),
@@ -314,13 +322,20 @@ class Collections:
         else:
             sibling_rows = db_execute(
                 conn,
-                """SELECT id FROM collections
+                """SELECT id, updated_at FROM collections
                    WHERE parent_id IS NULL AND user_id = ?
                    ORDER BY sort_order ASC, id ASC""",
                 (user_id,),
             ).fetchall()
 
         sibling_ids = [row["id"] for row in sibling_rows]
+        expected_token = Collections._reorder_token(sibling_rows)
+        if not reorder_token:
+            raise ValueError("reorder_token required")
+        if reorder_token != expected_token:
+            raise ReorderTokenConflictError(
+                "Collection reorder token is stale; refresh collections and try again"
+            )
         if set(normalized_ids) != set(sibling_ids):
             raise ValueError(
                 "ordered_ids must include exactly the sibling collections for the parent"

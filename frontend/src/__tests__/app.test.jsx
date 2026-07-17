@@ -38,10 +38,12 @@ vi.mock('../api/client', () => ({
 const testCollections = [
   {
     id: 'collection-1',
+    updated_at: 'c1-v1',
     name: 'Smoke Tests',
     requests: [
       {
         id: 'request-1',
+        updated_at: 'r1-v1',
         name: 'Health Check',
         method: 'GET',
         url: 'https://example.test/health',
@@ -51,6 +53,7 @@ const testCollections = [
       },
       {
         id: 'request-3',
+        updated_at: 'r3-v1',
         name: 'Status Check',
         method: 'GET',
         url: 'https://example.test/status',
@@ -62,10 +65,12 @@ const testCollections = [
     children: [
       {
         id: 'collection-2',
+        updated_at: 'c2-v1',
         name: 'Nested',
         requests: [
           {
             id: 'request-2',
+            updated_at: 'r2-v1',
             name: 'Create Widget',
             method: 'POST',
             url: 'https://example.test/widgets',
@@ -80,6 +85,7 @@ const testCollections = [
   },
   {
     id: 'collection-3',
+    updated_at: 'c3-v1',
     name: 'Regression Tests',
     requests: [],
     children: [],
@@ -597,6 +603,7 @@ describe('App shell', () => {
     await waitFor(() => expect(apiClient.reorderCollections).toHaveBeenCalledWith({
       parent_id: null,
       ordered_ids: ['collection-3', 'collection-1'],
+      reorder_token: 'collection-1:c1-v1|collection-3:c3-v1',
     }));
     const treeItems = screen.getAllByRole('treeitem');
     expect(treeItems[0]).toHaveTextContent('Regression Tests');
@@ -613,6 +620,7 @@ describe('App shell', () => {
     await waitFor(() => expect(apiClient.reorderRequests).toHaveBeenCalledWith({
       collection_id: 'collection-1',
       ordered_ids: ['request-3', 'request-1'],
+      reorder_token: 'request-1:r1-v1|request-3:r3-v1',
     }));
     const requestItems = screen.getAllByRole('treeitem').filter((item) => /Health Check|Status Check/.test(item.textContent));
     expect(requestItems[0]).toHaveTextContent('Status Check');
@@ -633,6 +641,47 @@ describe('App shell', () => {
     expect(requestItems[1]).toHaveTextContent('Status Check');
   });
 
+  test('rolls back, refreshes, and reports request reorder conflicts', async () => {
+    const user = userEvent.setup();
+    const conflict = new Error('Request reorder token is stale; refresh collections and try again');
+    conflict.status = 409;
+    apiClient.listCollections
+      .mockResolvedValueOnce(testCollections)
+      .mockResolvedValueOnce(testCollections);
+    apiClient.reorderRequests.mockRejectedValueOnce(conflict);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText('Status Check')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', {name: /move request up/i}).at(-1));
+
+    await waitFor(() => expect(screen.getByText(/request reorder token is stale/i)).toBeInTheDocument());
+    expect(apiClient.listCollections).toHaveBeenCalledTimes(2);
+    const requestItems = screen.getAllByRole('treeitem').filter((item) => /Health Check|Status Check/.test(item.textContent));
+    expect(requestItems[0]).toHaveTextContent('Health Check');
+    expect(requestItems[1]).toHaveTextContent('Status Check');
+  });
+
+  test('rolls back, refreshes, and reports collection reorder conflicts', async () => {
+    const user = userEvent.setup();
+    const conflict = new Error('Collection reorder token is stale; refresh collections and try again');
+    conflict.status = 409;
+    apiClient.listCollections
+      .mockResolvedValueOnce(testCollections)
+      .mockResolvedValueOnce(testCollections);
+    apiClient.reorderCollections.mockRejectedValueOnce(conflict);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText('Regression Tests')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', {name: /move collection up/i}).at(-1));
+
+    await waitFor(() => expect(screen.getByText(/collection reorder token is stale/i)).toBeInTheDocument());
+    expect(apiClient.listCollections).toHaveBeenCalledTimes(2);
+    const treeItems = screen.getAllByRole('treeitem');
+    expect(treeItems[0]).toHaveTextContent('Smoke Tests');
+    expect(treeItems[1]).toHaveTextContent('Health Check');
+    expect(treeItems.some((item) => item.textContent.includes('Regression Tests'))).toBe(true);
+  });
+
   test('supports keyboard operation for reorder controls', async () => {
     const user = userEvent.setup();
     renderApp();
@@ -645,6 +694,7 @@ describe('App shell', () => {
     await waitFor(() => expect(apiClient.reorderRequests).toHaveBeenCalledWith({
       collection_id: 'collection-1',
       ordered_ids: ['request-3', 'request-1'],
+      reorder_token: 'request-1:r1-v1|request-3:r3-v1',
     }));
     expect(screen.getAllByRole('button', {name: /move request down/i}).length).toBeGreaterThan(0);
   });

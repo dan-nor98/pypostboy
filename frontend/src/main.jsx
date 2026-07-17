@@ -118,6 +118,30 @@ function moveItemInArray(items, itemId, direction) {
   return next;
 }
 
+
+function siblingReorderToken(items) {
+  return items.map((item) => `${item.id}:${item.updated_at || ''}`).join('|');
+}
+
+function collectionSiblings(collections, parentId) {
+  if (parentId === null || parentId === undefined) return collections;
+  for (const collection of collections) {
+    if (collection.id === parentId) return collection.children || [];
+    const match = collectionSiblings(collection.children || [], parentId);
+    if (match) return match;
+  }
+  return null;
+}
+
+function requestSiblings(collections, collectionId) {
+  for (const collection of collections) {
+    if (collection.id === collectionId) return collection.requests || [];
+    const match = requestSiblings(collection.children || [], collectionId);
+    if (match) return match;
+  }
+  return null;
+}
+
 function reorderCollectionSiblings(collections, parentId, collectionId, direction) {
   if (!parentId) return moveItemInArray(collections, collectionId, direction);
 
@@ -491,36 +515,50 @@ export function App() {
 
   const moveCollection = useCallback(async (collectionId, direction, parentId = null) => {
     const previousCollections = collections;
+    const previousSiblings = collectionSiblings(collections, parentId) || [];
     const previousIds = collectionSiblingIds(collections, parentId);
+    const reorderToken = siblingReorderToken(previousSiblings);
     const nextCollections = reorderCollectionSiblings(collections, parentId, collectionId, direction);
     const nextIds = collectionSiblingIds(nextCollections, parentId);
     if (previousIds.join('\0') === nextIds.join('\0')) return;
 
     setCollections(nextCollections);
     try {
-      await apiClient.reorderCollections({parent_id: parentId, ordered_ids: nextIds});
+      await apiClient.reorderCollections({parent_id: parentId, ordered_ids: nextIds, reorder_token: reorderToken});
     } catch (error) {
       setCollections(previousCollections);
-      setCollectionsError(error.message);
+      if (error.status === 409) {
+        setCollectionsError(error.message || 'Collection order changed elsewhere. Refreshed collections.');
+        await refreshCollections();
+      } else {
+        setCollectionsError(error.message);
+      }
     }
-  }, [collections]);
+  }, [collections, refreshCollections]);
 
   const moveRequest = useCallback(async (requestId, direction, collectionId) => {
     if (!collectionId) return;
     const previousCollections = collections;
+    const previousSiblings = requestSiblings(collections, collectionId) || [];
     const previousIds = requestSiblingIds(collections, collectionId);
+    const reorderToken = siblingReorderToken(previousSiblings);
     const nextCollections = reorderRequestsInCollection(collections, collectionId, requestId, direction);
     const nextIds = requestSiblingIds(nextCollections, collectionId);
     if (previousIds.join('\0') === nextIds.join('\0')) return;
 
     setCollections(nextCollections);
     try {
-      await apiClient.reorderRequests({collection_id: collectionId, ordered_ids: nextIds});
+      await apiClient.reorderRequests({collection_id: collectionId, ordered_ids: nextIds, reorder_token: reorderToken});
     } catch (error) {
       setCollections(previousCollections);
-      setCollectionsError(error.message);
+      if (error.status === 409) {
+        setCollectionsError(error.message || 'Request order changed elsewhere. Refreshed collections.');
+        await refreshCollections();
+      } else {
+        setCollectionsError(error.message);
+      }
     }
-  }, [collections]);
+  }, [collections, refreshCollections]);
 
 
   const runCollectionMutation = useCallback(async (mutation, preferredRequestId = undefined) => {

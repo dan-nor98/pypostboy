@@ -5,7 +5,7 @@ import logging
 from django.views.decorators.csrf import csrf_exempt
 
 from db import Collections
-from pypostboy.repositories.collections import DuplicateCollectionNameError
+from pypostboy.repositories.collections import DuplicateCollectionNameError, ReorderTokenConflictError
 from pypostboy.auth import require_current_user
 from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
@@ -21,7 +21,7 @@ def _current_user_id(request):
 
 
 def _status_for_error(err):
-    if isinstance(err, (DuplicateCollectionNameError, SyncConflictError)):
+    if isinstance(err, (DuplicateCollectionNameError, SyncConflictError, ReorderTokenConflictError)):
         return 409
     return 404 if 'not found' in str(err).lower() else 400
 
@@ -65,7 +65,14 @@ def reorder_collections(request):
         parent_id = body.get('parent_id')
         if 'ordered_ids' not in body:
             return error('ordered_ids required', 400)
-        result = Collections.reorder(parent_id, _current_user_id(request), body.get('ordered_ids'))
+        if 'reorder_token' not in body:
+            return error('reorder_token required', 400)
+        result = Collections.reorder(
+            parent_id,
+            _current_user_id(request),
+            body.get('ordered_ids'),
+            body.get('reorder_token'),
+        )
         return ok(result)
     except BadJsonBody:
         return error('Invalid JSON request body', 400)

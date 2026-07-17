@@ -10,6 +10,7 @@ from pypostboy.djangoapp.request import BadJsonBody, json_body
 from pypostboy.http.responses import created, error, ok
 from pypostboy.services.export_service import export_request_curl as export_request_curl_data
 from pypostboy.services.sync_status import SyncConflictError
+from pypostboy.repositories.collections import ReorderTokenConflictError
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ def _current_user_id(request):
 
 
 def _status_for_error(err):
-    if isinstance(err, SyncConflictError):
+    if isinstance(err, (SyncConflictError, ReorderTokenConflictError)):
         return 409
     return 404 if 'not found' in str(err).lower() else 400
 
@@ -57,7 +58,14 @@ def reorder_requests(request):
             return error('collection_id required', 400)
         if 'ordered_ids' not in body:
             return error('ordered_ids required', 400)
-        result = Requests.reorder(collection_id, _current_user_id(request), body.get('ordered_ids'))
+        if 'reorder_token' not in body:
+            return error('reorder_token required', 400)
+        result = Requests.reorder(
+            collection_id,
+            _current_user_id(request),
+            body.get('ordered_ids'),
+            body.get('reorder_token'),
+        )
         return ok(result)
     except BadJsonBody:
         return error('Invalid JSON request body', 400)

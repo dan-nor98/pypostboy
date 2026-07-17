@@ -81,7 +81,10 @@ def test_request_reorder_move_and_duplicate_require_user_owned_records(
 
     with pytest.raises(ValueError, match="exactly the requests"):
         Requests.reorder(
-            collection_one["id"], user_one, [request_one["id"], request_two["id"]]
+            collection_one["id"],
+            user_one,
+            [request_one["id"], request_two["id"]],
+            f"{request_one['id']}:{request_one['updated_at']}",
         )
 
     with pytest.raises(ValueError, match="Target collection not found"):
