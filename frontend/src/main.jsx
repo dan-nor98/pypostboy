@@ -47,6 +47,9 @@ const defaultRequest = {
   headers: [],
   body_content: '',
   body_raw_type: 'application/json',
+  auth_type: 'none',
+  auth_data: {},
+  pre_request_script: '',
 };
 
 
@@ -261,6 +264,9 @@ function requestFieldValue(request = {}, field) {
   if (field === 'body_content') return request.body_content ?? request.body_raw ?? '';
   if (field === 'body_raw_type') return request.body_raw_type ?? 'application/json';
   if (field === 'headers') return request.headers ?? [];
+  if (field === 'auth_type') return request.auth_type ?? 'none';
+  if (field === 'auth_data') return request.auth_data ?? {};
+  if (field === 'pre_request_script') return request.pre_request_script ?? '';
   if (field === 'method') return request.method ?? 'GET';
   if (field === 'name') return request.name ?? 'Untitled Request';
   if (field === 'url') return request.url ?? '';
@@ -270,13 +276,14 @@ function requestFieldValue(request = {}, field) {
 function requestFieldEquals(field, value, sourceRequest = {}) {
   const sourceValue = requestFieldValue(sourceRequest, field);
   if (field === 'headers') return headersEqual(value, sourceValue);
+  if (field === 'auth_data') return JSON.stringify(value || {}) === JSON.stringify(sourceValue || {});
   return (value ?? '') === (sourceValue ?? '');
 }
 
 function getRequestDirtyFields(requestId, draft = {}, bodyDraft, sourceRequest = {}) {
   if (!requestId) return {};
   const dirtyFields = {};
-  ['name', 'method', 'url', 'headers', 'body_raw_type'].forEach((field) => {
+  ['name', 'method', 'url', 'headers', 'body_raw_type', 'auth_type', 'auth_data', 'pre_request_script'].forEach((field) => {
     if (Object.prototype.hasOwnProperty.call(draft, field) && !requestFieldEquals(field, draft[field], sourceRequest)) {
       dirtyFields[field] = true;
     }
@@ -300,6 +307,91 @@ function removeRequestBodyDraftIfClean(draftBodies, requestId, sourceRequest) {
   if (!requestFieldEquals('body_content', draftBodies[requestId], sourceRequest)) return draftBodies;
   const {[requestId]: _cleanBody, ...remainingBodies} = draftBodies;
   return remainingBodies;
+}
+
+function authDataValue(authData, field, fallback = '') {
+  return authData && typeof authData === 'object' ? authData[field] ?? fallback : fallback;
+}
+
+function maskSecretValue(value) {
+  const text = String(value ?? '');
+  if (!text) return '';
+  return text.length <= 4 ? '••••' : `${text.slice(0, 2)}••••${text.slice(-2)}`;
+}
+
+function maskHeaders(headers = {}) {
+  return Object.entries(headers).reduce((masked, [key, value]) => {
+    masked[key] = /authorization|api[-_]?key|token|secret|password/i.test(key) ? maskSecretValue(value) : value;
+    return masked;
+  }, {});
+}
+
+function applyAuthorization(request, authType = 'none', authData = {}) {
+  const next = {...request, headers: {...(request.headers || {})}};
+  const type = String(authType || 'none').toLowerCase();
+  if (type === 'bearer' && authData.token) {
+    next.headers.Authorization = `Bearer ${authData.token}`;
+  } else if (type === 'basic' && (authData.username || authData.password)) {
+    next.headers.Authorization = `Basic ${btoa(`${authData.username || ''}:${authData.password || ''}`)}`;
+  } else if (type === 'api_key' && authData.key) {
+    if (authData.in === 'query') {
+      const url = new URL(next.url, window.location.origin);
+      url.searchParams.set(authData.key, authData.value || '');
+      next.url = url.href;
+    } else {
+      next.headers[authData.key] = authData.value || '';
+    }
+  }
+  return next;
+}
+
+function runPreRequestScript(source, request) {
+  if (!String(source || '').trim()) return request;
+  const mutable = {...request, headers: {...(request.headers || {})}};
+  const api = Object.freeze({
+    setHeader: (key, value) => { if (key) mutable.headers[String(key)] = String(value ?? ''); },
+    removeHeader: (key) => { delete mutable.headers[String(key)]; },
+    setUrl: (url) => { mutable.url = String(url || ''); },
+    setBody: (body) => { mutable.body = body == null ? '' : String(body); },
+    setMethod: (method) => { mutable.method = String(method || 'GET').toUpperCase(); },
+    addQueryParam: (key, value) => {
+      if (!key) return;
+      const url = new URL(mutable.url, window.location.origin);
+      url.searchParams.set(String(key), String(value ?? ''));
+      mutable.url = url.href;
+    },
+    get request() { return Object.freeze({...mutable, headers: Object.freeze({...mutable.headers})}); },
+  });
+  const runner = new Function('pb', '"use strict"; const window = undefined, document = undefined, localStorage = undefined, sessionStorage = undefined, fetch = undefined, XMLHttpRequest = undefined;\n' + String(source));
+  runner(api);
+  return mutable;
+}
+
+async function recordRequestHistory(requestId, payload) {
+  if (!requestId || isDraftRequestId(requestId)) return;
+  try {
+    await apiClient.createRequestInstance?.(requestId, payload);
+  } catch {
+    // History writes are best-effort and should not mask the request result.
+  }
+}
+
+function buildHistoryPayload({request, response, error}) {
+  const bodyText = String(request.body ?? '');
+  return {
+    name: `${request.method || 'GET'} ${request.url} @ ${new Date().toISOString()}`,
+    method: request.method || 'GET',
+    url: request.url,
+    headers: Object.entries(maskHeaders(request.headers || {})).map(([key, value]) => ({enabled: true, key, value})),
+    body_content: bodyText ? `[${bodyText.length} bytes ${request.contentType || 'body'}]` : '',
+    body_raw_type: request.contentType || 'application/json',
+    response_status: response?.status ?? null,
+    response_status_text: response?.statusText || (error ? 'Error' : ''),
+    response_headers: response?.headers || {},
+    response_body: response ? {metadata: {time_ms: response.time, size: response.size}} : {error: error?.message || 'Request failed'},
+    response_time_ms: response?.time,
+    response_size: response?.size ?? '',
+  };
 }
 
 function headersArrayToObject(headers = []) {
@@ -681,6 +773,9 @@ export function App() {
       headers: data.headers || [],
       body_content: data.body_content || '',
       body_raw_type: data.body_raw_type || 'application/json',
+      auth_type: data.auth_type || 'none',
+      auth_data: data.auth_data || {},
+      pre_request_script: data.pre_request_script || '',
       is_draft: true,
     };
 
@@ -874,6 +969,9 @@ export function App() {
     url: activeRequestDraft.url ?? activeRequest.url ?? '',
     headers: activeRequestDraft.headers ?? activeRequest.headers ?? [],
     body_raw_type: activeRequestDraft.body_raw_type ?? activeRequest.body_raw_type ?? 'application/json',
+    auth_type: activeRequestDraft.auth_type ?? activeRequest.auth_type ?? 'none',
+    auth_data: activeRequestDraft.auth_data ?? activeRequest.auth_data ?? {},
+    pre_request_script: activeRequestDraft.pre_request_script ?? activeRequest.pre_request_script ?? '',
   };
   const requestBody = draftBodies[activeRequest.id] ?? activeRequest.body_content ?? activeRequest.body_raw ?? '';
   const requestLoadError = requestLoadErrors[activeRequest.id] || '';
@@ -926,6 +1024,20 @@ export function App() {
     setComparableRequestDraftField(activeRequest.id, 'headers', headers, activeRequest);
   }, [activeRequest, setComparableRequestDraftField]);
 
+
+  const updateAuthType = useCallback((authType) => {
+    setComparableRequestDraftField(activeRequest.id, 'auth_type', authType, activeRequest);
+  }, [activeRequest, setComparableRequestDraftField]);
+
+  const updateAuthData = useCallback((field, value) => {
+    const nextAuthData = {...(editableRequest.auth_data || {}), [field]: value};
+    setComparableRequestDraftField(activeRequest.id, 'auth_data', nextAuthData, activeRequest);
+  }, [activeRequest, editableRequest.auth_data, setComparableRequestDraftField]);
+
+  const updatePreRequestScript = useCallback((script) => {
+    setComparableRequestDraftField(activeRequest.id, 'pre_request_script', script, activeRequest);
+  }, [activeRequest, setComparableRequestDraftField]);
+
   const selectConfigTab = useCallback((tabId, shouldFocus = false) => {
     setActiveConfigTab(tabId);
     if (shouldFocus) {
@@ -965,14 +1077,26 @@ export function App() {
         return;
       }
       setEnvironmentWarnings([]);
-      const result = await apiClient.proxyRequest({
+      const baseRequest = {
         method: editableRequest.method || 'GET',
         url: resolvedRequest.url,
         headers: resolvedRequest.headers,
         body: resolvedRequest.body,
         contentType: editableRequest.body_raw_type || 'application/json',
-      });
-      setProxyResult(result);
+      };
+      const scriptedRequest = runPreRequestScript(editableRequest.pre_request_script, baseRequest);
+      const outboundRequest = applyAuthorization(scriptedRequest, editableRequest.auth_type, editableRequest.auth_data);
+      let result;
+      try {
+        result = await apiClient.proxyRequest(outboundRequest);
+        setProxyResult(result);
+        return;
+      } catch (requestError) {
+        await recordRequestHistory(activeRequest.id, buildHistoryPayload({request: outboundRequest, error: requestError}));
+        throw requestError;
+      } finally {
+        if (result) await recordRequestHistory(activeRequest.id, buildHistoryPayload({request: outboundRequest, response: result}));
+      }
     } catch (error) {
       setProxyError(error.message);
     } finally {
@@ -1015,6 +1139,9 @@ export function App() {
         headers: requestDraft.headers ?? request.headers ?? [],
         body_content: draftBodies[requestId] ?? request.body_content ?? request.body_raw ?? '',
         body_raw_type: requestDraft.body_raw_type ?? request.body_raw_type ?? 'application/json',
+        auth_type: requestDraft.auth_type ?? request.auth_type ?? 'none',
+        auth_data: requestDraft.auth_data ?? request.auth_data ?? {},
+        pre_request_script: requestDraft.pre_request_script ?? request.pre_request_script ?? '',
       };
       const saveDraft = isDraftRequestId(request.id) || request.is_draft;
       const {_temporaryId, id: _draftId, is_draft: _isDraft, ...createPayload} = payload;
@@ -1427,8 +1554,64 @@ export function App() {
                 {headerRows.length ? <p>{headerRows.length} configured headers</p> : <p className="hint">No headers configured.</p>}
               </aside>
             </div>
+
+            <div
+              className="request-grid"
+              id="request-config-panel-authorization"
+              role="tabpanel"
+              aria-labelledby="request-config-tab-authorization"
+              hidden={activeConfigTab !== 'authorization'}
+            >
+              <section>
+                <div className="section-head"><span>Authorization</span></div>
+                <div className="form-stack">
+                  <label>
+                    <span>Type</span>
+                    <select aria-label="Authorization type" value={editableRequest.auth_type || 'none'} onChange={(event) => updateAuthType(event.target.value)}>
+                      <option value="none">No Auth</option>
+                      <option value="bearer">Bearer Token</option>
+                      <option value="basic">Basic Auth</option>
+                      <option value="api_key">API Key</option>
+                    </select>
+                  </label>
+                  {editableRequest.auth_type === 'bearer' && (
+                    <label>
+                      <span>Token</span>
+                      <input aria-label="Bearer token" type="password" value={authDataValue(editableRequest.auth_data, 'token')} onChange={(event) => updateAuthData('token', event.target.value)} />
+                    </label>
+                  )}
+                  {editableRequest.auth_type === 'basic' && (
+                    <>
+                      <label><span>Username</span><input aria-label="Basic username" value={authDataValue(editableRequest.auth_data, 'username')} onChange={(event) => updateAuthData('username', event.target.value)} /></label>
+                      <label><span>Password</span><input aria-label="Basic password" type="password" value={authDataValue(editableRequest.auth_data, 'password')} onChange={(event) => updateAuthData('password', event.target.value)} /></label>
+                    </>
+                  )}
+                  {editableRequest.auth_type === 'api_key' && (
+                    <>
+                      <label><span>Key</span><input aria-label="API key name" value={authDataValue(editableRequest.auth_data, 'key')} onChange={(event) => updateAuthData('key', event.target.value)} /></label>
+                      <label><span>Value</span><input aria-label="API key value" type="password" value={authDataValue(editableRequest.auth_data, 'value')} onChange={(event) => updateAuthData('value', event.target.value)} /></label>
+                      <label><span>Add to</span><select aria-label="API key location" value={authDataValue(editableRequest.auth_data, 'in', 'header')} onChange={(event) => updateAuthData('in', event.target.value)}><option value="header">Header</option><option value="query">Query parameter</option></select></label>
+                    </>
+                  )}
+                </div>
+              </section>
+              <aside className="inspector"><h3>Authorization</h3><p className="hint">Credentials are applied only to the outbound request and masked in history.</p></aside>
+            </div>
+            <div
+              className="request-grid"
+              id="request-config-panel-scripts"
+              role="tabpanel"
+              aria-labelledby="request-config-tab-scripts"
+              hidden={activeConfigTab !== 'scripts'}
+            >
+              <section>
+                <div className="section-head"><span>Pre-request Script</span></div>
+                <CodeEditor value={editableRequest.pre_request_script || ''} onChange={updatePreRequestScript} wordWrap label="Pre-request script editor" />
+              </section>
+              <aside className="inspector"><h3>Script API</h3><p className="hint">Use pb.setHeader, pb.removeHeader, pb.addQueryParam, pb.setUrl, pb.setMethod, or pb.setBody. Browser globals and network APIs are unavailable.</p></aside>
+            </div>
             {requestConfigTabs
-              .filter((tab) => !['params', 'body', 'headers'].includes(tab.id))
+              .filter((tab) => !['params', 'body', 'headers', 'authorization', 'scripts'].includes(tab.id))
               .map((tab) => (
                 <div
                   key={tab.id}

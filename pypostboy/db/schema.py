@@ -2,6 +2,7 @@
 
 from .migrations import (
     migrate_ownership,
+    migrate_requests,
     migrate_request_instances,
     migrate_user_auth_fields,
     migrate_user_credential_fields,
@@ -59,6 +60,7 @@ SQLITE_TABLE_SCHEMAS = {
             form_data TEXT DEFAULT '[]',
             auth_type TEXT DEFAULT 'none',
             auth_data TEXT DEFAULT '{{}}',
+            pre_request_script TEXT DEFAULT '',
             sort_order INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -168,6 +170,7 @@ def create_indexes(cursor):
 def initialize_schema(cursor, backend='sqlite'):
     """Create tables, run migrations, and ensure indexes exist."""
     create_tables(cursor, backend=backend)
+    migrate_requests(cursor)
     migrate_request_instances(cursor)
     migrate_ownership(cursor)
     migrate_user_recovery_fields(cursor)
