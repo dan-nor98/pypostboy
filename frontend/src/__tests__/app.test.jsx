@@ -1335,6 +1335,60 @@ describe('App shell', () => {
   });
 
 
+  test('lists all supported HTTP methods in the request toolbar', async () => {
+    renderApp();
+
+    const methodSelect = await screen.findByRole('combobox', {name: /http method/i});
+    expect(within(methodSelect).getAllByRole('option').map((option) => option.value)).toEqual([
+      'GET',
+      'POST',
+      'PUT',
+      'PATCH',
+      'DELETE',
+      'HEAD',
+      'OPTIONS',
+    ]);
+  });
+
+  test.each(['HEAD', 'OPTIONS'])('sends and persists %s request method edits', async (method) => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /^health check$/i})).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByRole('combobox', {name: /http method/i}), method);
+
+    expect(screen.getByRole('tab', {name: /health check unsaved/i})).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({method})));
+
+    await user.click(screen.getByRole('button', {name: /^save$/i}));
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalledWith('request-1', expect.objectContaining({method})));
+  });
+
+  test.each(['HEAD', 'OPTIONS'])('creates draft requests with the selected %s method', async (method) => {
+    const user = userEvent.setup();
+    renderApp();
+    apiClient.createRequest.mockImplementation((data) => Promise.resolve({...data, id: `request-${method.toLowerCase()}`}));
+
+    await user.click(await screen.findByRole('button', {name: /^create request$/i}));
+    await user.type(screen.getByRole('textbox', {name: /request name/i}), `${method} Draft`);
+    await user.selectOptions(screen.getByRole('combobox', {name: /destination collection/i}), 'collection-3');
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    await user.selectOptions(screen.getByRole('combobox', {name: /http method/i}), method);
+
+    expect(screen.getByRole('tab', {name: new RegExp(`${method} Draft unsaved`, 'i')})).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: /^save$/i}));
+    await waitFor(() => expect(apiClient.createRequest).toHaveBeenCalledWith(expect.objectContaining({
+      collection_id: 'collection-3',
+      name: `${method} Draft`,
+      method,
+    })));
+  });
+
   test('saves edited request method and URL and reconciles the toolbar state', async () => {
     const user = userEvent.setup();
     renderApp();
