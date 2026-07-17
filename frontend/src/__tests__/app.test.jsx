@@ -1668,6 +1668,71 @@ describe('App shell', () => {
     }));
   });
 
+  test('trims resolved URLs for sending without changing the draft URL field', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const urlInput = await screen.findByRole('textbox', {name: /request url/i});
+    fireEvent.change(urlInput, {target: {value: '  https://example.test/health?trimmed=true  '}});
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://example.test/health?trimmed=true',
+    }));
+    expect(urlInput).toHaveValue('  https://example.test/health?trimmed=true  ');
+  });
+
+  test('trims URLs when saving requests without changing the draft URL field', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const urlInput = await screen.findByRole('textbox', {name: /request url/i});
+    fireEvent.change(urlInput, {target: {value: '  https://example.test/health/saved  '}});
+
+    await user.click(screen.getByRole('button', {name: /save/i}));
+
+    await waitFor(() => expect(apiClient.updateRequest).toHaveBeenCalledWith('request-1', expect.objectContaining({
+      url: 'https://example.test/health/saved',
+    })));
+    expect(urlInput).toHaveValue('  https://example.test/health/saved  ');
+  });
+
+  test.each([
+    ['http URL', 'http://example.test/health'],
+    ['https URL', 'https://example.test/health'],
+  ])('sends valid %s URLs', async (_label, requestUrl) => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const urlInput = await screen.findByRole('textbox', {name: /request url/i});
+    fireEvent.change(urlInput, {target: {value: requestUrl}});
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
+    expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({url: requestUrl}));
+  });
+
+  test.each([
+    ['missing scheme', 'example.test/health', /valid absolute url including http:\/\/ or https:\/\//i],
+    ['unsupported ftp scheme', 'ftp://example.test/health', /must use the http:\/\/ or https:\/\/ scheme/i],
+    ['malformed URL', 'http://[::1', /valid absolute url including http:\/\/ or https:\/\//i],
+  ])('blocks send for %s URLs', async (_label, requestUrl, expectedError) => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const urlInput = await screen.findByRole('textbox', {name: /request url/i});
+    fireEvent.change(urlInput, {target: {value: requestUrl}});
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+
+    expect(await screen.findByText(expectedError)).toBeInTheDocument();
+    expect(apiClient.proxyRequest).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', {name: /send/i})).toBeEnabled();
+  });
+
   test('blocks send and warns for unresolved environment variables', async () => {
     const user = userEvent.setup();
     renderApp();
