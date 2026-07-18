@@ -27,10 +27,15 @@ import './styles.css';
 
 const PANEL_SPLIT_STORAGE_KEY = 'pypostboy.responsePaneRatio';
 const COLLECTION_WIDTH_STORAGE_KEY = 'pypostboy.collectionPanelWidth';
+const INSPECTOR_WIDTH_STORAGE_KEY = 'pypostboy.inspectorPaneWidth';
 const DEFAULT_COLLECTION_PANEL_WIDTH = 260;
 const MIN_COLLECTION_PANEL_WIDTH = 200;
 const MAX_COLLECTION_PANEL_WIDTH = 480;
 const COLLECTION_PANEL_KEYBOARD_STEP = 16;
+const DEFAULT_INSPECTOR_PANE_WIDTH = 280;
+const MIN_INSPECTOR_PANE_WIDTH = 220;
+const MAX_INSPECTOR_PANE_WIDTH = 520;
+const INSPECTOR_PANE_KEYBOARD_STEP = 16;
 const DEFAULT_RESPONSE_PANE_RATIO = 40;
 const MIN_RESPONSE_PANE_RATIO = 25;
 const MAX_RESPONSE_PANE_RATIO = 75;
@@ -65,6 +70,35 @@ function clampNumber(value, min, max) {
 function readStoredNumber(key, fallback, min, max) {
   const stored = Number(localStorage.getItem(key));
   return Number.isFinite(stored) ? clampNumber(stored, min, max) : fallback;
+}
+
+
+function RequestConfigPanel({id, labelledBy, active, inspectorWidth, onResizePointerDown, onResizeKeyDown, children, inspector}) {
+  return (
+    <div
+      className="request-grid"
+      id={id}
+      role="tabpanel"
+      aria-labelledby={labelledBy}
+      hidden={!active}
+      style={{'--inspector-width': `${inspectorWidth}px`, '--inspector-min-width': `${MIN_INSPECTOR_PANE_WIDTH}px`}}
+    >
+      <section>{children}</section>
+      <div
+        className="inspector-divider"
+        role="separator"
+        aria-label="Resize request inspector panel"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_INSPECTOR_PANE_WIDTH}
+        aria-valuemax={MAX_INSPECTOR_PANE_WIDTH}
+        aria-valuenow={inspectorWidth}
+        tabIndex={active ? 0 : -1}
+        onPointerDown={onResizePointerDown}
+        onKeyDown={onResizeKeyDown}
+      />
+      <aside className="inspector">{inspector}</aside>
+    </div>
+  );
 }
 
 const defaultRequest = {
@@ -702,6 +736,7 @@ export function App() {
   const [activeSidePanel, setActiveSidePanel] = useState('collections');
   const [responsePaneRatio, setResponsePaneRatio] = useState(() => readStoredNumber(PANEL_SPLIT_STORAGE_KEY, DEFAULT_RESPONSE_PANE_RATIO, MIN_RESPONSE_PANE_RATIO, MAX_RESPONSE_PANE_RATIO));
   const [collectionPanelWidth, setCollectionPanelWidth] = useState(() => readStoredNumber(COLLECTION_WIDTH_STORAGE_KEY, DEFAULT_COLLECTION_PANEL_WIDTH, MIN_COLLECTION_PANEL_WIDTH, MAX_COLLECTION_PANEL_WIDTH));
+  const [inspectorWidth, setInspectorWidth] = useState(() => readStoredNumber(INSPECTOR_WIDTH_STORAGE_KEY, DEFAULT_INSPECTOR_PANE_WIDTH, MIN_INSPECTOR_PANE_WIDTH, MAX_INSPECTOR_PANE_WIDTH));
   const [environments, setEnvironments] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pypostboy.environments')) || defaultEnvironments; } catch { return defaultEnvironments; }
   });
@@ -709,6 +744,7 @@ export function App() {
   const [environmentWarnings, setEnvironmentWarnings] = useState([]);
   const mainPanelRef = useRef(null);
   const collectionResizeRef = useRef({startX: 0, startWidth: DEFAULT_COLLECTION_PANEL_WIDTH});
+  const inspectorResizeRef = useRef({startX: 0, startWidth: DEFAULT_INSPECTOR_PANE_WIDTH});
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
   const activeEnvironment = environments.find((environment) => environment.id === activeEnvironmentId) || environments[0] || defaultEnvironments[0];
@@ -728,6 +764,7 @@ export function App() {
   useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
   useEffect(() => { localStorage.setItem(PANEL_SPLIT_STORAGE_KEY, String(responsePaneRatio)); }, [responsePaneRatio]);
   useEffect(() => { localStorage.setItem(COLLECTION_WIDTH_STORAGE_KEY, String(collectionPanelWidth)); }, [collectionPanelWidth]);
+  useEffect(() => { localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(inspectorWidth)); }, [inspectorWidth]);
   useEffect(() => { localStorage.setItem('pypostboy.activeEnvironment', activeEnvironmentId); }, [activeEnvironmentId]);
 
   useEffect(() => {
@@ -821,6 +858,37 @@ export function App() {
     event.preventDefault();
     updateCollectionPanelWidth(collectionPanelWidth + keySteps[event.key]);
   }, [collectionPanelWidth, updateCollectionPanelWidth]);
+
+  const updateInspectorWidth = useCallback((nextWidth) => {
+    setInspectorWidth(clampNumber(Math.round(nextWidth), MIN_INSPECTOR_PANE_WIDTH, MAX_INSPECTOR_PANE_WIDTH));
+  }, []);
+
+  const handleInspectorDividerPointerDown = useCallback((event) => {
+    event.preventDefault();
+    inspectorResizeRef.current = {startX: event.clientX, startWidth: inspectorWidth};
+    const handlePointerMove = (moveEvent) => {
+      const {startX, startWidth} = inspectorResizeRef.current;
+      updateInspectorWidth(startWidth - (moveEvent.clientX - startX));
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  }, [inspectorWidth, updateInspectorWidth]);
+
+  const handleInspectorDividerKeyDown = useCallback((event) => {
+    const keySteps = {
+      ArrowLeft: INSPECTOR_PANE_KEYBOARD_STEP,
+      ArrowRight: -INSPECTOR_PANE_KEYBOARD_STEP,
+      Home: MIN_INSPECTOR_PANE_WIDTH - inspectorWidth,
+      End: MAX_INSPECTOR_PANE_WIDTH - inspectorWidth,
+    };
+    if (!(event.key in keySteps)) return;
+    event.preventDefault();
+    updateInspectorWidth(inspectorWidth + keySteps[event.key]);
+  }, [inspectorWidth, updateInspectorWidth]);
 
   const updateEnvironment = useCallback((nextEnvironment) => {
     setEnvironments((current) => current.map((environment) => (environment.id === nextEnvironment.id ? nextEnvironment : environment)));
@@ -1826,164 +1894,111 @@ export function App() {
               })}
               {collectionsError && <span className="inline-error">{collectionsError}</span>}
             </div>
-            <div
-              className="request-grid"
+            <RequestConfigPanel
               id="request-config-panel-params"
-              role="tabpanel"
-              aria-labelledby="request-config-tab-params"
-              hidden={activeConfigTab !== 'params'}
+              labelledBy="request-config-tab-params"
+              active={activeConfigTab === 'params'}
+              inspectorWidth={inspectorWidth}
+              onResizePointerDown={handleInspectorDividerPointerDown}
+              onResizeKeyDown={handleInspectorDividerKeyDown}
+              inspector={(
+                <>
+                  <h3>Request</h3>
+                  <p className="mono variable">{activeRequest.name}</p>
+                  <p>{editableRequest.method} {editableRequest.url || 'No URL configured'}</p>
+                  <h3>Headers</h3>
+                  {(editableRequest.headers || []).length ? <p>{editableRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
+                  <SnapshotsPanel
+                    snapshots={snapshots}
+                    loading={snapshotsLoading}
+                    error={snapshotsError}
+                    saving={savingSnapshot}
+                    onSave={saveSnapshot}
+                    onRestore={restoreSnapshot}
+                    onRename={renameSnapshot}
+                    onDelete={deleteSnapshot}
+                  />
+                </>
+              )}
             >
-              <section>
-                <div className="section-head">
-                  <span>Query Parameters</span>
-                  {paramsEditMode === 'structured' ? (
-                    <button type="button" onClick={switchParamsToBulk}>Bulk Edit</button>
-                  ) : (
-                    <button type="button" onClick={switchParamsToStructured}>Structured Edit</button>
-                  )}
-                </div>
-                {requests.length ? (
-                  paramsEditMode === 'structured' ? (
-                    <EditableGrid rows={parameterRows} onChange={handleParameterRowsChange} type="parameter" />
-                  ) : (
-                    <div className="field-stack params-bulk-editor">
-                      <p className="hint">Use one <code>key=value</code> per line. Add descriptions with <code> # description</code>. Disabled rows are represented as <code># key=value</code>.</p>
-                      <textarea
-                        aria-label="Bulk query parameters"
-                        rows={12}
-                        value={paramsBulkText}
-                        onChange={handleParamsBulkTextChange}
-                      />
-                      {paramsBulkInvalidLines.length > 0 && (
-                        <div className="inline-error" role="alert">
-                          Invalid parameter lines: {paramsBulkInvalidLines.map((line) => line.lineNumber).join(', ')}. Add a key and an equals sign before switching back.
-                        </div>
-                      )}
-                    </div>
-                  )
-                ) : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
-              </section>
-              <aside className="inspector">
-                <h3>Request</h3>
-                <p className="mono variable">{activeRequest.name}</p>
-                <p>{editableRequest.method} {editableRequest.url || 'No URL configured'}</p>
-                <h3>Headers</h3>
-                {(editableRequest.headers || []).length ? <p>{editableRequest.headers.length} configured headers</p> : <p className="hint">No headers configured.</p>}
-                <SnapshotsPanel
-                  snapshots={snapshots}
-                  loading={snapshotsLoading}
-                  error={snapshotsError}
-                  saving={savingSnapshot}
-                  onSave={saveSnapshot}
-                  onRestore={restoreSnapshot}
-                  onRename={renameSnapshot}
-                  onDelete={deleteSnapshot}
-                />
-              </aside>
-            </div>
-            <div
-              className="request-grid"
+              <div className="section-head">
+                <span>Query Parameters</span>
+                {paramsEditMode === 'structured' ? (
+                  <button type="button" onClick={switchParamsToBulk}>Bulk Edit</button>
+                ) : (
+                  <button type="button" onClick={switchParamsToStructured}>Structured Edit</button>
+                )}
+              </div>
+              {requests.length ? (
+                paramsEditMode === 'structured' ? (
+                  <EditableGrid rows={parameterRows} onChange={handleParameterRowsChange} type="parameter" />
+                ) : (
+                  <div className="field-stack params-bulk-editor">
+                    <p className="hint">Use one <code>key=value</code> per line. Add descriptions with <code> # description</code>. Disabled rows are represented as <code># key=value</code>.</p>
+                    <textarea aria-label="Bulk query parameters" rows={12} value={paramsBulkText} onChange={handleParamsBulkTextChange} />
+                    {paramsBulkInvalidLines.length > 0 && (
+                      <div className="inline-error" role="alert">
+                        Invalid parameter lines: {paramsBulkInvalidLines.map((line) => line.lineNumber).join(', ')}. Add a key and an equals sign before switching back.
+                      </div>
+                    )}
+                  </div>
+                )
+              ) : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
+            </RequestConfigPanel>
+            <RequestConfigPanel
               id="request-config-panel-body"
-              role="tabpanel"
-              aria-labelledby="request-config-tab-body"
-              hidden={activeConfigTab !== 'body'}
+              labelledBy="request-config-tab-body"
+              active={activeConfigTab === 'body'}
+              inspectorWidth={inspectorWidth}
+              onResizePointerDown={handleInspectorDividerPointerDown}
+              onResizeKeyDown={handleInspectorDividerKeyDown}
+              inspector={(<><h3>Body</h3><p className="hint">Editing {bodyTypeLabel(editableRequest.body_raw_type)} content for this request.</p><p className="hint">Switching body type keeps the current body content intact.</p></>)}
             >
-              <section>
-                <div className="section-head">
-                  <span>Request Body</span>
-                  <label className="body-type-selector">
-                    <span>Body type</span>
-                    <select aria-label="Body type" value={editableRequest.body_raw_type || 'application/json'} onChange={updateBodyType}>
-                      {BODY_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-                    </select>
-                  </label>
-                </div>
-                {bodyValidationError ? <div className="body-validation-error" role="alert">{bodyValidationError}</div> : null}
-                <CodeEditor
-                  value={requestBody}
-                  onChange={updateBodyDraft}
-                  wordWrap
-                  label={`Request ${bodyTypeLabel(editableRequest.body_raw_type)} body editor`}
-                />
-              </section>
-              <aside className="inspector">
-                <h3>Body</h3>
-                <p className="hint">Editing {bodyTypeLabel(editableRequest.body_raw_type)} content for this request.</p>
-                <p className="hint">Switching body type keeps the current body content intact.</p>
-              </aside>
-            </div>
-            <div
-              className="request-grid"
+              <div className="section-head"><span>Request Body</span><label className="body-type-selector"><span>Body type</span><select aria-label="Body type" value={editableRequest.body_raw_type || 'application/json'} onChange={updateBodyType}>{BODY_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label></div>
+              {bodyValidationError ? <div className="body-validation-error" role="alert">{bodyValidationError}</div> : null}
+              <CodeEditor value={requestBody} onChange={updateBodyDraft} wordWrap label={`Request ${bodyTypeLabel(editableRequest.body_raw_type)} body editor`} />
+            </RequestConfigPanel>
+            <RequestConfigPanel
               id="request-config-panel-headers"
-              role="tabpanel"
-              aria-labelledby="request-config-tab-headers"
-              hidden={activeConfigTab !== 'headers'}
+              labelledBy="request-config-tab-headers"
+              active={activeConfigTab === 'headers'}
+              inspectorWidth={inspectorWidth}
+              onResizePointerDown={handleInspectorDividerPointerDown}
+              onResizeKeyDown={handleInspectorDividerKeyDown}
+              inspector={(<><h3>Headers</h3>{headerRows.length ? <p>{headerRows.length} configured headers</p> : <p className="hint">No headers configured.</p>}</>)}
             >
-              <section>
-                <div className="section-head"><span>Request Headers</span><button>Bulk Edit</button></div>
-                {requests.length ? <EditableGrid rows={headerRows} onChange={handleHeaderRowsChange} type="header" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
-              </section>
-              <aside className="inspector">
-                <h3>Headers</h3>
-                {headerRows.length ? <p>{headerRows.length} configured headers</p> : <p className="hint">No headers configured.</p>}
-              </aside>
-            </div>
-
-            <div
-              className="request-grid"
+              <div className="section-head"><span>Request Headers</span><button>Bulk Edit</button></div>
+              {requests.length ? <EditableGrid rows={headerRows} onChange={handleHeaderRowsChange} type="header" /> : <div className="empty-state">No requests yet. Create or import a request to begin.</div>}
+            </RequestConfigPanel>
+            <RequestConfigPanel
               id="request-config-panel-authorization"
-              role="tabpanel"
-              aria-labelledby="request-config-tab-authorization"
-              hidden={activeConfigTab !== 'authorization'}
+              labelledBy="request-config-tab-authorization"
+              active={activeConfigTab === 'authorization'}
+              inspectorWidth={inspectorWidth}
+              onResizePointerDown={handleInspectorDividerPointerDown}
+              onResizeKeyDown={handleInspectorDividerKeyDown}
+              inspector={(<><h3>Authorization</h3><p className="hint">Credentials are applied only to the outbound request and masked in history.</p></>)}
             >
-              <section>
-                <div className="section-head"><span>Authorization</span></div>
-                <div className="form-stack">
-                  <label>
-                    <span>Type</span>
-                    <select aria-label="Authorization type" value={editableRequest.auth_type || 'none'} onChange={(event) => updateAuthType(event.target.value)}>
-                      <option value="none">No Auth</option>
-                      <option value="bearer">Bearer Token</option>
-                      <option value="basic">Basic Auth</option>
-                      <option value="api_key">API Key</option>
-                    </select>
-                  </label>
-                  {editableRequest.auth_type === 'bearer' && (
-                    <label>
-                      <span>Token</span>
-                      <input aria-label="Bearer token" type="password" value={authDataValue(editableRequest.auth_data, 'token')} onChange={(event) => updateAuthData('token', event.target.value)} />
-                    </label>
-                  )}
-                  {editableRequest.auth_type === 'basic' && (
-                    <>
-                      <label><span>Username</span><input aria-label="Basic username" value={authDataValue(editableRequest.auth_data, 'username')} onChange={(event) => updateAuthData('username', event.target.value)} /></label>
-                      <label><span>Password</span><input aria-label="Basic password" type="password" value={authDataValue(editableRequest.auth_data, 'password')} onChange={(event) => updateAuthData('password', event.target.value)} /></label>
-                    </>
-                  )}
-                  {editableRequest.auth_type === 'api_key' && (
-                    <>
-                      <label><span>Key</span><input aria-label="API key name" value={authDataValue(editableRequest.auth_data, 'key')} onChange={(event) => updateAuthData('key', event.target.value)} /></label>
-                      <label><span>Value</span><input aria-label="API key value" type="password" value={authDataValue(editableRequest.auth_data, 'value')} onChange={(event) => updateAuthData('value', event.target.value)} /></label>
-                      <label><span>Add to</span><select aria-label="API key location" value={authDataValue(editableRequest.auth_data, 'in', 'header')} onChange={(event) => updateAuthData('in', event.target.value)}><option value="header">Header</option><option value="query">Query parameter</option></select></label>
-                    </>
-                  )}
-                </div>
-              </section>
-              <aside className="inspector"><h3>Authorization</h3><p className="hint">Credentials are applied only to the outbound request and masked in history.</p></aside>
-            </div>
-            <div
-              className="request-grid"
+              <div className="section-head"><span>Authorization</span></div>
+              <div className="form-stack">
+                <label><span>Type</span><select aria-label="Authorization type" value={editableRequest.auth_type || 'none'} onChange={(event) => updateAuthType(event.target.value)}><option value="none">No Auth</option><option value="bearer">Bearer Token</option><option value="basic">Basic Auth</option><option value="api_key">API Key</option></select></label>
+                {editableRequest.auth_type === 'bearer' && <label><span>Token</span><input aria-label="Bearer token" type="password" value={authDataValue(editableRequest.auth_data, 'token')} onChange={(event) => updateAuthData('token', event.target.value)} /></label>}
+                {editableRequest.auth_type === 'basic' && <><label><span>Username</span><input aria-label="Basic username" value={authDataValue(editableRequest.auth_data, 'username')} onChange={(event) => updateAuthData('username', event.target.value)} /></label><label><span>Password</span><input aria-label="Basic password" type="password" value={authDataValue(editableRequest.auth_data, 'password')} onChange={(event) => updateAuthData('password', event.target.value)} /></label></>}
+                {editableRequest.auth_type === 'api_key' && <><label><span>Key</span><input aria-label="API key name" value={authDataValue(editableRequest.auth_data, 'key')} onChange={(event) => updateAuthData('key', event.target.value)} /></label><label><span>Value</span><input aria-label="API key value" type="password" value={authDataValue(editableRequest.auth_data, 'value')} onChange={(event) => updateAuthData('value', event.target.value)} /></label><label><span>Add to</span><select aria-label="API key location" value={authDataValue(editableRequest.auth_data, 'in', 'header')} onChange={(event) => updateAuthData('in', event.target.value)}><option value="header">Header</option><option value="query">Query parameter</option></select></label></>}
+              </div>
+            </RequestConfigPanel>
+            <RequestConfigPanel
               id="request-config-panel-scripts"
-              role="tabpanel"
-              aria-labelledby="request-config-tab-scripts"
-              hidden={activeConfigTab !== 'scripts'}
+              labelledBy="request-config-tab-scripts"
+              active={activeConfigTab === 'scripts'}
+              inspectorWidth={inspectorWidth}
+              onResizePointerDown={handleInspectorDividerPointerDown}
+              onResizeKeyDown={handleInspectorDividerKeyDown}
+              inspector={(<><h3>Script API</h3><p className="hint">Use pb.setHeader, pb.removeHeader, pb.addQueryParam, pb.setUrl, pb.setMethod, or pb.setBody. Browser globals and network APIs are unavailable.</p></>)}
             >
-              <section>
-                <div className="section-head"><span>Pre-request Script</span></div>
-                <CodeEditor value={editableRequest.pre_request_script || ''} onChange={updatePreRequestScript} wordWrap label="Pre-request script editor" />
-              </section>
-              <aside className="inspector"><h3>Script API</h3><p className="hint">Use pb.setHeader, pb.removeHeader, pb.addQueryParam, pb.setUrl, pb.setMethod, or pb.setBody. Browser globals and network APIs are unavailable.</p></aside>
-            </div>
+              <div className="section-head"><span>Pre-request Script</span></div>
+              <CodeEditor value={editableRequest.pre_request_script || ''} onChange={updatePreRequestScript} wordWrap label="Pre-request script editor" />
+            </RequestConfigPanel>
             {requestConfigTabs
               .filter((tab) => !['params', 'body', 'headers', 'authorization', 'scripts'].includes(tab.id))
               .map((tab) => (
