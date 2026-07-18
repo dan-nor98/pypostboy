@@ -869,6 +869,76 @@ describe('App shell', () => {
     expect(screen.getByRole('textbox', {name: /header row 2 value/i})).toHaveValue('kept');
   });
 
+
+  test('resizes the request inspector with keyboard, drag, clamps, and persistence', async () => {
+    localStorage.setItem('pypostboy.inspectorPaneWidth', '320');
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const divider = screen.getByRole('separator', {name: /resize request inspector panel/i});
+    const requestGrid = divider.closest('.request-grid');
+
+    expect(divider).toHaveAttribute('aria-orientation', 'vertical');
+    expect(divider).toHaveAttribute('aria-valuemin', '220');
+    expect(divider).toHaveAttribute('aria-valuemax', '520');
+    expect(divider).toHaveAttribute('aria-valuenow', '320');
+    expect(requestGrid).toHaveStyle({'--inspector-width': '320px'});
+
+    fireEvent.keyDown(divider, {key: 'ArrowLeft'});
+    expect(divider).toHaveAttribute('aria-valuenow', '336');
+    expect(localStorage.getItem('pypostboy.inspectorPaneWidth')).toBe('336');
+
+    fireEvent.pointerDown(divider, {clientX: 336});
+    fireEvent.pointerMove(window, {clientX: -40});
+    fireEvent.pointerUp(window);
+    expect(divider).toHaveAttribute('aria-valuenow', '520');
+    expect(localStorage.getItem('pypostboy.inspectorPaneWidth')).toBe('520');
+
+    fireEvent.keyDown(divider, {key: 'Home'});
+    expect(divider).toHaveAttribute('aria-valuenow', '220');
+    expect(localStorage.getItem('pypostboy.inspectorPaneWidth')).toBe('220');
+    expect(requestGrid).toHaveStyle({'--inspector-width': '220px'});
+  });
+
+  test('clamps invalid stored request inspector widths on startup', async () => {
+    localStorage.setItem('pypostboy.inspectorPaneWidth', '900');
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const divider = screen.getByRole('separator', {name: /resize request inspector panel/i});
+    expect(divider).toHaveAttribute('aria-valuenow', '520');
+    expect(localStorage.getItem('pypostboy.inspectorPaneWidth')).toBe('520');
+
+    localStorage.clear();
+    localStorage.setItem('pypostboy.inspectorPaneWidth', 'not-a-number');
+    renderApp();
+    await waitFor(() => expect(screen.getAllByText('Health Check').length).toBeGreaterThan(0));
+    expect(screen.getAllByRole('separator', {name: /resize request inspector panel/i}).at(-1)).toHaveAttribute('aria-valuenow', '280');
+  });
+
+  test('keeps request draft data unchanged while resizing the request inspector', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/inspector-draft');
+    await user.click(screen.getByRole('tab', {name: 'Headers'}));
+    await user.type(screen.getByRole('textbox', {name: /header row 2 key/i}), 'X-Inspector');
+    await user.type(screen.getByRole('textbox', {name: /header row 2 value/i}), 'kept');
+
+    const divider = screen.getByRole('separator', {name: /resize request inspector panel/i});
+    fireEvent.keyDown(divider, {key: 'ArrowLeft'});
+    fireEvent.pointerDown(divider, {clientX: 296});
+    fireEvent.pointerMove(window, {clientX: 250});
+    fireEvent.pointerUp(window);
+
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/inspector-draft');
+    expect(screen.getByRole('textbox', {name: /header row 2 key/i})).toHaveValue('X-Inspector');
+    expect(screen.getByRole('textbox', {name: /header row 2 value/i})).toHaveValue('kept');
+  });
+
   test('resizes request and response panels with keyboard, drag, bounds, and persistence', async () => {
     renderApp();
     await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
