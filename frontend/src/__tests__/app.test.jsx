@@ -800,6 +800,75 @@ describe('App shell', () => {
     expect(screen.queryByText(/unable to load request details/i)).not.toBeInTheDocument();
   });
 
+  test('resizes the collection panel with keyboard, drag, clamps, and persistence', async () => {
+    localStorage.setItem('pypostboy.collectionPanelWidth', '320');
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const divider = screen.getByRole('separator', {name: /resize collection panel/i});
+    const workspace = divider.closest('.workspace');
+
+    expect(divider).toHaveAttribute('aria-orientation', 'vertical');
+    expect(divider).toHaveAttribute('aria-valuemin', '200');
+    expect(divider).toHaveAttribute('aria-valuemax', '480');
+    expect(divider).toHaveAttribute('aria-valuenow', '320');
+    expect(workspace).toHaveStyle({gridTemplateColumns: 'var(--activity-bar-width) 320px 5px 1fr'});
+
+    fireEvent.keyDown(divider, {key: 'ArrowRight'});
+    expect(divider).toHaveAttribute('aria-valuenow', '336');
+    expect(localStorage.getItem('pypostboy.collectionPanelWidth')).toBe('336');
+
+    fireEvent.pointerDown(divider, {clientX: 336});
+    fireEvent.pointerMove(window, {clientX: 600});
+    fireEvent.pointerUp(window);
+    expect(divider).toHaveAttribute('aria-valuenow', '480');
+    expect(localStorage.getItem('pypostboy.collectionPanelWidth')).toBe('480');
+
+    fireEvent.keyDown(divider, {key: 'Home'});
+    expect(divider).toHaveAttribute('aria-valuenow', '200');
+    expect(localStorage.getItem('pypostboy.collectionPanelWidth')).toBe('200');
+    expect(workspace).toHaveStyle({gridTemplateColumns: 'var(--activity-bar-width) 200px 5px 1fr'});
+  });
+
+  test('clamps invalid stored collection panel widths on startup', async () => {
+    localStorage.setItem('pypostboy.collectionPanelWidth', '900');
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const divider = screen.getByRole('separator', {name: /resize collection panel/i});
+    expect(divider).toHaveAttribute('aria-valuenow', '480');
+    expect(localStorage.getItem('pypostboy.collectionPanelWidth')).toBe('480');
+
+    localStorage.clear();
+    localStorage.setItem('pypostboy.collectionPanelWidth', 'not-a-number');
+    renderApp();
+    await waitFor(() => expect(screen.getAllByText('Health Check').length).toBeGreaterThan(0));
+    expect(screen.getAllByRole('separator', {name: /resize collection panel/i}).at(-1)).toHaveAttribute('aria-valuenow', '260');
+  });
+
+  test('keeps request draft data unchanged while resizing the collection panel', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const urlInput = screen.getByRole('textbox', {name: /request url/i});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://example.test/draft');
+    await user.click(screen.getByRole('tab', {name: 'Headers'}));
+    await user.type(screen.getByRole('textbox', {name: /header row 2 key/i}), 'X-Draft');
+    await user.type(screen.getByRole('textbox', {name: /header row 2 value/i}), 'kept');
+
+    const divider = screen.getByRole('separator', {name: /resize collection panel/i});
+    fireEvent.keyDown(divider, {key: 'ArrowRight'});
+    fireEvent.pointerDown(divider, {clientX: 276});
+    fireEvent.pointerMove(window, {clientX: 360});
+    fireEvent.pointerUp(window);
+
+    expect(screen.getByRole('textbox', {name: /request url/i})).toHaveValue('https://example.test/draft');
+    expect(screen.getByRole('textbox', {name: /header row 2 key/i})).toHaveValue('X-Draft');
+    expect(screen.getByRole('textbox', {name: /header row 2 value/i})).toHaveValue('kept');
+  });
+
   test('resizes request and response panels with keyboard, drag, bounds, and persistence', async () => {
     renderApp();
     await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
