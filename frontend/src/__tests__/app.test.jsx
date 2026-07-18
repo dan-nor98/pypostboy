@@ -97,6 +97,75 @@ const testCollections = [
   },
 ];
 
+const scrollOverflowCollections = [
+  {
+    id: 'scroll-collection',
+    updated_at: 'scroll-collection-v1',
+    name: 'Scrollable Collection Tree',
+    requests: Array.from({length: 36}, (_, index) => ({
+      id: `scroll-request-${index + 1}`,
+      updated_at: `scroll-request-${index + 1}-v1`,
+      name: `Scrollable Request ${index + 1}`,
+      method: index % 3 === 0 ? 'POST' : 'GET',
+      url: `https://example.test/scroll/${index + 1}?wide=${'x'.repeat(80)}`,
+      headers: Array.from({length: 28}, (__, headerIndex) => ({
+        enabled: true,
+        key: `X-Scrollable-Header-${headerIndex + 1}-${'wide'.repeat(8)}`,
+        value: `value-${headerIndex + 1}-${'content'.repeat(12)}`,
+        description: `Header description ${headerIndex + 1}`,
+      })),
+      body_content: Array.from({length: 80}, (__, lineIndex) => JSON.stringify({
+        line: lineIndex + 1,
+        message: `request body content ${lineIndex + 1}`,
+        wide: 'request-body-wide-token-'.repeat(12),
+      })).join('\n'),
+      body_raw_type: 'application/json',
+      auth_type: 'api_key',
+      auth_data: {key: 'X-API-Key', value: 'secret', in: 'header'},
+      pre_request_script: Array.from({length: 60}, (__, lineIndex) => `pb.setHeader('X-Script-${lineIndex + 1}', '${'wide-script-value-'.repeat(10)}');`).join('\n'),
+    })),
+    children: Array.from({length: 8}, (_, index) => ({
+      id: `scroll-child-${index + 1}`,
+      updated_at: `scroll-child-${index + 1}-v1`,
+      name: `Nested Scroll Folder ${index + 1}`,
+      requests: [],
+      children: [],
+    })),
+  },
+];
+
+const largeScrollResponse = {
+  status: 200,
+  statusText: 'OK',
+  time: 128,
+  headers: Object.fromEntries(Array.from({length: 45}, (_, index) => [
+    `x-scroll-response-header-${index + 1}-${'wide'.repeat(8)}`,
+    `response-header-value-${index + 1}-${'wide-value'.repeat(14)}`,
+  ])),
+  body: {
+    rows: Array.from({length: 90}, (_, index) => ({
+      id: index + 1,
+      message: `response body row ${index + 1}`,
+      wide: 'response-body-wide-token-'.repeat(14),
+    })),
+  },
+};
+
+function setScrollableMetrics(element, {clientHeight = 120, scrollHeight = 1200, clientWidth = 240, scrollWidth = 1600} = {}) {
+  Object.defineProperties(element, {
+    clientHeight: {configurable: true, value: clientHeight},
+    scrollHeight: {configurable: true, value: scrollHeight},
+    clientWidth: {configurable: true, value: clientWidth},
+    scrollWidth: {configurable: true, value: scrollWidth},
+  });
+}
+
+function scrollContainer(element, {top, left} = {}) {
+  if (top !== undefined) element.scrollTop = top;
+  if (left !== undefined) element.scrollLeft = left;
+  fireEvent.scroll(element);
+}
+
 
 function flattenTestRequests(collections) {
   return collections.flatMap((collection) => [
@@ -964,6 +1033,140 @@ describe('App shell', () => {
     fireEvent.keyDown(divider, {key: 'ArrowDown'});
     fireEvent.keyDown(divider, {key: 'ArrowDown'});
     expect(divider).toHaveAttribute('aria-valuenow', '75');
+  });
+
+
+  test('keeps large sidebar, request editor, inspector, and response scroll containers independent', async () => {
+    const user = userEvent.setup();
+    renderApp(scrollOverflowCollections);
+    apiClient.proxyRequest.mockResolvedValueOnce(largeScrollResponse);
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /scrollable request 1/i})).toBeInTheDocument());
+    await user.click(within(screen.getByRole('tablist', {name: /request configuration tabs/i})).getByRole('tab', {name: 'Body'}));
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    await waitFor(() => expect(screen.getByText(/200 OK/i)).toBeInTheDocument());
+
+    const sidebar = screen.getByRole('tree', {name: /collections/i}).closest('.sidebar');
+    const requestBodyPanel = document.getElementById('request-config-panel-body');
+    const requestEditor = screen.getByRole('textbox', {name: /request json body editor/i}).closest('.cm-editor').querySelector('.cm-scroller');
+    const inspector = requestBodyPanel.querySelector('.inspector');
+    const responseBodyPanel = document.getElementById('response-panel-body');
+
+    for (const container of [sidebar, requestBodyPanel, requestEditor, inspector, responseBodyPanel]) {
+      setScrollableMetrics(container);
+    }
+
+    expect(sidebar).toHaveClass('sidebar');
+    expect(requestBodyPanel).toHaveClass('request-grid');
+    expect(requestEditor).toHaveClass('cm-scroller');
+    expect(inspector).toHaveClass('inspector');
+    expect(responseBodyPanel).toHaveClass('response-body');
+
+    scrollContainer(sidebar, {top: 180});
+    expect(sidebar.scrollTop).toBe(180);
+    expect(requestBodyPanel.scrollTop).toBe(0);
+    expect(requestEditor.scrollTop).toBe(0);
+    expect(inspector.scrollTop).toBe(0);
+    expect(responseBodyPanel.scrollTop).toBe(0);
+
+    scrollContainer(requestBodyPanel, {top: 90});
+    scrollContainer(requestEditor, {top: 240});
+    scrollContainer(inspector, {top: 45});
+    scrollContainer(responseBodyPanel, {top: 320});
+
+    expect(sidebar.scrollTop).toBe(180);
+    expect(requestBodyPanel.scrollTop).toBe(90);
+    expect(requestEditor.scrollTop).toBe(240);
+    expect(inspector.scrollTop).toBe(45);
+    expect(responseBodyPanel.scrollTop).toBe(320);
+
+    responseBodyPanel.focus();
+    expect(responseBodyPanel).toHaveFocus();
+    fireEvent.keyDown(responseBodyPanel, {key: 'PageDown'});
+    expect(sidebar.scrollTop).toBe(180);
+    expect(requestBodyPanel.scrollTop).toBe(90);
+    expect(requestEditor.scrollTop).toBe(240);
+    expect(inspector.scrollTop).toBe(45);
+  });
+
+  test('preserves scroll positions per request configuration tab and response tab', async () => {
+    const user = userEvent.setup();
+    renderApp(scrollOverflowCollections);
+    apiClient.proxyRequest.mockResolvedValueOnce(largeScrollResponse);
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /scrollable request 1/i})).toBeInTheDocument());
+    const configTabs = screen.getByRole('tablist', {name: /request configuration tabs/i});
+    const paramsPanel = document.getElementById('request-config-panel-params');
+    setScrollableMetrics(paramsPanel);
+    scrollContainer(paramsPanel, {top: 135});
+
+    await user.click(within(configTabs).getByRole('tab', {name: 'Headers'}));
+    const headersPanel = document.getElementById('request-config-panel-headers');
+    setScrollableMetrics(headersPanel);
+    scrollContainer(headersPanel, {top: 265, left: 410});
+    expect(paramsPanel).toHaveAttribute('hidden');
+    expect(headersPanel).not.toHaveAttribute('hidden');
+
+    await user.click(within(configTabs).getByRole('tab', {name: 'Params'}));
+    expect(paramsPanel.scrollTop).toBe(135);
+    expect(headersPanel.scrollTop).toBe(265);
+    expect(headersPanel.scrollLeft).toBe(410);
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    await waitFor(() => expect(screen.getByText(/200 OK/i)).toBeInTheDocument());
+    const responseTabs = screen.getByRole('tablist', {name: /response tabs/i});
+    const responseBodyPanel = document.getElementById('response-panel-body');
+    setScrollableMetrics(responseBodyPanel);
+    scrollContainer(responseBodyPanel, {top: 220, left: 520});
+
+    await user.click(within(responseTabs).getByRole('tab', {name: 'Headers'}));
+    const responseHeadersPanel = document.getElementById('response-panel-headers');
+    setScrollableMetrics(responseHeadersPanel);
+    scrollContainer(responseHeadersPanel, {top: 160, left: 680});
+
+    await user.click(within(responseTabs).getByRole('tab', {name: 'Body'}));
+    expect(responseBodyPanel.scrollTop).toBe(220);
+    expect(responseBodyPanel.scrollLeft).toBe(520);
+    expect(responseHeadersPanel.scrollTop).toBe(160);
+    expect(responseHeadersPanel.scrollLeft).toBe(680);
+  });
+
+  test('allows horizontal overflow in table and code panels while keeping controls outside the scroller', async () => {
+    const user = userEvent.setup();
+    renderApp(scrollOverflowCollections);
+    apiClient.proxyRequest.mockResolvedValueOnce(largeScrollResponse);
+
+    await waitFor(() => expect(screen.getByRole('tab', {name: /scrollable request 1/i})).toBeInTheDocument());
+    const configTabs = screen.getByRole('tablist', {name: /request configuration tabs/i});
+    await user.click(within(configTabs).getByRole('tab', {name: 'Headers'}));
+    const requestHeadersPanel = document.getElementById('request-config-panel-headers');
+    setScrollableMetrics(requestHeadersPanel);
+    scrollContainer(requestHeadersPanel, {left: 700});
+
+    expect(requestHeadersPanel.scrollLeft).toBe(700);
+    expect(within(requestHeadersPanel).getByRole('button', {name: /bulk edit/i})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /send/i})).toBeVisible();
+
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    await waitFor(() => expect(screen.getByText(/200 OK/i)).toBeInTheDocument());
+    const responseBodyPanel = document.getElementById('response-panel-body');
+    const responseCode = within(responseBodyPanel).getByLabelText(/response body editor/i);
+    const copyResponseButton = screen.getByRole('button', {name: /copy response body/i});
+    setScrollableMetrics(responseBodyPanel);
+    setScrollableMetrics(responseCode);
+    scrollContainer(responseBodyPanel, {left: 900});
+    scrollContainer(responseCode, {left: 450});
+
+    expect(responseBodyPanel.scrollLeft).toBe(900);
+    expect(responseCode.scrollLeft).toBe(450);
+    expect(copyResponseButton.closest('[role="tablist"]')).toBe(screen.getByRole('tablist', {name: /response tabs/i}));
+    expect(copyResponseButton).toBeVisible();
+
+    responseBodyPanel.focus();
+    fireEvent.keyDown(responseBodyPanel, {key: 'End'});
+    fireEvent.keyDown(responseBodyPanel, {key: 'Home'});
+    expect(responseBodyPanel.scrollLeft).toBe(900);
+    expect(responseCode.scrollLeft).toBe(450);
   });
 
 
