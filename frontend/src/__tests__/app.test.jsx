@@ -966,6 +966,45 @@ describe('App shell', () => {
     expect(divider).toHaveAttribute('aria-valuenow', '75');
   });
 
+
+  test('resets managed separators to their default sizes on double click', async () => {
+    renderApp();
+    await waitFor(() => expect(screen.getByText('Health Check')).toBeInTheDocument());
+
+    const collectionDivider = screen.getByRole('separator', {name: /resize collection panel/i});
+    const workspace = collectionDivider.closest('.workspace');
+    fireEvent.keyDown(collectionDivider, {key: 'ArrowRight'});
+    expect(collectionDivider).toHaveAttribute('aria-valuenow', '276');
+    expect(localStorage.getItem('pypostboy.collectionPanelWidth')).toBe('276');
+
+    fireEvent.doubleClick(collectionDivider);
+    expect(collectionDivider).toHaveAttribute('aria-valuenow', '260');
+    expect(localStorage.getItem('pypostboy.collectionPanelWidth')).toBe('260');
+    expect(workspace).toHaveStyle({gridTemplateColumns: 'var(--activity-bar-width) 260px 5px 1fr'});
+
+    const inspectorDivider = screen.getByRole('separator', {name: /resize request inspector panel/i});
+    const requestGrid = inspectorDivider.closest('.request-grid');
+    fireEvent.keyDown(inspectorDivider, {key: 'ArrowLeft'});
+    expect(inspectorDivider).toHaveAttribute('aria-valuenow', '296');
+    expect(localStorage.getItem('pypostboy.inspectorPaneWidth')).toBe('296');
+
+    fireEvent.doubleClick(inspectorDivider);
+    expect(inspectorDivider).toHaveAttribute('aria-valuenow', '280');
+    expect(localStorage.getItem('pypostboy.inspectorPaneWidth')).toBe('280');
+    expect(requestGrid).toHaveStyle({'--inspector-width': '280px'});
+
+    const mainDivider = screen.getByRole('separator', {name: /resize request and response panels/i});
+    const main = mainDivider.closest('.main');
+    fireEvent.keyDown(mainDivider, {key: 'ArrowDown'});
+    expect(mainDivider).toHaveAttribute('aria-valuenow', '45');
+    expect(localStorage.getItem('pypostboy.responsePaneRatio')).toBe('45');
+
+    fireEvent.doubleClick(mainDivider);
+    expect(mainDivider).toHaveAttribute('aria-valuenow', '40');
+    expect(localStorage.getItem('pypostboy.responsePaneRatio')).toBe('40');
+    expect(main).toHaveStyle({gridTemplateRows: '34px minmax(240px, 60fr) 5px minmax(220px, 40fr)'});
+  });
+
   test('switches response tabs by click and exposes accessible tab state', async () => {
     const user = userEvent.setup();
     renderApp();
