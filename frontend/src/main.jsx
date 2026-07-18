@@ -73,7 +73,7 @@ function readStoredNumber(key, fallback, min, max) {
 }
 
 
-function RequestConfigPanel({id, labelledBy, active, inspectorWidth, onResizePointerDown, onResizeKeyDown, children, inspector}) {
+function RequestConfigPanel({id, labelledBy, active, inspectorWidth, onResizePointerDown, onResizeKeyDown, onResizeDoubleClick, children, inspector}) {
   return (
     <div
       className="request-grid"
@@ -95,6 +95,7 @@ function RequestConfigPanel({id, labelledBy, active, inspectorWidth, onResizePoi
         tabIndex={active ? 0 : -1}
         onPointerDown={onResizePointerDown}
         onKeyDown={onResizeKeyDown}
+        onDoubleClick={onResizeDoubleClick}
       />
       <aside className="inspector">{inspector}</aside>
     </div>
@@ -821,6 +822,10 @@ export function App() {
     window.addEventListener('pointerup', handlePointerUp);
   }, [resizeResponsePaneFromClientY]);
 
+  const handleMainDividerDoubleClick = useCallback(() => {
+    updateResponsePaneRatio(DEFAULT_RESPONSE_PANE_RATIO);
+  }, [updateResponsePaneRatio]);
+
   const handleMainDividerKeyDown = useCallback((event) => {
     const keySteps = {ArrowUp: -PANEL_SPLIT_KEYBOARD_STEP, ArrowDown: PANEL_SPLIT_KEYBOARD_STEP, Home: MIN_RESPONSE_PANE_RATIO - responsePaneRatio, End: MAX_RESPONSE_PANE_RATIO - responsePaneRatio};
     if (!(event.key in keySteps)) return;
@@ -846,6 +851,10 @@ export function App() {
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
   }, [collectionPanelWidth, updateCollectionPanelWidth]);
+
+  const handleCollectionDividerDoubleClick = useCallback(() => {
+    updateCollectionPanelWidth(DEFAULT_COLLECTION_PANEL_WIDTH);
+  }, [updateCollectionPanelWidth]);
 
   const handleCollectionDividerKeyDown = useCallback((event) => {
     const keySteps = {
@@ -877,6 +886,10 @@ export function App() {
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
   }, [inspectorWidth, updateInspectorWidth]);
+
+  const handleInspectorDividerDoubleClick = useCallback(() => {
+    updateInspectorWidth(DEFAULT_INSPECTOR_PANE_WIDTH);
+  }, [updateInspectorWidth]);
 
   const handleInspectorDividerKeyDown = useCallback((event) => {
     const keySteps = {
@@ -1836,6 +1849,7 @@ export function App() {
           tabIndex={0}
           onPointerDown={handleCollectionDividerPointerDown}
           onKeyDown={handleCollectionDividerKeyDown}
+          onDoubleClick={handleCollectionDividerDoubleClick}
         />
         <section
           className="main"
@@ -1901,6 +1915,7 @@ export function App() {
               inspectorWidth={inspectorWidth}
               onResizePointerDown={handleInspectorDividerPointerDown}
               onResizeKeyDown={handleInspectorDividerKeyDown}
+              onResizeDoubleClick={handleInspectorDividerDoubleClick}
               inspector={(
                 <>
                   <h3>Request</h3>
@@ -1952,6 +1967,7 @@ export function App() {
               inspectorWidth={inspectorWidth}
               onResizePointerDown={handleInspectorDividerPointerDown}
               onResizeKeyDown={handleInspectorDividerKeyDown}
+              onResizeDoubleClick={handleInspectorDividerDoubleClick}
               inspector={(<><h3>Body</h3><p className="hint">Editing {bodyTypeLabel(editableRequest.body_raw_type)} content for this request.</p><p className="hint">Switching body type keeps the current body content intact.</p></>)}
             >
               <div className="section-head"><span>Request Body</span><label className="body-type-selector"><span>Body type</span><select aria-label="Body type" value={editableRequest.body_raw_type || 'application/json'} onChange={updateBodyType}>{BODY_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label></div>
@@ -1965,6 +1981,7 @@ export function App() {
               inspectorWidth={inspectorWidth}
               onResizePointerDown={handleInspectorDividerPointerDown}
               onResizeKeyDown={handleInspectorDividerKeyDown}
+              onResizeDoubleClick={handleInspectorDividerDoubleClick}
               inspector={(<><h3>Headers</h3>{headerRows.length ? <p>{headerRows.length} configured headers</p> : <p className="hint">No headers configured.</p>}</>)}
             >
               <div className="section-head"><span>Request Headers</span><button>Bulk Edit</button></div>
@@ -1977,6 +1994,7 @@ export function App() {
               inspectorWidth={inspectorWidth}
               onResizePointerDown={handleInspectorDividerPointerDown}
               onResizeKeyDown={handleInspectorDividerKeyDown}
+              onResizeDoubleClick={handleInspectorDividerDoubleClick}
               inspector={(<><h3>Authorization</h3><p className="hint">Credentials are applied only to the outbound request and masked in history.</p></>)}
             >
               <div className="section-head"><span>Authorization</span></div>
@@ -1994,6 +2012,7 @@ export function App() {
               inspectorWidth={inspectorWidth}
               onResizePointerDown={handleInspectorDividerPointerDown}
               onResizeKeyDown={handleInspectorDividerKeyDown}
+              onResizeDoubleClick={handleInspectorDividerDoubleClick}
               inspector={(<><h3>Script API</h3><p className="hint">Use pb.setHeader, pb.removeHeader, pb.addQueryParam, pb.setUrl, pb.setMethod, or pb.setBody. Browser globals and network APIs are unavailable.</p></>)}
             >
               <div className="section-head"><span>Pre-request Script</span></div>
@@ -2022,6 +2041,7 @@ export function App() {
             tabIndex={0}
             onPointerDown={handleMainDividerPointerDown}
             onKeyDown={handleMainDividerKeyDown}
+            onDoubleClick={handleMainDividerDoubleClick}
           />
           <ResponseViewer response={proxyResult} loading={sending} error={requestLoadError || proxyError} />
         </section>
