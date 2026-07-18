@@ -26,6 +26,11 @@ import './styles.css';
 
 
 const PANEL_SPLIT_STORAGE_KEY = 'pypostboy.responsePaneRatio';
+const COLLECTION_WIDTH_STORAGE_KEY = 'pypostboy.collectionPanelWidth';
+const DEFAULT_COLLECTION_PANEL_WIDTH = 260;
+const MIN_COLLECTION_PANEL_WIDTH = 200;
+const MAX_COLLECTION_PANEL_WIDTH = 480;
+const COLLECTION_PANEL_KEYBOARD_STEP = 16;
 const DEFAULT_RESPONSE_PANE_RATIO = 40;
 const MIN_RESPONSE_PANE_RATIO = 25;
 const MAX_RESPONSE_PANE_RATIO = 75;
@@ -696,12 +701,14 @@ export function App() {
   const [activeConfigTab, setActiveConfigTab] = useState('params');
   const [activeSidePanel, setActiveSidePanel] = useState('collections');
   const [responsePaneRatio, setResponsePaneRatio] = useState(() => readStoredNumber(PANEL_SPLIT_STORAGE_KEY, DEFAULT_RESPONSE_PANE_RATIO, MIN_RESPONSE_PANE_RATIO, MAX_RESPONSE_PANE_RATIO));
+  const [collectionPanelWidth, setCollectionPanelWidth] = useState(() => readStoredNumber(COLLECTION_WIDTH_STORAGE_KEY, DEFAULT_COLLECTION_PANEL_WIDTH, MIN_COLLECTION_PANEL_WIDTH, MAX_COLLECTION_PANEL_WIDTH));
   const [environments, setEnvironments] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pypostboy.environments')) || defaultEnvironments; } catch { return defaultEnvironments; }
   });
   const [activeEnvironmentId, setActiveEnvironmentId] = useState(() => localStorage.getItem('pypostboy.activeEnvironment') || defaultEnvironments[0].id);
   const [environmentWarnings, setEnvironmentWarnings] = useState([]);
   const mainPanelRef = useRef(null);
+  const collectionResizeRef = useRef({startX: 0, startWidth: DEFAULT_COLLECTION_PANEL_WIDTH});
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
   const activeEnvironment = environments.find((environment) => environment.id === activeEnvironmentId) || environments[0] || defaultEnvironments[0];
@@ -720,6 +727,7 @@ export function App() {
 
   useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
   useEffect(() => { localStorage.setItem(PANEL_SPLIT_STORAGE_KEY, String(responsePaneRatio)); }, [responsePaneRatio]);
+  useEffect(() => { localStorage.setItem(COLLECTION_WIDTH_STORAGE_KEY, String(collectionPanelWidth)); }, [collectionPanelWidth]);
   useEffect(() => { localStorage.setItem('pypostboy.activeEnvironment', activeEnvironmentId); }, [activeEnvironmentId]);
 
   useEffect(() => {
@@ -782,6 +790,37 @@ export function App() {
     event.preventDefault();
     updateResponsePaneRatio(responsePaneRatio + keySteps[event.key]);
   }, [responsePaneRatio, updateResponsePaneRatio]);
+
+  const updateCollectionPanelWidth = useCallback((nextWidth) => {
+    setCollectionPanelWidth(clampNumber(Math.round(nextWidth), MIN_COLLECTION_PANEL_WIDTH, MAX_COLLECTION_PANEL_WIDTH));
+  }, []);
+
+  const handleCollectionDividerPointerDown = useCallback((event) => {
+    event.preventDefault();
+    collectionResizeRef.current = {startX: event.clientX, startWidth: collectionPanelWidth};
+    const handlePointerMove = (moveEvent) => {
+      const {startX, startWidth} = collectionResizeRef.current;
+      updateCollectionPanelWidth(startWidth + moveEvent.clientX - startX);
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  }, [collectionPanelWidth, updateCollectionPanelWidth]);
+
+  const handleCollectionDividerKeyDown = useCallback((event) => {
+    const keySteps = {
+      ArrowLeft: -COLLECTION_PANEL_KEYBOARD_STEP,
+      ArrowRight: COLLECTION_PANEL_KEYBOARD_STEP,
+      Home: MIN_COLLECTION_PANEL_WIDTH - collectionPanelWidth,
+      End: MAX_COLLECTION_PANEL_WIDTH - collectionPanelWidth,
+    };
+    if (!(event.key in keySteps)) return;
+    event.preventDefault();
+    updateCollectionPanelWidth(collectionPanelWidth + keySteps[event.key]);
+  }, [collectionPanelWidth, updateCollectionPanelWidth]);
 
   const updateEnvironment = useCallback((nextEnvironment) => {
     setEnvironments((current) => current.map((environment) => (environment.id === nextEnvironment.id ? nextEnvironment : environment)));
@@ -1680,7 +1719,10 @@ export function App() {
         </IconButton>
       </header>
 
-      <main className="workspace">
+      <main
+        className="workspace"
+        style={{gridTemplateColumns: `var(--activity-bar-width) ${collectionPanelWidth}px 5px 1fr`}}
+      >
         <ActivityBar activePanel={activeSidePanel} onSelectPanel={setActiveSidePanel} />
         {activeSidePanel === 'environments' ? (
           <EnvironmentPanel
@@ -1715,6 +1757,18 @@ export function App() {
           onCopyRequestCurl={copyRequestCurl}
         />
         )}
+        <div
+          className="collection-divider"
+          role="separator"
+          aria-label="Resize collection panel"
+          aria-orientation="vertical"
+          aria-valuemin={MIN_COLLECTION_PANEL_WIDTH}
+          aria-valuemax={MAX_COLLECTION_PANEL_WIDTH}
+          aria-valuenow={collectionPanelWidth}
+          tabIndex={0}
+          onPointerDown={handleCollectionDividerPointerDown}
+          onKeyDown={handleCollectionDividerKeyDown}
+        />
         <section
           className="main"
           ref={mainPanelRef}
