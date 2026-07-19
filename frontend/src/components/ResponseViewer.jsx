@@ -1,6 +1,6 @@
 import React, {useCallback, useRef, useState} from 'react';
 import {AlertTriangle, CheckCircle2, Copy} from 'lucide-react';
-import {CodeBlock} from './CodeBlock';
+import {CodeEditor} from './CodeEditor';
 import {IconButton} from './IconButton';
 
 function isRenderableResponse(response) {
@@ -9,10 +9,23 @@ function isRenderableResponse(response) {
   return !['binary', 'unsupported'].includes(response.bodyType);
 }
 
-function formatBody(body) {
-  if (body === undefined || body === null) return [''];
-  if (typeof body === 'string') return body.split('\n');
-  return JSON.stringify(body, null, 2).split('\n');
+function hasJsonContentType(response) {
+  const contentType = response?.contentType || response?.headers?.['content-type'] || response?.headers?.['Content-Type'] || '';
+  return /(^|[/+])json($|[;\s])/i.test(String(contentType));
+}
+
+function getResponseBodyDocument(response) {
+  const body = response?.body;
+  if (body === undefined || body === null) return {value: '', language: 'text'};
+  if (typeof body !== 'string') return {value: JSON.stringify(body, null, 2), language: 'json'};
+
+  if (!hasJsonContentType(response)) return {value: body, language: 'text'};
+
+  try {
+    return {value: JSON.stringify(JSON.parse(body), null, 2), language: 'json'};
+  } catch (_error) {
+    return {value: body, language: 'text'};
+  }
 }
 
 const responseTabs = ['Body', 'Headers', 'Tests'];
@@ -52,7 +65,15 @@ export function ResponseViewer({response, loading = false, error = ''}) {
     if (response && !isRenderableResponse(response)) {
       return <EmptyState>Unsupported content type{response.contentType ? `: ${response.contentType}` : ''}. Response body not displayed.</EmptyState>;
     }
-    return <CodeBlock response lines={formatBody(response?.body)} />;
+    const {value, language} = getResponseBodyDocument(response);
+    return (
+      <CodeEditor
+        value={value}
+        readOnly
+        language={language}
+        label="Response body viewer"
+      />
+    );
   };
 
   return (

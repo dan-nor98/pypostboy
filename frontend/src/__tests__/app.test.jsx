@@ -260,6 +260,43 @@ describe('ResponseViewer content-type rendering', () => {
     expect(screen.queryByText(/not displayed/i)).not.toBeInTheDocument();
   });
 
+
+  test('renders JSON response bodies with read-only CodeMirror line numbers and syntax highlighting', async () => {
+    const {container} = render(<ResponseViewer response={{
+      ...baseResponse,
+      bodyType: 'json',
+      headers: {'content-type': 'application/vnd.api+json; charset=utf-8'},
+      body: '{"ok":true,"count":2}',
+      size: 21,
+    }} />);
+
+    const editor = await screen.findByRole('textbox', {name: /response body viewer/i});
+    expect(editor.closest('.cm-editor')).toBeInTheDocument();
+    expect(editor).toHaveTextContent('"ok"');
+    expect(editor).toHaveTextContent('true');
+    expect(editor).toHaveTextContent('"count"');
+    expect(editor).toHaveTextContent('2');
+    expect(container.querySelector('.cm-lineNumbers')).toBeInTheDocument();
+    expect([...container.querySelectorAll('.cm-lineNumbers .cm-gutterElement')].map((line) => line.textContent)).toContain('1');
+    expect(container.querySelector('.cm-content span[class]')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /format/i})).toBeDisabled();
+  });
+
+  test('falls back to plain text mode for malformed JSON response bodies', async () => {
+    const {container} = render(<ResponseViewer response={{
+      ...baseResponse,
+      bodyType: 'json',
+      contentType: 'application/json',
+      body: '{not json',
+      size: 9,
+    }} />);
+
+    const editor = await screen.findByRole('textbox', {name: /response body viewer/i});
+    expect(screen.getByText('Text')).toBeInTheDocument();
+    expect(editor).toHaveTextContent('{not json');
+    expect(container.querySelector('.cm-lineNumbers')).toBeInTheDocument();
+  });
+
   test('shows a binary fallback without rendering body bytes', () => {
     render(<ResponseViewer response={{...baseResponse, bodyType: 'binary', contentType: 'image/png', body: '', isBinary: true, size: 8}} />);
 
