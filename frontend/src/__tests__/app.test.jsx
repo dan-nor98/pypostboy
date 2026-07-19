@@ -6,6 +6,7 @@ import {App} from '../main.jsx';
 import {CodeEditor} from '../components/CodeEditor.jsx';
 import {Sidebar} from '../components/Sidebar.jsx';
 import {RequestToolbar} from '../components/RequestToolbar.jsx';
+import {ResponseViewer} from '../components/ResponseViewer.jsx';
 import {EditableGrid} from '../components/EditableGrid.jsx';
 import {apiClient} from '../api/client';
 
@@ -232,6 +233,46 @@ function renderApp(collections = testCollections) {
 
   return render(<App />);
 }
+
+
+describe('ResponseViewer content-type rendering', () => {
+  const baseResponse = {
+    status: 200,
+    statusText: 'OK',
+    time: 12,
+    headers: {},
+    size: 0,
+    isTruncated: false,
+  };
+
+  test.each([
+    ['JSON', {bodyType: 'json', contentType: 'application/json', body: {ok: true}, size: 11}, '"ok": true'],
+    ['plain text', {bodyType: 'text', contentType: 'text/plain', body: 'hello world', size: 11}, 'hello world'],
+    ['HTML', {bodyType: 'markup', contentType: 'text/html', body: '<h1>Hello</h1>', size: 14}, '<h1>Hello</h1>'],
+    ['XML', {bodyType: 'markup', contentType: 'application/xml', body: '<ok>true</ok>', size: 13}, '<ok>true</ok>'],
+    ['empty', {bodyType: 'empty', contentType: 'application/json', body: '', size: 0}, '1'],
+    ['malformed JSON', {bodyType: 'json', contentType: 'application/json', body: '{not json', size: 9}, '{not json'],
+  ])('shows %s responses in the read-only body viewer', (_label, metadata, expectedText) => {
+    render(<ResponseViewer response={{...baseResponse, ...metadata}} />);
+
+    expect(screen.getByText('200 OK')).toBeInTheDocument();
+    expect(screen.getByText(expectedText)).toBeInTheDocument();
+    expect(screen.queryByText(/not displayed/i)).not.toBeInTheDocument();
+  });
+
+  test('shows a binary fallback without rendering body bytes', () => {
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'binary', contentType: 'image/png', body: '', isBinary: true, size: 8}} />);
+
+    expect(screen.getByText('Binary response not displayed.')).toBeInTheDocument();
+    expect(screen.getByText('8 B')).toBeInTheDocument();
+  });
+
+  test('shows an unsupported content-type fallback', () => {
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'unsupported', contentType: 'application/x-protobuf', body: '', isBinary: false, size: 12}} />);
+
+    expect(screen.getByText('Unsupported content type: application/x-protobuf. Response body not displayed.')).toBeInTheDocument();
+  });
+});
 
 
 describe('CodeEditor', () => {

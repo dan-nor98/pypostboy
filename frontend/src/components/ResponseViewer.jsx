@@ -3,6 +3,12 @@ import {AlertTriangle, CheckCircle2, Copy} from 'lucide-react';
 import {CodeBlock} from './CodeBlock';
 import {IconButton} from './IconButton';
 
+function isRenderableResponse(response) {
+  if (!response) return true;
+  if (response.isBinary) return false;
+  return !['binary', 'unsupported'].includes(response.bodyType);
+}
+
 function formatBody(body) {
   if (body === undefined || body === null) return [''];
   if (typeof body === 'string') return body.split('\n');
@@ -17,7 +23,7 @@ function EmptyState({children, tone = ''}) {
 
 export function ResponseViewer({response, loading = false, error = ''}) {
   const headers = response?.headers ? Object.entries(response.headers) : [];
-  const size = response?.body ? new Blob([typeof response.body === 'string' ? response.body : JSON.stringify(response.body)]).size : 0;
+  const size = typeof response?.size === 'number' ? response.size : (response?.body ? new Blob([typeof response.body === 'string' ? response.body : JSON.stringify(response.body)]).size : 0);
   const [activeTab, setActiveTab] = useState('Body');
   const tabRefs = useRef({});
 
@@ -39,6 +45,15 @@ export function ResponseViewer({response, loading = false, error = ''}) {
     event.preventDefault();
     focusTab(responseTabs[getNextIndex()]);
   }, [activeTab, focusTab]);
+
+  const renderResponseBody = () => {
+    if (error) return <EmptyState tone="error">{error}</EmptyState>;
+    if (response?.isBinary) return <EmptyState>Binary response not displayed.</EmptyState>;
+    if (response && !isRenderableResponse(response)) {
+      return <EmptyState>Unsupported content type{response.contentType ? `: ${response.contentType}` : ''}. Response body not displayed.</EmptyState>;
+    }
+    return <CodeBlock response lines={formatBody(response?.body)} />;
+  };
 
   return (
     <section className="response" aria-labelledby="response-tabs-label">
@@ -75,7 +90,7 @@ export function ResponseViewer({response, loading = false, error = ''}) {
       </div>
       <div className="response-panels">
         <div className="response-body" id="response-panel-body" role="tabpanel" aria-labelledby="response-tab-body" tabIndex={0} hidden={activeTab !== 'Body'}>
-          {error ? <EmptyState tone="error">{error}</EmptyState> : <CodeBlock response lines={formatBody(response?.body)} />}
+          {renderResponseBody()}
         </div>
         <div className="response-headers-panel" id="response-panel-headers" role="tabpanel" aria-labelledby="response-tab-headers" tabIndex={0} hidden={activeTab !== 'Headers'}>
           <table className="headers"><tbody>{headers.length ? headers.map(([key, value]) => <tr key={key}><td>{key}</td><td className="mono">{String(value)}</td><td>Response</td></tr>) : <tr><td className="muted">No response headers yet.</td></tr>}</tbody></table>

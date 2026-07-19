@@ -52,6 +52,19 @@ NON_COMBINABLE_REQUEST_HEADERS = {
 
 LOOPBACK_HOSTNAMES = {'localhost', '127.0.0.1', '::1'}
 
+MAX_RESPONSE_BODY_BYTES = 1_000_000
+TEXT_CONTENT_TYPES = {
+    'text/plain',
+    'text/csv',
+    'text/markdown',
+}
+HTML_XML_CONTENT_TYPES = {
+    'text/html',
+    'application/xhtml+xml',
+    'application/xml',
+    'text/xml',
+}
+
 
 class ProxyError(Exception):
     """Base exception for proxy failures."""
@@ -283,19 +296,102 @@ def proxy_http_request(body):
         skipped_headers_count,
     )
 
-    resp_text = response.text
-    try:
-        parsed_body = response.json()
-    except (json.JSONDecodeError, ValueError):
-        parsed_body = resp_text
+    body_payload = _serialize_response_body(response)
 
     return {
         'status': response.status_code,
         'statusText': response.reason,
         'headers': dict(response.headers),
-        'body': parsed_body,
+        'body': body_payload['body'],
+        'contentType': body_payload['contentType'],
+        'bodyType': body_payload['bodyType'],
+        'isBinary': body_payload['isBinary'],
+        'isTruncated': body_payload['isTruncated'],
+        'size': body_payload['size'],
         'time': int(elapsed)
     }
+
+
+def _serialize_response_body(response):
+    """Return content-type-aware, JSON-serializable response body metadata."""
+    headers = getattr(response, 'headers', {}) or {}
+    content_type = headers.get('Content-Type') or headers.get('content-type') or ''
+    media_type = content_type.split(';', 1)[0].strip().lower()
+    raw_body = getattr(response, 'content', b'')
+    if raw_body is None:
+        raw_body = b''
+    if isinstance(raw_body, str):
+        raw_body = raw_body.encode(_response_encoding(response), errors='replace')
+
+    size = len(raw_body)
+    is_truncated = size > MAX_RESPONSE_BODY_BYTES
+    display_bytes = raw_body[:MAX_RESPONSE_BODY_BYTES]
+
+    body_type = _classify_response_body(media_type)
+    if not display_bytes:
+        return {
+            'body': '',
+            'contentType': content_type,
+            'bodyType': 'empty',
+            'isBinary': False,
+            'isTruncated': False,
+            'size': size,
+        }
+
+    if body_type == 'binary':
+        return {
+            'body': '',
+            'contentType': content_type,
+            'bodyType': 'binary',
+            'isBinary': True,
+            'isTruncated': is_truncated,
+            'size': size,
+        }
+
+    text = display_bytes.decode(_response_encoding(response), errors='replace')
+    if body_type == 'json':
+        try:
+            body = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            body = text
+    elif body_type in {'text', 'markup'}:
+        body = text
+    else:
+        body = ''
+
+    return {
+        'body': body,
+        'contentType': content_type,
+        'bodyType': body_type,
+        'isBinary': False,
+        'isTruncated': is_truncated,
+        'size': size,
+    }
+
+
+def _classify_response_body(media_type):
+    """Classify a response media type into a safe viewer category."""
+    if not media_type:
+        return 'text'
+    if media_type == 'application/json' or media_type.endswith('+json'):
+        return 'json'
+    if media_type in HTML_XML_CONTENT_TYPES or media_type.endswith('+xml'):
+        return 'markup'
+    if media_type.startswith('text/') or media_type in TEXT_CONTENT_TYPES:
+        return 'text'
+    if media_type.startswith(('image/', 'audio/', 'video/')) or media_type in {
+        'application/octet-stream',
+        'application/pdf',
+        'application/zip',
+        'application/gzip',
+    }:
+        return 'binary'
+    return 'unsupported'
+
+
+def _response_encoding(response):
+    """Return a safe text encoding for response content bytes."""
+    return getattr(response, 'encoding', None) or 'utf-8'
 
 
 def _is_multipart_form_data(content_type):
