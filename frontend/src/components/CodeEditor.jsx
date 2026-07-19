@@ -39,6 +39,7 @@ export function CodeEditor({
   wordWrap = true,
   readOnly = false,
   label = 'JSON body editor',
+  language = 'json',
 }) {
   const hostRef = useRef(null);
   const viewRef = useRef(null);
@@ -98,7 +99,7 @@ export function CodeEditor({
       dropCursor(),
       indentOnInput(),
       bracketMatching(),
-      json(),
+      ...(language === 'json' ? [json()] : []),
       syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
       search({top: true}),
       highlightSelectionMatches(),
@@ -125,7 +126,7 @@ export function CodeEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, [theme]);
+  }, [language, theme]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -188,7 +189,7 @@ export function CodeEditor({
   return (
     <div className="code-editor-shell">
       <div className="code-editor-toolbar">
-        <span>JSON</span>
+        <span>{language === 'json' ? 'JSON' : 'Text'}</span>
         {formatError && <span className="inline-error">{formatError}</span>}
         <button type="button" onClick={handleSearch}><Search size={13} /> Search</button>
         <button type="button" onClick={handleFormat} disabled={readOnly}>Format</button>
