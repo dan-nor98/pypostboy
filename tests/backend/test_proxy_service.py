@@ -16,10 +16,8 @@ class FakeResponse:
     status_code = 201
     reason = "Created"
     headers = {"Content-Type": "application/json"}
-    text = '{"ok": true}'
-
-    def json(self):
-        return {"ok": True}
+    content = b'{"ok": true}'
+    encoding = "utf-8"
 
 
 def test_proxy_http_request_filters_headers_sets_content_type_and_serializes_response(monkeypatch):
@@ -45,6 +43,11 @@ def test_proxy_http_request_filters_headers_sets_content_type_and_serializes_res
     assert result["statusText"] == "Created"
     assert result["headers"] == {"Content-Type": "application/json"}
     assert result["body"] == {"ok": True}
+    assert result["contentType"] == "application/json"
+    assert result["bodyType"] == "json"
+    assert result["isBinary"] is False
+    assert result["isTruncated"] is False
+    assert result["size"] == len(b'{"ok": true}')
     assert calls[0]["headers"] == {
         "Accept": "application/json",
         "Accept-Encoding": "identity",
@@ -52,6 +55,60 @@ def test_proxy_http_request_filters_headers_sets_content_type_and_serializes_res
     }
     assert calls[0]["data"] == '{"name":"Ada"}'
     assert calls[0]["timeout"] == 30
+
+
+@pytest.mark.parametrize(
+    ("content_type", "content", "expected_body_type", "expected_body", "is_binary"),
+    [
+        ("application/json", b'{"ok": true}', "json", {"ok": True}, False),
+        ("text/plain; charset=utf-8", b"hello\nworld", "text", "hello\nworld", False),
+        ("text/html", b"<h1>Hello</h1>", "markup", "<h1>Hello</h1>", False),
+        ("application/xml", b"<root><ok>true</ok></root>", "markup", "<root><ok>true</ok></root>", False),
+        ("image/png", b"\x89PNG\r\n\x1a\n", "binary", "", True),
+        ("application/json", b"", "empty", "", False),
+        ("application/json", b"{not json", "json", "{not json", False),
+        ("application/x-protobuf", b"field: value", "unsupported", "", False),
+    ],
+)
+def test_proxy_http_request_serializes_response_bodies_by_content_type(
+    monkeypatch, content_type, content, expected_body_type, expected_body, is_binary
+):
+    class ContentResponse:
+        status_code = 200
+        reason = "OK"
+        headers = {"Content-Type": content_type}
+        encoding = "utf-8"
+
+        def __init__(self):
+            self.content = content
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", lambda **kwargs: ContentResponse())
+
+    result = proxy_http_request({"url": "https://api.example.test", "method": "GET"})
+
+    assert result["contentType"] == content_type
+    assert result["bodyType"] == expected_body_type
+    assert result["body"] == expected_body
+    assert result["isBinary"] is is_binary
+    assert result["isTruncated"] is False
+    assert result["size"] == len(content)
+
+
+def test_proxy_http_request_truncates_large_text_response(monkeypatch):
+    class LargeResponse:
+        status_code = 200
+        reason = "OK"
+        headers = {"Content-Type": "text/plain"}
+        encoding = "utf-8"
+        content = b"a" * (proxy_service.MAX_RESPONSE_BODY_BYTES + 1)
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", lambda **kwargs: LargeResponse())
+
+    result = proxy_http_request({"url": "https://api.example.test", "method": "GET"})
+
+    assert result["body"] == "a" * proxy_service.MAX_RESPONSE_BODY_BYTES
+    assert result["isTruncated"] is True
+    assert result["size"] == proxy_service.MAX_RESPONSE_BODY_BYTES + 1
 
 
 def test_proxy_http_request_does_not_forward_unsafe_transport_headers(monkeypatch):
