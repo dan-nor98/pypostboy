@@ -573,3 +573,40 @@ def test_proxy_route_sends_imported_curl_form_data_to_echo_endpoint_as_multipart
     assert "application/json" not in echoed["content_type"]
     assert 'name="name"' in echoed["body"]
     assert "Ada" in echoed["body"]
+
+
+def test_proxy_http_request_rejects_when_backend_proxy_disabled(monkeypatch):
+    monkeypatch.setenv("POSTBOY_PROXY_ENABLED", "false")
+
+    def fail_request(**kwargs):
+        raise AssertionError("outbound request should not execute when proxy is disabled")
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", fail_request)
+
+    with pytest.raises(proxy_service.ProxyDisabledError) as excinfo:
+        proxy_http_request({"url": "https://api.example.test", "method": "GET"})
+
+    assert excinfo.value.status_text == "Proxy Disabled"
+
+
+@pytest.mark.parametrize(
+    ("requests_error", "proxy_error", "status_text"),
+    [
+        (requests.exceptions.ConnectionError("refused"), ProxyConnectionError, "Connection Error"),
+        (requests.exceptions.SSLError("certificate verify failed"), ProxyTlsError, "TLS Error"),
+        (requests.exceptions.Timeout("slow"), ProxyTimeoutError, "Timeout"),
+    ],
+)
+def test_proxy_http_request_returns_distinct_transport_failures(monkeypatch, requests_error, proxy_error, status_text):
+    monkeypatch.setenv("POSTBOY_PROXY_ENABLED", "true")
+
+    def fail_request(**kwargs):
+        raise requests_error
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", fail_request)
+
+    with pytest.raises(proxy_error) as excinfo:
+        proxy_http_request({"url": "https://api.example.test", "method": "GET"})
+
+    assert excinfo.value.status_text == status_text
+    assert excinfo.value.to_payload()["statusText"] == status_text

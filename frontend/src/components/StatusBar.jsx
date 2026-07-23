@@ -11,8 +11,10 @@ function connectionLabel(status) {
 }
 
 function proxyLabel(proxy = {}) {
-  if (proxy.enabled) return 'Proxy: On';
-  return proxy.configured ? 'Proxy: Configured' : 'Proxy: Off';
+  const mode = proxy.mode || (proxy.enabled ? 'enabled' : 'disabled');
+  if (mode === 'disabled' || proxy.enabled === false) return 'Proxy: Disabled';
+  if (proxy.target) return `Proxy: ${proxy.transport || 'http'} target`;
+  return proxy.configured ? 'Proxy: Configured' : 'Proxy: On';
 }
 
 function sslLabel(ssl = {}) {
@@ -58,7 +60,7 @@ export function StatusBar({
     <footer className="status" aria-label="Runtime status">
       <span title={diagnostics.join('; ')}>{connectionLabel(connectionStatus)}</span>
       <span className={stageClassName(stageClassification)} aria-label={`Runtime stage: ${stageText(stage, stageLabel, stageClassification)}`}>{stageText(stage, stageLabel, stageClassification)}</span>
-      <span>{proxyLabel(proxy)}</span>
+      <span title={(proxy.diagnostics || []).join('; ')}>{proxyLabel(proxy)}</span>
       <span>{sslLabel(ssl)}</span>
       <span>{encoding}</span>
       <span>{cursorLabel(cursorPosition)}</span>

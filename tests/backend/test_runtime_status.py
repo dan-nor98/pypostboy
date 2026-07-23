@@ -87,3 +87,44 @@ def test_runtime_status_classifies_non_production_stage(client, user_a_headers, 
     assert payload["stageLabel"] == "Staging (non-production)"
     assert payload["stageClassification"] == "non-production"
     assert payload["isProductionStage"] is False
+
+
+def test_runtime_status_reports_enabled_proxy_safe_metadata(client, user_a_headers, monkeypatch):
+    monkeypatch.setenv("POSTBOY_PROXY_ENABLED", "true")
+    monkeypatch.setenv("POSTBOY_PROXY_TARGET", "https://proxy.example.test")
+    monkeypatch.setenv("POSTBOY_PROXY_TRANSPORT", "https")
+    monkeypatch.setenv("POSTBOY_PROXY_AUTH_POLICY", "client-token")
+
+    payload = client.get("/api/runtime/status", headers=user_a_headers).get_json()["data"]
+
+    assert payload["proxy"] == {
+        "enabled": True,
+        "configured": True,
+        "mode": "enabled",
+        "target": "https://proxy.example.test",
+        "transport": "https",
+        "authPolicy": "client-token",
+        "diagnostics": ["Proxy target configured: https://proxy.example.test"],
+    }
+
+
+def test_runtime_status_redacts_proxy_credentials(client, user_a_headers, monkeypatch):
+    monkeypatch.setenv("POSTBOY_PROXY_ENABLED", "true")
+    monkeypatch.setenv("POSTBOY_PROXY_TARGET", "https://alice:secret-token@proxy.example.test:8443/api")
+
+    proxy = client.get("/api/runtime/status", headers=user_a_headers).get_json()["data"]["proxy"]
+
+    assert "alice" not in str(proxy)
+    assert "secret-token" not in str(proxy)
+    assert proxy["target"] == "https://[redacted]@proxy.example.test:8443/api"
+    assert proxy["diagnostics"] == ["Proxy target configured: https://[redacted]@proxy.example.test:8443/api"]
+
+
+def test_runtime_status_reports_disabled_proxy_policy(client, user_a_headers, monkeypatch):
+    monkeypatch.setenv("POSTBOY_PROXY_ENABLED", "false")
+
+    proxy = client.get("/api/runtime/status", headers=user_a_headers).get_json()["data"]["proxy"]
+
+    assert proxy["enabled"] is False
+    assert proxy["mode"] == "disabled"
+    assert "disabled by backend configuration" in proxy["diagnostics"][0]
