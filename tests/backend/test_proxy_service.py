@@ -49,6 +49,8 @@ def test_proxy_http_request_filters_headers_sets_content_type_and_serializes_res
     assert result["isBinary"] is False
     assert result["isTruncated"] is False
     assert result["size"] == len(b'{"ok": true}')
+    assert result["originalSize"] == len(b'{"ok": true}')
+    assert result["truncatedSize"] == len(b'{"ok": true}')
     assert calls[0]["headers"] == {
         "Accept": "application/json",
         "Accept-Encoding": "identity",
@@ -94,6 +96,8 @@ def test_proxy_http_request_serializes_response_bodies_by_content_type(
     assert result["isBinary"] is is_binary
     assert result["isTruncated"] is False
     assert result["size"] == len(content)
+    assert result["originalSize"] == len(content)
+    assert result["truncatedSize"] == len(content)
 
 
 def test_proxy_http_request_preserves_raw_json_text_and_validity_metadata(monkeypatch):
@@ -151,7 +155,9 @@ def test_proxy_http_request_truncates_large_text_response(monkeypatch):
 
     assert result["body"] == "a" * proxy_service.MAX_RESPONSE_BODY_BYTES
     assert result["isTruncated"] is True
-    assert result["size"] == proxy_service.MAX_RESPONSE_BODY_BYTES + 1
+    assert result["size"] == proxy_service.MAX_RESPONSE_BODY_BYTES
+    assert result["originalSize"] == proxy_service.MAX_RESPONSE_BODY_BYTES + 1
+    assert result["truncatedSize"] == proxy_service.MAX_RESPONSE_BODY_BYTES
 
 
 def test_proxy_http_request_does_not_forward_unsafe_transport_headers(monkeypatch):

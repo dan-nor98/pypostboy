@@ -52,6 +52,9 @@ NON_COMBINABLE_REQUEST_HEADERS = {
 
 LOOPBACK_HOSTNAMES = {'localhost', '127.0.0.1', '::1'}
 
+# Proxy responses larger than this are not copied to the browser in full.
+# The payload keeps the original byte count and truncation metadata so the
+# frontend can render a safe preview instead of freezing on huge documents.
 MAX_RESPONSE_BODY_BYTES = 1_000_000
 TEXT_CONTENT_TYPES = {
     'text/plain',
@@ -309,6 +312,8 @@ def proxy_http_request(body):
         'isTruncated': body_payload['isTruncated'],
         'isJsonValid': body_payload['isJsonValid'],
         'size': body_payload['size'],
+        'originalSize': body_payload['originalSize'],
+        'truncatedSize': body_payload['truncatedSize'],
         'time': int(elapsed)
     }
 
@@ -324,9 +329,10 @@ def _serialize_response_body(response):
     if isinstance(raw_body, str):
         raw_body = raw_body.encode(_response_encoding(response), errors='replace')
 
-    size = len(raw_body)
-    is_truncated = size > MAX_RESPONSE_BODY_BYTES
+    original_size = len(raw_body)
+    is_truncated = original_size > MAX_RESPONSE_BODY_BYTES
     display_bytes = raw_body[:MAX_RESPONSE_BODY_BYTES]
+    size = len(display_bytes)
 
     body_type = _classify_response_body(media_type)
     if not display_bytes:
@@ -338,6 +344,8 @@ def _serialize_response_body(response):
             'isTruncated': False,
             'isJsonValid': False,
             'size': size,
+            'originalSize': original_size,
+            'truncatedSize': size,
         }
 
     if body_type == 'binary':
@@ -349,6 +357,8 @@ def _serialize_response_body(response):
             'isTruncated': is_truncated,
             'isJsonValid': False,
             'size': size,
+            'originalSize': original_size,
+            'truncatedSize': size,
         }
 
     text = display_bytes.decode(_response_encoding(response), errors='replace')
@@ -373,6 +383,8 @@ def _serialize_response_body(response):
         'isTruncated': is_truncated,
         'isJsonValid': is_json_valid,
         'size': size,
+        'originalSize': original_size,
+        'truncatedSize': size,
     }
 
 

@@ -6,7 +6,7 @@ import {App} from '../main.jsx';
 import {CodeEditor} from '../components/CodeEditor.jsx';
 import {Sidebar} from '../components/Sidebar.jsx';
 import {RequestToolbar} from '../components/RequestToolbar.jsx';
-import {ResponseViewer} from '../components/ResponseViewer.jsx';
+import {MAX_INLINE_RENDERED_RESPONSE_BYTES, ResponseViewer} from '../components/ResponseViewer.jsx';
 import {EditableGrid} from '../components/EditableGrid.jsx';
 import {apiClient} from '../api/client';
 
@@ -353,6 +353,35 @@ describe('ResponseViewer content-type rendering', () => {
     expect(editor).toHaveTextContent('"decimal": 1234567890.1234567890123456789');
     expect(editor).toHaveTextContent('"unicode": "café ☃️ こんにちは"');
     expect(editor).toHaveTextContent('"items": [');
+  });
+
+
+  test('renders response bodies below the inline limit in CodeMirror', async () => {
+    const body = 'a'.repeat(MAX_INLINE_RENDERED_RESPONSE_BYTES - 1);
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain', body, size: body.length, originalSize: body.length}} />);
+
+    const editor = await screen.findByRole('textbox', {name: /response body viewer/i});
+    expect(editor).toHaveTextContent(body.slice(0, 120));
+    expect(screen.queryByText(/preview truncated for responsiveness/i)).not.toBeInTheDocument();
+  });
+
+  test('renders response bodies exactly at the inline limit in CodeMirror', async () => {
+    const body = 'b'.repeat(MAX_INLINE_RENDERED_RESPONSE_BYTES);
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain', body, size: body.length, originalSize: body.length}} />);
+
+    const editor = await screen.findByRole('textbox', {name: /response body viewer/i});
+    expect(editor).toHaveTextContent(body.slice(0, 120));
+    expect(screen.queryByText(/preview truncated for responsiveness/i)).not.toBeInTheDocument();
+  });
+
+  test('shows a lightweight truncation preview above the inline limit', () => {
+    const body = `${'c'.repeat(MAX_INLINE_RENDERED_RESPONSE_BYTES)}tail`;
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain', body, size: body.length, originalSize: body.length}} />);
+
+    expect(screen.getByText(/preview truncated for responsiveness/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/truncated response body preview/i)).toHaveTextContent('c'.repeat(120));
+    expect(screen.getByLabelText(/truncated response body preview/i)).not.toHaveTextContent('tail');
+    expect(screen.queryByRole('textbox', {name: /response body viewer/i})).not.toBeInTheDocument();
   });
 
   test('shows a binary fallback without rendering body bytes', () => {
