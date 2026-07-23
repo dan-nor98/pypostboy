@@ -247,12 +247,15 @@ function renderApp(collections = testCollections, runtimeStatus = {
 describe('App runtime status bar', () => {
   afterEach(() => {
     vi.useRealTimers();
+    localStorage.clear();
   });
 
   test('renders loading status then server-provided runtime status', async () => {
     renderApp(testCollections, {
       connectionStatus: 'connected',
       stage: 'Production',
+      stageLabel: 'Production',
+      stageClassification: 'production',
       proxy: {enabled: true, configured: true},
       ssl: {verify: false, label: 'Disabled'},
       encoding: 'ISO-8859-1',
@@ -263,11 +266,39 @@ describe('App runtime status bar', () => {
     expect(within(status).getByText('Connecting…')).toBeInTheDocument();
 
     await waitFor(() => expect(within(status).getByText('Connected')).toBeInTheDocument());
-    expect(within(status).getByText('Production')).toBeInTheDocument();
+    const productionStage = within(status).getByLabelText('Runtime stage: Production');
+    expect(productionStage).toHaveTextContent('Production');
+    expect(productionStage).toHaveClass('status-stage-production');
     expect(within(status).getByText('Proxy: On')).toBeInTheDocument();
     expect(within(status).getByText('⚠ SSL: Disabled')).toBeInTheDocument();
     expect(within(status).getByText('ISO-8859-1')).toBeInTheDocument();
     expect(within(status).getByText('v1.2.3')).toBeInTheDocument();
+  });
+
+  test('renders footer stage from backend response instead of stored or editable environments', async () => {
+    localStorage.setItem('pypostboy.environments', JSON.stringify([
+      {id: 'prod-env', name: 'Local Production Environment', variables: [{key: 'stage', value: 'Production'}]},
+    ]));
+    localStorage.setItem('pypostboy.activeEnvironment', 'prod-env');
+
+    renderApp(testCollections, {
+      connectionStatus: 'connected',
+      stage: 'Staging',
+      stageLabel: 'Staging (non-production)',
+      stageClassification: 'non-production',
+      proxy: {enabled: false, configured: false},
+      ssl: {verify: true, label: 'Enabled'},
+      encoding: 'UTF-8',
+      version: '0.1.0',
+    });
+
+    const status = screen.getByLabelText(/runtime status/i);
+    await waitFor(() => expect(within(status).getByText('Connected')).toBeInTheDocument());
+    const footerStage = within(status).getByLabelText('Runtime stage: Staging (non-production)');
+    expect(footerStage).toHaveTextContent('Staging (non-production)');
+    expect(footerStage).toHaveClass('status-stage-non-production');
+    expect(within(status).queryByText('Local Production Environment')).not.toBeInTheDocument();
+    expect(within(status).queryByText(/^Production$/)).not.toBeInTheDocument();
   });
 
   test.each([
@@ -861,8 +892,6 @@ describe('App shell', () => {
     expect(screen.getByPlaceholderText(/type a command or search/i)).toBeInTheDocument();
   });
 
-
-
   test('exposes request and response tabs with tablist, tab, tabpanel, selection, and control relationships', async () => {
     renderApp();
 
@@ -1066,8 +1095,6 @@ describe('App shell', () => {
     expect(screen.getByText(/no requests available/i)).toBeInTheDocument();
     expect(apiClient.deleteRequest).not.toHaveBeenCalled();
   });
-
-
 
   test('saves a dirty existing request before closing its tab', async () => {
     const user = userEvent.setup();
@@ -2592,8 +2619,6 @@ describe('App shell', () => {
     }));
   });
 
-
-
   test('blocks invalid JSON body send until raw mode is selected', async () => {
     const user = userEvent.setup();
     renderApp();
@@ -2665,8 +2690,6 @@ describe('App shell', () => {
     await waitFor(() => expect(apiClient.proxyRequest).toHaveBeenCalledTimes(1));
     expect(apiClient.proxyRequest).toHaveBeenCalledWith(expect.objectContaining({contentType: 'application/json'}));
   });
-
-
 
   test('applies bearer authorization before proxy transmission and masks it in history', async () => {
     const user = userEvent.setup();

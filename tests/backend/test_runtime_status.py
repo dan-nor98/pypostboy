@@ -64,3 +64,26 @@ def test_runtime_status_invalid_connection_status_fails_with_diagnostics(client,
     assert payload["connectionStatus"] == "failed"
     assert payload["diagnostics"] == ["bad runtime state"]
     assert payload["retry"]["retryable"] is True
+
+
+def test_runtime_status_returns_normalized_server_authoritative_stage(client, user_a_headers, monkeypatch):
+    monkeypatch.setenv("POSTBOY_RUNTIME_STAGE", "prod")
+    monkeypatch.setenv("POSTBOY_STAGE", "Editable Local")
+
+    payload = client.get("/api/runtime/status", headers=user_a_headers).get_json()["data"]
+
+    assert payload["stage"] == "Production"
+    assert payload["stageLabel"] == "Production"
+    assert payload["stageClassification"] == "production"
+    assert payload["isProductionStage"] is True
+
+
+def test_runtime_status_classifies_non_production_stage(client, user_a_headers, monkeypatch):
+    monkeypatch.setenv("POSTBOY_RUNTIME_STAGE", "staging")
+
+    payload = client.get("/api/runtime/status", headers=user_a_headers).get_json()["data"]
+
+    assert payload["stage"] == "Staging"
+    assert payload["stageLabel"] == "Staging (non-production)"
+    assert payload["stageClassification"] == "non-production"
+    assert payload["isProductionStage"] is False
