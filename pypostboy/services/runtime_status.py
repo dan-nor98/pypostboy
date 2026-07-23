@@ -7,7 +7,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-from pypostboy.config import BaseConfig, normalize_runtime_stage
+from pypostboy.config import BaseConfig, get_proxy_settings, normalize_runtime_stage
 from pypostboy.services.sync_status import build_sync_status
 
 
@@ -33,15 +33,6 @@ SYNC_TO_CONNECTION_STATUS = {
     'offline': ConnectionStatus.DISCONNECTED,
     'failed': ConnectionStatus.FAILED,
 }
-
-_PROXY_ENV_KEYS = (
-    'POSTBOY_PROXY_ENABLED',
-    'POSTBOY_PROXY_URL',
-    'HTTPS_PROXY',
-    'HTTP_PROXY',
-    'https_proxy',
-    'http_proxy',
-)
 
 
 def _as_bool(value, default=False):
@@ -88,9 +79,7 @@ def build_runtime_status(connection_status=None, stage=None, diagnostics=None, s
     """Return server-derived runtime metadata for the web client footer."""
     sync_status = sync_status if sync_status is not None else build_sync_status()
     normalized_connection = normalize_connection_status(connection_status, sync_status)
-    configured_proxy_values = [os.environ.get(key) for key in _PROXY_ENV_KEYS]
-    proxy_configured = any(value for value in configured_proxy_values)
-    proxy_enabled = _as_bool(os.environ.get('POSTBOY_PROXY_ENABLED'), default=proxy_configured)
+    proxy_status = get_proxy_settings()
     verify_ssl = _as_bool(os.environ.get('POSTBOY_VERIFY_SSL'), default=True)
     configured_stage = stage or os.environ.get('POSTBOY_RUNTIME_STAGE') or getattr(settings, 'POSTBOY_RUNTIME_STAGE', None) or BaseConfig.RUNTIME_STAGE
     if isinstance(configured_stage, dict):
@@ -122,8 +111,13 @@ def build_runtime_status(connection_status=None, stage=None, diagnostics=None, s
         },
         'syncStatus': sync_status,
         'proxy': {
-            'enabled': proxy_enabled,
-            'configured': proxy_configured,
+            'enabled': proxy_status['enabled'],
+            'configured': proxy_status['configured'],
+            'mode': proxy_status['mode'],
+            'target': proxy_status['target'],
+            'transport': proxy_status['transport'],
+            'authPolicy': proxy_status['authPolicy'],
+            'diagnostics': proxy_status['diagnostics'],
         },
         'ssl': {
             'verify': verify_ssl,

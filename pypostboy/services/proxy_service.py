@@ -10,7 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 import requests as http_requests
 from django.conf import settings
 
-from pypostboy.config import BaseConfig
+from pypostboy.config import BaseConfig, get_proxy_settings
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,17 @@ class ProxyError(Exception):
         }
 
 
+class ProxyDisabledError(ProxyError):
+    """Raised when outbound proxying is disabled by configuration."""
+
+    status_text = 'Proxy Disabled'
+
+    def to_payload(self):
+        payload = super().to_payload()
+        payload['body'] = 'Proxy error: Outbound proxying is disabled'
+        return payload
+
+
 class ProxyTimeoutError(ProxyError):
     """Raised when an outbound request times out."""
 
@@ -145,6 +156,18 @@ def _rewrite_loopback_url_for_host(url):
     return urlunsplit((parsed.scheme, authority, parsed.path, parsed.query, parsed.fragment))
 
 
+def get_proxy_config():
+    """Return current proxy configuration, honoring Django settings when present."""
+    configured = get_proxy_settings()
+    if settings.configured:
+        configured['enabled'] = getattr(settings, 'PROXY_ENABLED', configured['enabled'])
+        configured['mode'] = 'enabled' if configured['enabled'] else 'disabled'
+        configured['target'] = getattr(settings, 'PROXY_TARGET', configured['target'])
+        configured['transport'] = getattr(settings, 'PROXY_TRANSPORT', configured['transport'])
+        configured['authPolicy'] = getattr(settings, 'PROXY_AUTH_POLICY', configured['authPolicy'])
+    return configured
+
+
 def get_proxy_timeout():
     """Return the configured outbound proxy timeout."""
     if not settings.configured:
@@ -154,6 +177,10 @@ def get_proxy_timeout():
 
 def proxy_http_request(body):
     """Proxy an outbound HTTP request and return a serializable response payload."""
+    proxy_config = get_proxy_config()
+    if not proxy_config.get('enabled'):
+        raise ProxyDisabledError('Outbound proxying is disabled by backend configuration')
+
     url = body.get('url')
     method = body.get('method', 'GET')
     headers = body.get('headers', {})

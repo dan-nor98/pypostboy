@@ -54,6 +54,57 @@ def normalize_runtime_stage(value=None):
         'label': label if classification == 'production' else f'{label} (non-production)',
     }
 
+
+def _redact_secret_url(value):
+    """Return a URL-like value without embedded credentials."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    if not value:
+        return ''
+    try:
+        parsed = urlsplit(str(value))
+    except ValueError:
+        return '[invalid]'
+    if not parsed.netloc:
+        return str(value)
+    host = parsed.hostname or ''
+    if ':' in host and not host.startswith('['):
+        host = f'[{host}]'
+    netloc = host
+    if parsed.port is not None:
+        netloc = f'{netloc}:{parsed.port}'
+    if parsed.username or parsed.password:
+        netloc = f'[redacted]@{netloc}'
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
+def get_proxy_settings():
+    """Return explicit proxy configuration and safe runtime metadata."""
+    target = (os.environ.get('POSTBOY_PROXY_TARGET') or os.environ.get('POSTBOY_PROXY_URL') or '').strip()
+    transport = (os.environ.get('POSTBOY_PROXY_TRANSPORT') or 'http').strip().lower()
+    auth_policy = (os.environ.get('POSTBOY_PROXY_AUTH_POLICY') or 'client-provided').strip().lower()
+    enabled = _bool_from_env('POSTBOY_PROXY_ENABLED', True)
+    configured = any([
+        os.environ.get('POSTBOY_PROXY_ENABLED'),
+        target,
+        os.environ.get('POSTBOY_PROXY_TRANSPORT'),
+        os.environ.get('POSTBOY_PROXY_AUTH_POLICY'),
+    ])
+    diagnostics = []
+    if not enabled:
+        diagnostics.append('Outbound proxying is disabled by backend configuration')
+    if target:
+        diagnostics.append(f'Proxy target configured: {_redact_secret_url(target)}')
+    return {
+        'enabled': enabled,
+        'configured': configured,
+        'mode': 'enabled' if enabled else 'disabled',
+        'target': _redact_secret_url(target),
+        'transport': transport,
+        'authPolicy': auth_policy,
+        'diagnostics': diagnostics,
+    }
+
 def _int_from_env(name, default):
     """Read an integer environment variable with a safe fallback."""
     try:
@@ -81,6 +132,10 @@ class BaseConfig:
     DEBUG = False
     MAX_CONTENT_LENGTH = _int_from_env('POSTBOY_MAX_CONTENT_LENGTH', 10 * 1024 * 1024)
     PROXY_TIMEOUT = _int_from_env('POSTBOY_PROXY_TIMEOUT', 30)
+    PROXY_ENABLED = _bool_from_env('POSTBOY_PROXY_ENABLED', True)
+    PROXY_TARGET = os.environ.get('POSTBOY_PROXY_TARGET') or os.environ.get('POSTBOY_PROXY_URL', '')
+    PROXY_TRANSPORT = os.environ.get('POSTBOY_PROXY_TRANSPORT', 'http')
+    PROXY_AUTH_POLICY = os.environ.get('POSTBOY_PROXY_AUTH_POLICY', 'client-provided')
     SECRET_KEY = os.environ.get('POSTBOY_SECRET_KEY', 'postboy-dev-secret-key')
     SESSION_COOKIE_SAMESITE = 'Lax'
     POSTBOY_API_TOKEN_MAX_AGE_SECONDS = _int_from_env(
