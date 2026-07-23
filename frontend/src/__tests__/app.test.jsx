@@ -326,6 +326,7 @@ describe('ResponseViewer content-type rendering', () => {
       bodyType: 'json',
       contentType: 'application/json',
       body: '{not json',
+      isJsonValid: false,
       size: 9,
     }} />);
 
@@ -333,6 +334,25 @@ describe('ResponseViewer content-type rendering', () => {
     expect(screen.getByText('Text')).toBeInTheDocument();
     expect(editor).toHaveTextContent('{not json');
     expect(container.querySelector('.cm-lineNumbers')).toBeInTheDocument();
+  });
+
+
+  test('formats raw JSON without coercing large integers, decimals, or Unicode text', async () => {
+    const body = '{"large":900719925474099312345,"decimal":1234567890.1234567890123456789,"unicode":"café ☃️ こんにちは","items":[1,2]}';
+    render(<ResponseViewer response={{
+      ...baseResponse,
+      bodyType: 'json',
+      contentType: 'application/json',
+      body,
+      isJsonValid: true,
+      size: body.length,
+    }} />);
+
+    const editor = await screen.findByRole('textbox', {name: /response body viewer/i});
+    expect(editor).toHaveTextContent('"large": 900719925474099312345');
+    expect(editor).toHaveTextContent('"decimal": 1234567890.1234567890123456789');
+    expect(editor).toHaveTextContent('"unicode": "café ☃️ こんにちは"');
+    expect(editor).toHaveTextContent('"items": [');
   });
 
   test('shows a binary fallback without rendering body bytes', () => {
@@ -405,20 +425,14 @@ describe('ResponseViewer copy response body', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(body);
   });
 
-  test('copies the same formatted JSON shown in the response viewer without mutating the response', async () => {
+  test('copies the original raw JSON response body while showing formatted JSON without mutating the response', async () => {
     const user = userEvent.setup();
     const response = {...baseResponse, bodyType: 'json', contentType: 'application/json', body: '{"ok":true,"items":[1,2]}', size: 27};
     render(<ResponseViewer response={response} />);
 
     await user.click(screen.getByRole('button', {name: /copy response body/i}));
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`{
-  "ok": true,
-  "items": [
-    1,
-    2
-  ]
-}`);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('{"ok":true,"items":[1,2]}');
     expect(response.body).toBe('{"ok":true,"items":[1,2]}');
   });
 

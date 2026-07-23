@@ -307,6 +307,7 @@ def proxy_http_request(body):
         'bodyType': body_payload['bodyType'],
         'isBinary': body_payload['isBinary'],
         'isTruncated': body_payload['isTruncated'],
+        'isJsonValid': body_payload['isJsonValid'],
         'size': body_payload['size'],
         'time': int(elapsed)
     }
@@ -335,6 +336,7 @@ def _serialize_response_body(response):
             'bodyType': 'empty',
             'isBinary': False,
             'isTruncated': False,
+            'isJsonValid': False,
             'size': size,
         }
 
@@ -345,15 +347,19 @@ def _serialize_response_body(response):
             'bodyType': 'binary',
             'isBinary': True,
             'isTruncated': is_truncated,
+            'isJsonValid': False,
             'size': size,
         }
 
     text = display_bytes.decode(_response_encoding(response), errors='replace')
+    is_json_valid = False
     if body_type == 'json':
+        body = text
         try:
-            body = json.loads(text)
+            json.loads(text)
+            is_json_valid = True
         except (json.JSONDecodeError, ValueError):
-            body = text
+            is_json_valid = False
     elif body_type in {'text', 'markup'}:
         body = text
     else:
@@ -365,6 +371,7 @@ def _serialize_response_body(response):
         'bodyType': body_type,
         'isBinary': False,
         'isTruncated': is_truncated,
+        'isJsonValid': is_json_valid,
         'size': size,
     }
 

@@ -15,6 +15,73 @@ function hasJsonContentType(response) {
 }
 
 
+
+function formatJsonPreservingLexemes(source) {
+  const text = String(source);
+  let index = 0;
+  let output = '';
+  let indentLevel = 0;
+  let inString = false;
+  let escaped = false;
+  const indent = () => '  '.repeat(indentLevel);
+
+  while (index < text.length) {
+    const char = text[index];
+
+    if (inString) {
+      output += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      output += char;
+    } else if (char === '{' || char === '[') {
+      const nextNonWhitespace = text.slice(index + 1).match(/\S/)?.[0];
+      output += char;
+      if ((char === '{' && nextNonWhitespace !== '}') || (char === '[' && nextNonWhitespace !== ']')) {
+        indentLevel += 1;
+        output += `\n${indent()}`;
+      }
+    } else if (char === '}' || char === ']') {
+      indentLevel = Math.max(0, indentLevel - 1);
+      if (output.endsWith('{') || output.endsWith('[')) {
+        output += char;
+      } else {
+        if (output.endsWith('\n')) {
+          output += indent();
+        } else {
+          output += `\n${indent()}`;
+        }
+        output += char;
+      }
+    } else if (char === ',') {
+      output += `,\n${indent()}`;
+    } else if (char === ':') {
+      output += ': ';
+    } else {
+      output += char;
+    }
+
+    index += 1;
+  }
+
+  return output;
+}
+
 function responseHeaderValue(response, headerName) {
   const headers = response?.headers || {};
   const lowerHeaderName = headerName.toLowerCase();
@@ -41,9 +108,11 @@ function getResponseBodyDocument(response) {
   if (typeof body !== 'string') return {value: JSON.stringify(body, null, 2), language: 'json'};
 
   if (!hasJsonContentType(response)) return {value: body, language: 'text'};
+  if (response.isJsonValid === false) return {value: body, language: 'text'};
 
   try {
-    return {value: JSON.stringify(JSON.parse(body), null, 2), language: 'json'};
+    JSON.parse(body);
+    return {value: formatJsonPreservingLexemes(body), language: 'json'};
   } catch (_error) {
     return {value: body, language: 'text'};
   }
@@ -62,7 +131,8 @@ export function ResponseViewer({response, loading = false, error = ''}) {
   const [copyStatus, setCopyStatus] = useState('');
   const tabRefs = useRef({});
   const responseBodyDocument = useMemo(() => getResponseBodyDocument(response), [response]);
-  const copyableResponseBody = isRenderableResponse(response) ? responseBodyDocument.value : '';
+  const rawResponseBody = typeof response?.body === 'string' ? response.body : responseBodyDocument.value;
+  const copyableResponseBody = isRenderableResponse(response) ? rawResponseBody : '';
   const canCopyResponseBody = copyableResponseBody.length > 0;
 
   const focusTab = useCallback((tab) => {
