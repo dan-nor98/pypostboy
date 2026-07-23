@@ -42,7 +42,8 @@ def test_proxy_http_request_filters_headers_sets_content_type_and_serializes_res
     assert result["status"] == 201
     assert result["statusText"] == "Created"
     assert result["headers"] == {"Content-Type": "application/json"}
-    assert result["body"] == {"ok": True}
+    assert result["body"] == '{"ok": true}'
+    assert result["isJsonValid"] is True
     assert result["contentType"] == "application/json"
     assert result["bodyType"] == "json"
     assert result["isBinary"] is False
@@ -60,7 +61,7 @@ def test_proxy_http_request_filters_headers_sets_content_type_and_serializes_res
 @pytest.mark.parametrize(
     ("content_type", "content", "expected_body_type", "expected_body", "is_binary"),
     [
-        ("application/json", b'{"ok": true}', "json", {"ok": True}, False),
+        ("application/json", b'{"ok": true}', "json", '{"ok": true}', False),
         ("text/plain; charset=utf-8", b"hello\nworld", "text", "hello\nworld", False),
         ("text/html", b"<h1>Hello</h1>", "markup", "<h1>Hello</h1>", False),
         ("application/xml", b"<root><ok>true</ok></root>", "markup", "<root><ok>true</ok></root>", False),
@@ -89,9 +90,51 @@ def test_proxy_http_request_serializes_response_bodies_by_content_type(
     assert result["contentType"] == content_type
     assert result["bodyType"] == expected_body_type
     assert result["body"] == expected_body
+    assert result["isJsonValid"] is (content_type == "application/json" and content == b'{"ok": true}')
     assert result["isBinary"] is is_binary
     assert result["isTruncated"] is False
     assert result["size"] == len(content)
+
+
+def test_proxy_http_request_preserves_raw_json_text_and_validity_metadata(monkeypatch):
+    raw_json = '{"large":900719925474099312345,"decimal":1234567890.1234567890123456789,"unicode":"café ☃️ こんにちは","nested":[true,null]}'
+
+    class JsonResponse:
+        status_code = 200
+        reason = "OK"
+        headers = {"Content-Type": "application/json; charset=utf-8"}
+        encoding = "utf-8"
+        content = raw_json.encode("utf-8")
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", lambda **kwargs: JsonResponse())
+
+    result = proxy_http_request({"url": "https://api.example.test", "method": "GET"})
+
+    assert result["body"] == raw_json
+    assert result["bodyType"] == "json"
+    assert result["isJsonValid"] is True
+    assert "900719925474099312345" in result["body"]
+    assert "1234567890.1234567890123456789" in result["body"]
+    assert "café ☃️ こんにちは" in result["body"]
+
+
+def test_proxy_http_request_marks_invalid_json_without_replacing_raw_text(monkeypatch):
+    raw_json = '{"ok": true, "broken": }'
+
+    class InvalidJsonResponse:
+        status_code = 200
+        reason = "OK"
+        headers = {"Content-Type": "application/json"}
+        encoding = "utf-8"
+        content = raw_json.encode("utf-8")
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", lambda **kwargs: InvalidJsonResponse())
+
+    result = proxy_http_request({"url": "https://api.example.test", "method": "GET"})
+
+    assert result["body"] == raw_json
+    assert result["bodyType"] == "json"
+    assert result["isJsonValid"] is False
 
 
 def test_proxy_http_request_truncates_large_text_response(monkeypatch):
@@ -436,7 +479,8 @@ def test_proxy_route_sends_imported_curl_form_data_to_echo_endpoint_as_multipart
         thread.join(timeout=2)
 
     assert response.status_code == 200
-    echoed = response.get_json()["body"]
+    echoed = json.loads(response.get_json()["body"])
+    assert response.get_json()["isJsonValid"] is True
     assert echoed["content_type"].startswith("multipart/form-data; boundary=")
     assert "application/json" not in echoed["content_type"]
     assert 'name="name"' in echoed["body"]
