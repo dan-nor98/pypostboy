@@ -31,9 +31,21 @@ function versionLabel(version) {
   return String(version).startsWith('v') ? version : `v${version}`;
 }
 
+function stageText(stage, stageLabel, stageClassification) {
+  const fallback = stage || 'Loading';
+  if (stageLabel) return stageLabel;
+  return stageClassification === 'non-production' ? `${fallback} (non-production)` : fallback;
+}
+
+function stageClassName(stageClassification) {
+  return `status-stage status-stage-${stageClassification === 'production' ? 'production' : 'non-production'}`;
+}
+
 export function StatusBar({
   connectionStatus = 'connecting',
   stage = 'Loading',
+  stageLabel = '',
+  stageClassification = 'non-production',
   proxy = {enabled: false, configured: false},
   ssl = {verify: true, label: 'Enabled'},
   encoding = 'UTF-8',
@@ -45,7 +57,7 @@ export function StatusBar({
   return (
     <footer className="status" aria-label="Runtime status">
       <span title={diagnostics.join('; ')}>{connectionLabel(connectionStatus)}</span>
-      <span>{stage}</span>
+      <span className={stageClassName(stageClassification)} aria-label={`Runtime stage: ${stageText(stage, stageLabel, stageClassification)}`}>{stageText(stage, stageLabel, stageClassification)}</span>
       <span>{proxyLabel(proxy)}</span>
       <span>{sslLabel(ssl)}</span>
       <span>{encoding}</span>

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-from pypostboy.config import BaseConfig
+from pypostboy.config import BaseConfig, normalize_runtime_stage
 from pypostboy.services.sync_status import build_sync_status
 
 
@@ -92,7 +92,11 @@ def build_runtime_status(connection_status=None, stage=None, diagnostics=None, s
     proxy_configured = any(value for value in configured_proxy_values)
     proxy_enabled = _as_bool(os.environ.get('POSTBOY_PROXY_ENABLED'), default=proxy_configured)
     verify_ssl = _as_bool(os.environ.get('POSTBOY_VERIFY_SSL'), default=True)
-    active_stage = stage or os.environ.get('POSTBOY_STAGE') or ('Development' if BaseConfig.DEBUG else 'Production')
+    configured_stage = stage or os.environ.get('POSTBOY_RUNTIME_STAGE') or getattr(settings, 'POSTBOY_RUNTIME_STAGE', None) or BaseConfig.RUNTIME_STAGE
+    if isinstance(configured_stage, dict):
+        active_stage = configured_stage
+    else:
+        active_stage = normalize_runtime_stage(configured_stage)
     retry_interval_ms = _as_positive_int(os.environ.get('POSTBOY_RUNTIME_RETRY_INTERVAL_MS'), 30_000)
     retry_backoff = max(1, _as_positive_int(os.environ.get('POSTBOY_RUNTIME_RETRY_BACKOFF'), 2))
     max_retry_interval_ms = max(retry_interval_ms, _as_positive_int(os.environ.get('POSTBOY_RUNTIME_MAX_RETRY_INTERVAL_MS'), 120_000))
@@ -105,7 +109,10 @@ def build_runtime_status(connection_status=None, stage=None, diagnostics=None, s
     return {
         'connectionStatus': normalized_connection.value,
         'connectionLabel': CONNECTION_LABELS[normalized_connection],
-        'stage': active_stage,
+        'stage': active_stage['name'],
+        'stageLabel': active_stage['label'],
+        'stageClassification': active_stage['classification'],
+        'isProductionStage': active_stage['isProduction'],
         'diagnostics': diagnostic_items,
         'retry': {
             'intervalMs': retry_interval_ms,

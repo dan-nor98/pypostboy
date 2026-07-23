@@ -45,6 +45,8 @@ const RUNTIME_STATUS_REFRESH_MS = Number(import.meta.env?.VITE_RUNTIME_STATUS_RE
 const DEFAULT_RUNTIME_STATUS = {
   connectionStatus: 'connecting',
   stage: 'Loading',
+  stageLabel: 'Loading',
+  stageClassification: 'non-production',
   proxy: {enabled: false, configured: false},
   ssl: {verify: true, label: 'Enabled'},
   encoding: 'UTF-8',
@@ -2111,6 +2113,8 @@ export function App() {
       <StatusBar
         connectionStatus={runtimeStatus.connectionStatus}
         stage={runtimeStatus.stage}
+        stageLabel={runtimeStatus.stageLabel}
+        stageClassification={runtimeStatus.stageClassification}
         proxy={runtimeStatus.proxy}
         ssl={runtimeStatus.ssl}
         encoding={runtimeStatus.encoding}

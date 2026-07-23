@@ -25,6 +25,35 @@ def get_database_backend(database_url=None, explicit_backend=None):
     return 'sqlite'
 
 
+def normalize_runtime_stage(value=None):
+    """Normalize the configured runtime stage and classify production use."""
+    raw_stage = str(value or os.environ.get('POSTBOY_RUNTIME_STAGE') or '').strip()
+    if not raw_stage:
+        raw_stage = 'development'
+
+    normalized_key = raw_stage.lower().replace('_', '-').replace(' ', '-')
+    production_aliases = {'prod', 'production'}
+    label_aliases = {
+        'dev': 'Development',
+        'development': 'Development',
+        'local': 'Local',
+        'test': 'Testing',
+        'testing': 'Testing',
+        'stage': 'Staging',
+        'staging': 'Staging',
+        'qa': 'QA',
+        'prod': 'Production',
+        'production': 'Production',
+    }
+    label = label_aliases.get(normalized_key) or raw_stage.replace('-', ' ').title()
+    classification = 'production' if normalized_key in production_aliases else 'non-production'
+    return {
+        'name': label,
+        'classification': classification,
+        'isProduction': classification == 'production',
+        'label': label if classification == 'production' else f'{label} (non-production)',
+    }
+
 def _int_from_env(name, default):
     """Read an integer environment variable with a safe fallback."""
     try:
@@ -58,6 +87,7 @@ class BaseConfig:
         'POSTBOY_API_TOKEN_MAX_AGE_SECONDS',
         15 * 60,
     )
+    RUNTIME_STAGE = normalize_runtime_stage(os.environ.get('POSTBOY_RUNTIME_STAGE'))
     TESTING = False
 
 

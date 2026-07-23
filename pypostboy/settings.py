@@ -8,7 +8,7 @@ integration.
 import os
 from urllib.parse import parse_qs, unquote, urlparse
 
-from pypostboy.config import BaseConfig, DEFAULT_DATABASE_PATH
+from pypostboy.config import BaseConfig, DEFAULT_DATABASE_PATH, normalize_runtime_stage
 
 
 def _split_csv(value):
@@ -118,6 +118,7 @@ CSRF_COOKIE_HTTPONLY = False
 CSRF_TRUSTED_ORIGINS = _split_csv(os.environ.get('CSRF_TRUSTED_ORIGINS'))
 POSTBOY_API_TOKEN_MAX_AGE_SECONDS = BaseConfig.POSTBOY_API_TOKEN_MAX_AGE_SECONDS
 PROXY_TIMEOUT = BaseConfig.PROXY_TIMEOUT
+POSTBOY_RUNTIME_STAGE = normalize_runtime_stage(os.environ.get('POSTBOY_RUNTIME_STAGE'))
 DATA_UPLOAD_MAX_MEMORY_SIZE = BaseConfig.MAX_CONTENT_LENGTH
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
