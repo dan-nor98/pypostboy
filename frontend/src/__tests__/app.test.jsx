@@ -250,7 +250,6 @@ describe('ResponseViewer content-type rendering', () => {
     ['plain text', {bodyType: 'text', contentType: 'text/plain', body: 'hello world', size: 11}, 'hello world'],
     ['HTML', {bodyType: 'markup', contentType: 'text/html', body: '<h1>Hello</h1>', size: 14}, '<h1>Hello</h1>'],
     ['XML', {bodyType: 'markup', contentType: 'application/xml', body: '<ok>true</ok>', size: 13}, '<ok>true</ok>'],
-    ['empty', {bodyType: 'empty', contentType: 'application/json', body: '', size: 0}, '1'],
     ['malformed JSON', {bodyType: 'json', contentType: 'application/json', body: '{not json', size: 9}, '{not json'],
   ])('shows %s responses in the read-only body viewer', (_label, metadata, expectedText) => {
     render(<ResponseViewer response={{...baseResponse, ...metadata}} />);
@@ -280,6 +279,45 @@ describe('ResponseViewer content-type rendering', () => {
     expect([...container.querySelectorAll('.cm-lineNumbers .cm-gutterElement')].map((line) => line.textContent)).toContain('1');
     expect(container.querySelector('.cm-content span[class]')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: /format/i})).toBeDisabled();
+  });
+
+  test('shows the empty-body state for 204 No Content responses', () => {
+    render(<ResponseViewer response={{...baseResponse, status: 204, statusText: 'No Content', bodyType: 'empty', contentType: '', body: '', size: 0}} />);
+
+    expect(screen.getByText('204 No Content')).toBeInTheDocument();
+    expect(screen.getByText('Response body is empty.')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', {name: /response body viewer/i})).not.toBeInTheDocument();
+  });
+
+  test('shows the empty-body state for empty string response bodies', () => {
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain', body: '', size: 0}} />);
+
+    expect(screen.getByText('Response body is empty.')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', {name: /response body viewer/i})).not.toBeInTheDocument();
+  });
+
+  test('shows the empty-body state for null response bodies', () => {
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'empty', contentType: 'application/json', body: null, size: 0}} />);
+
+    expect(screen.getByText('Response body is empty.')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', {name: /response body viewer/i})).not.toBeInTheDocument();
+  });
+
+  test('keeps whitespace-only text response bodies in the body viewer', async () => {
+    const body = '   \n\t  ';
+    const {container} = render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain', body, size: body.length}} />);
+
+    await screen.findByRole('textbox', {name: /response body viewer/i});
+    expect(container.querySelector('.cm-content')).toHaveTextContent(body);
+    expect(screen.queryByText('Response body is empty.')).not.toBeInTheDocument();
+  });
+
+  test('keeps textual null response bodies in the body viewer', async () => {
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain', body: 'null', size: 4}} />);
+
+    const editor = await screen.findByRole('textbox', {name: /response body viewer/i});
+    expect(editor).toHaveTextContent('null');
+    expect(screen.queryByText('Response body is empty.')).not.toBeInTheDocument();
   });
 
   test('falls back to plain text mode for malformed JSON response bodies', async () => {
