@@ -39,15 +39,19 @@ export function StatusBar({
   encoding = 'UTF-8',
   cursorPosition = {line: 1, column: 1},
   version = 'v0.1.0',
+  diagnostics = [],
+  retry = {},
 }) {
   return (
     <footer className="status" aria-label="Runtime status">
-      <span>{connectionLabel(connectionStatus)}</span>
+      <span title={diagnostics.join('; ')}>{connectionLabel(connectionStatus)}</span>
       <span>{stage}</span>
       <span>{proxyLabel(proxy)}</span>
       <span>{sslLabel(ssl)}</span>
       <span>{encoding}</span>
       <span>{cursorLabel(cursorPosition)}</span>
+      {diagnostics.length > 0 && <span>{diagnostics[0]}</span>}
+      {retry.retryable && retry.nextRetryMs && <span>{`Retry in ${Math.round(retry.nextRetryMs / 1000)}s`}</span>}
       <span>{versionLabel(version)}</span>
     </footer>
   );

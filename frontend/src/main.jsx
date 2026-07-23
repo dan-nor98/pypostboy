@@ -40,7 +40,7 @@ const DEFAULT_RESPONSE_PANE_RATIO = 40;
 const MIN_RESPONSE_PANE_RATIO = 25;
 const MAX_RESPONSE_PANE_RATIO = 75;
 const PANEL_SPLIT_KEYBOARD_STEP = 5;
-const RUNTIME_STATUS_REFRESH_MS = 30_000;
+const RUNTIME_STATUS_REFRESH_MS = Number(import.meta.env?.VITE_RUNTIME_STATUS_RETRY_MS || 30_000);
 
 const DEFAULT_RUNTIME_STATUS = {
   connectionStatus: 'connecting',
@@ -49,6 +49,8 @@ const DEFAULT_RUNTIME_STATUS = {
   ssl: {verify: true, label: 'Enabled'},
   encoding: 'UTF-8',
   version: 'v0.1.0',
+  diagnostics: [],
+  retry: {intervalMs: RUNTIME_STATUS_REFRESH_MS, backoff: 2, maxIntervalMs: 120_000, retryable: false},
 };
 
 const BODY_TYPES = [
@@ -1136,25 +1138,49 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
+    let retryDelayMs = RUNTIME_STATUS_REFRESH_MS;
+    let timeoutId;
+
+    function scheduleRuntimeStatus(nextDelayMs) {
+      timeoutId = window.setTimeout(loadRuntimeStatus, nextDelayMs);
+    }
+
     async function loadRuntimeStatus() {
-      setRuntimeStatus((current) => ({...current, connectionStatus: current.connectionStatus === 'connected' ? 'connected' : 'connecting'}));
+      setRuntimeStatus((current) => ({
+        ...current,
+        connectionStatus: current.connectionStatus === 'connected' ? 'connected' : 'connecting',
+      }));
       try {
         const status = await apiClient.getRuntimeStatus?.();
-        if (!cancelled) setRuntimeStatus({...DEFAULT_RUNTIME_STATUS, ...status, connectionStatus: status?.connectionStatus || 'connected'});
+        if (cancelled) return;
+        const nextStatus = {...DEFAULT_RUNTIME_STATUS, ...status, connectionStatus: status?.connectionStatus || 'connected'};
+        const retry = {...DEFAULT_RUNTIME_STATUS.retry, ...(status?.retry || {})};
+        nextStatus.retry = retry;
+        retryDelayMs = retry.intervalMs || RUNTIME_STATUS_REFRESH_MS;
+        setRuntimeStatus(nextStatus);
+        scheduleRuntimeStatus(retryDelayMs);
       } catch (error) {
-        if (!cancelled) {
-          setRuntimeStatus((current) => ({
+        if (cancelled) return;
+        setRuntimeStatus((current) => {
+          const retry = {...DEFAULT_RUNTIME_STATUS.retry, ...(current.retry || {})};
+          retryDelayMs = Math.min(
+            retry.maxIntervalMs || 120_000,
+            Math.max(retry.intervalMs || RUNTIME_STATUS_REFRESH_MS, retryDelayMs * (retry.backoff || 2)),
+          );
+          return {
             ...current,
             connectionStatus: current.connectionStatus === 'connecting' ? 'failed' : 'disconnected',
+            diagnostics: [error.message].filter(Boolean),
             error: error.message,
-          }));
-        }
+            retry: {...retry, retryable: true, nextRetryMs: retryDelayMs},
+          };
+        });
+        scheduleRuntimeStatus(retryDelayMs);
       }
     }
 
     loadRuntimeStatus();
-    const intervalId = window.setInterval(loadRuntimeStatus, RUNTIME_STATUS_REFRESH_MS);
-    return () => { cancelled = true; window.clearInterval(intervalId); };
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
   }, []);
 
   useEffect(() => {
@@ -2090,6 +2116,8 @@ export function App() {
         encoding={runtimeStatus.encoding}
         cursorPosition={runtimeStatus.cursorPosition}
         version={runtimeStatus.version}
+        diagnostics={runtimeStatus.diagnostics}
+        retry={runtimeStatus.retry}
       />
       {palette && <CommandPalette onClose={closePalette} onImportCurl={() => { closePalette(); setImportCurlOpen(true); }} onImportPostman={() => { closePalette(); setImportPostmanOpen(true); }} />}
       {pendingDirtyCloseRequestId && (

@@ -270,6 +270,74 @@ describe('App runtime status bar', () => {
     expect(within(status).getByText('v1.2.3')).toBeInTheDocument();
   });
 
+  test.each([
+    ['connecting', 'Connecting…'],
+    ['connected', 'Connected'],
+    ['disconnected', 'Disconnected'],
+    ['failed', 'Connection failed'],
+  ])('renders first-class %s connection state', async (connectionStatus, label) => {
+    renderApp(testCollections, {
+      connectionStatus,
+      stage: 'Development',
+      diagnostics: ['runtime diagnostic'],
+      retry: {intervalMs: 5000, backoff: 2, maxIntervalMs: 20000, retryable: connectionStatus === 'disconnected' || connectionStatus === 'failed'},
+      proxy: {enabled: false, configured: false},
+      ssl: {verify: true, label: 'Enabled'},
+      encoding: 'UTF-8',
+      version: '0.1.0',
+    });
+
+    const status = screen.getByLabelText(/runtime status/i);
+    await waitFor(() => expect(within(status).getByText(label)).toBeInTheDocument());
+    expect(within(status).getByText('runtime diagnostic')).toBeInTheDocument();
+  });
+
+  test('backs off runtime polling failures and preserves dirty request edits across reconnect', async () => {
+    vi.useFakeTimers();
+    apiClient.getRuntimeStatus
+      .mockResolvedValueOnce({
+        connectionStatus: 'connected',
+        stage: 'Development',
+        diagnostics: [],
+        retry: {intervalMs: 1000, backoff: 2, maxIntervalMs: 4000, retryable: false},
+        proxy: {enabled: false, configured: false},
+        ssl: {verify: true, label: 'Enabled'},
+        encoding: 'UTF-8',
+        version: '0.1.0',
+      })
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({
+        connectionStatus: 'connected',
+        stage: 'Development',
+        diagnostics: ['reconnected'],
+        retry: {intervalMs: 1000, backoff: 2, maxIntervalMs: 4000, retryable: false},
+        proxy: {enabled: false, configured: false},
+        ssl: {verify: true, label: 'Enabled'},
+        encoding: 'UTF-8',
+        version: '0.1.0',
+      });
+
+    renderApp(testCollections, undefined);
+    const status = screen.getByLabelText(/runtime status/i);
+    await waitFor(() => expect(within(status).getByText('Connected')).toBeInTheDocument());
+
+    fireEvent.click(await screen.findByText('Health Check'));
+    const urlInput = await screen.findByDisplayValue('https://example.test/health');
+    fireEvent.change(urlInput, {target: {value: 'https://example.test/dirty'}});
+    expect(await screen.findByDisplayValue('https://example.test/dirty')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await waitFor(() => expect(within(status).getByText('Disconnected')).toBeInTheDocument());
+    expect(within(status).getByText('network down')).toBeInTheDocument();
+    expect(within(status).getByText('Retry in 2s')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('https://example.test/dirty')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await waitFor(() => expect(within(status).getByText('Connected')).toBeInTheDocument());
+    expect(within(status).getByText('reconnected')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('https://example.test/dirty')).toBeInTheDocument();
+  });
+
   test('updates runtime status on the refresh cadence and shows disconnected after a failed refresh', async () => {
     vi.useFakeTimers();
     apiClient.getRuntimeStatus
