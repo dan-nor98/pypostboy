@@ -1,4 +1,4 @@
-import React, {useCallback, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {AlertTriangle, CheckCircle2, Copy} from 'lucide-react';
 import {CodeEditor} from './CodeEditor';
 import {IconButton} from './IconButton';
@@ -85,6 +85,28 @@ function formatJsonPreservingLexemes(source) {
   return output;
 }
 
+function responseHeaderRows(response) {
+  if (Array.isArray(response?.headerList)) {
+    return response.headerList.map((header, index) => ({
+      id: `${header.name || ''}-${index}`,
+      name: String(header.name || ''),
+      value: String(header.value ?? ''),
+      originalValue: String(header.value ?? ''),
+    }));
+  }
+  return Object.entries(response?.headers || {}).map(([name, value], index) => ({
+    id: `${name}-${index}`,
+    name,
+    value: String(value),
+    originalValue: String(value),
+  }));
+}
+
+function displayHeaderValue(name, value) {
+  if (name.toLowerCase() !== 'set-cookie') return value;
+  return value.replace(/^([^=;\s]+)=([^;]*)/i, (_match, cookieName) => `${cookieName}=••••••`);
+}
+
 function responseHeaderValue(response, headerName) {
   const headers = response?.headers || {};
   const lowerHeaderName = headerName.toLowerCase();
@@ -145,7 +167,13 @@ function EmptyState({children, tone = ''}) {
 }
 
 export function ResponseViewer({response, loading = false, error = ''}) {
-  const headers = response?.headers ? Object.entries(response.headers) : [];
+  const [headerFilter, setHeaderFilter] = useState('');
+  const headers = useMemo(() => responseHeaderRows(response), [response]);
+  const filteredHeaders = useMemo(() => {
+    const query = headerFilter.trim().toLowerCase();
+    if (!query) return headers;
+    return headers.filter((header) => `${header.name} ${header.originalValue}`.toLowerCase().includes(query));
+  }, [headerFilter, headers]);
   const size = typeof response?.size === 'number' ? response.size : (response?.body ? new Blob([typeof response.body === 'string' ? response.body : JSON.stringify(response.body)]).size : 0);
   const originalSize = responseOriginalSize(response, size);
   const [activeTab, setActiveTab] = useState('Body');
@@ -156,6 +184,10 @@ export function ResponseViewer({response, loading = false, error = ''}) {
   const copyableResponseBody = isRenderableResponse(response) ? rawResponseBody : '';
   const copyableResponseBytes = copyableResponseBody ? new Blob([copyableResponseBody]).size : 0;
   const canCopyResponseBody = copyableResponseBody.length > 0 && copyableResponseBytes <= MAX_COPIED_RESPONSE_BYTES;
+
+  useEffect(() => {
+    setHeaderFilter('');
+  }, [response]);
 
   const focusTab = useCallback((tab) => {
     setActiveTab(tab);
@@ -257,7 +289,25 @@ export function ResponseViewer({response, loading = false, error = ''}) {
           {renderResponseBody()}
         </div>
         <div className="response-headers-panel" id="response-panel-headers" role="tabpanel" aria-labelledby="response-tab-headers" tabIndex={0} hidden={activeTab !== 'Headers'}>
-          <table className="headers"><tbody>{headers.length ? headers.map(([key, value]) => <tr key={key}><td>{key}</td><td className="mono">{String(value)}</td><td>Response</td></tr>) : <tr><td className="muted">No response headers yet.</td></tr>}</tbody></table>
+          <div className="response-headers-tools">
+            <label className="filter response-header-filter">
+              <span className="muted">Filter</span>
+              <input value={headerFilter} onChange={(event) => setHeaderFilter(event.target.value)} placeholder="Search headers" aria-label="Search response headers" />
+            </label>
+            <span className="muted">Showing {filteredHeaders.length} of {headers.length} headers</span>
+          </div>
+          <table className="headers response-headers-table">
+            <thead><tr><th>Name</th><th>Value</th><th>Source</th></tr></thead>
+            <tbody>{headers.length ? filteredHeaders.map((header) => (
+              <tr key={header.id}>
+                <td>{header.name}</td>
+                <td className="mono" title={header.name.toLowerCase() === 'set-cookie' ? 'Cookie value redacted in the UI' : header.originalValue}>{displayHeaderValue(header.name, header.value)}</td>
+                <td>Response</td>
+              </tr>
+            )) : <tr><td className="muted" colSpan={3}>No response headers yet.</td></tr>}
+            {headers.length > 0 && filteredHeaders.length === 0 && <tr><td className="muted" colSpan={3}>No response headers match this filter.</td></tr>}
+            </tbody>
+          </table>
         </div>
         <div className="response-empty-panel" id="response-panel-tests" role="tabpanel" aria-labelledby="response-tab-tests" tabIndex={0} hidden={activeTab !== 'Tests'}>
           <EmptyState>Response tests are planned. Add a request test runner to see assertions here.</EmptyState>

@@ -482,6 +482,60 @@ describe('ResponseViewer content-type rendering', () => {
 });
 
 
+describe('ResponseViewer response headers', () => {
+  const baseResponse = {
+    status: 200,
+    statusText: 'OK',
+    time: 12,
+    headers: {},
+    bodyType: 'text',
+    contentType: 'text/plain',
+    body: 'ok',
+    size: 2,
+    isTruncated: false,
+  };
+
+  test('shows latest response headers with duplicates, long values, count, and filtering', async () => {
+    const user = userEvent.setup();
+    render(<ResponseViewer response={{
+      ...baseResponse,
+      headerList: [
+        {name: 'Content-Type', value: 'text/plain'},
+        {name: 'Set-Cookie', value: 'session=secret-token; HttpOnly; Secure'},
+        {name: 'Set-Cookie', value: 'theme=dark; Path=/'},
+        {name: 'X-Long-Cache', value: `max-age=60, ${'stale-while-revalidate='.repeat(8)}`},
+      ],
+    }} />);
+
+    expect(screen.getByText('4 headers')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', {name: 'Headers'}));
+
+    expect(screen.getByText('Showing 4 of 4 headers')).toBeInTheDocument();
+    expect(screen.getAllByText('Set-Cookie')).toHaveLength(2);
+    expect(screen.getByText('session=••••••; HttpOnly; Secure')).toBeInTheDocument();
+    expect(screen.queryByText(/secret-token/)).not.toBeInTheDocument();
+    expect(screen.getByText(/stale-while-revalidate/)).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', {name: /search response headers/i}), 'cache');
+
+    expect(screen.getByText('Showing 1 of 4 headers')).toBeInTheDocument();
+    expect(screen.getByText('X-Long-Cache')).toBeInTheDocument();
+    expect(screen.queryByText('Content-Type')).not.toBeInTheDocument();
+  });
+
+  test('falls back to object headers for saved responses', async () => {
+    const user = userEvent.setup();
+    render(<ResponseViewer response={{...baseResponse, headers: {'content-type': 'application/json'}}} />);
+
+    expect(screen.getByText('1 headers')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', {name: 'Headers'}));
+
+    expect(screen.getByText('content-type')).toBeInTheDocument();
+    expect(screen.getByText('application/json')).toBeInTheDocument();
+  });
+});
+
+
 describe('ResponseViewer copy response body', () => {
   const baseResponse = {
     status: 200,
