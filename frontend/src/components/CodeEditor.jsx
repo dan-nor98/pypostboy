@@ -40,10 +40,15 @@ export function CodeEditor({
   readOnly = false,
   label = 'JSON body editor',
   language = 'json',
+  editorId = label,
+  onCursorChange,
+  onFocusChange,
 }) {
   const hostRef = useRef(null);
   const viewRef = useRef(null);
   const onChangeRef = useRef(onChange);
+  const onCursorChangeRef = useRef(onCursorChange);
+  const onFocusChangeRef = useRef(onFocusChange);
   const compartmentsRef = useRef(null);
   if (!compartmentsRef.current) {
     compartmentsRef.current = {
@@ -57,7 +62,20 @@ export function CodeEditor({
   const [formatError, setFormatError] = useState('');
 
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useEffect(() => { onCursorChangeRef.current = onCursorChange; }, [onCursorChange]);
+  useEffect(() => { onFocusChangeRef.current = onFocusChange; }, [onFocusChange]);
   useEffect(() => { setWrap(wordWrap); }, [wordWrap]);
+
+  const emitCursorChange = useCallback((state) => {
+    const selection = state.selection;
+    const line = state.doc.lineAt(selection.main.head);
+    onCursorChangeRef.current?.({
+      id: editorId,
+      label,
+      line: line.number,
+      column: selection.main.head - line.from + 1,
+    });
+  }, [editorId, label]);
 
   const theme = useMemo(() => EditorView.theme({
     '&': {
@@ -111,6 +129,16 @@ export function CodeEditor({
       theme,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChangeRef.current?.(update.state.doc.toString());
+        if (update.selectionSet) emitCursorChange(update.state);
+      }),
+      EditorView.domEventHandlers({
+        focus: (_event, view) => {
+          onFocusChangeRef.current?.({id: editorId, label, focused: true});
+          emitCursorChange(view.state);
+        },
+        blur: () => {
+          onFocusChangeRef.current?.({id: editorId, label, focused: false});
+        },
       }),
       compartmentsRef.current.label.of(EditorView.editorAttributes.of({'aria-label': label})),
       compartmentsRef.current.wrap.of(wrap ? EditorView.lineWrapping : []),
@@ -126,7 +154,7 @@ export function CodeEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, [language, theme]);
+  }, [emitCursorChange, editorId, label, language, theme]);
 
   useEffect(() => {
     const view = viewRef.current;

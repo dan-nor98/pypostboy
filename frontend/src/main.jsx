@@ -729,6 +729,7 @@ export function App() {
   const [collections, setCollections] = useState([]);
   const [syncStatus, setSyncStatus] = useState({status: 'synchronized', label: 'Synchronized', diagnostics: [], conflicts: [], retryable: false});
   const [runtimeStatus, setRuntimeStatus] = useState(DEFAULT_RUNTIME_STATUS);
+  const [activeEditorCursor, setActiveEditorCursor] = useState(null);
   const [collectionsLoading, setCollectionsLoading] = useState(true);
   const [collectionsError, setCollectionsError] = useState('');
   const [authMode, setAuthMode] = useState('login');
@@ -783,6 +784,15 @@ export function App() {
   useEffect(() => { localStorage.setItem(COLLECTION_WIDTH_STORAGE_KEY, String(collectionPanelWidth)); }, [collectionPanelWidth]);
   useEffect(() => { localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(inspectorWidth)); }, [inspectorWidth]);
   useEffect(() => { localStorage.setItem('pypostboy.activeEnvironment', activeEnvironmentId); }, [activeEnvironmentId]);
+
+  const updateActiveEditorCursor = useCallback((cursor) => {
+    setActiveEditorCursor(cursor);
+  }, []);
+
+  const updateActiveEditorFocus = useCallback((focusState) => {
+    if (focusState.focused) return;
+    setActiveEditorCursor((cursor) => (cursor?.id === focusState.id ? null : cursor));
+  }, []);
 
   useEffect(() => {
     if (!hasDirtyRequests) return undefined;
@@ -2035,7 +2045,15 @@ export function App() {
             >
               <div className="section-head"><span>Request Body</span><label className="body-type-selector"><span>Body type</span><select aria-label="Body type" value={editableRequest.body_raw_type || 'application/json'} onChange={updateBodyType}>{BODY_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label></div>
               {bodyValidationError ? <div className="body-validation-error" role="alert">{bodyValidationError}</div> : null}
-              <CodeEditor value={requestBody} onChange={updateBodyDraft} wordWrap label={`Request ${bodyTypeLabel(editableRequest.body_raw_type)} body editor`} />
+              <CodeEditor
+                value={requestBody}
+                onChange={updateBodyDraft}
+                wordWrap
+                label={`Request ${bodyTypeLabel(editableRequest.body_raw_type)} body editor`}
+                editorId="request-body"
+                onCursorChange={updateActiveEditorCursor}
+                onFocusChange={updateActiveEditorFocus}
+              />
             </RequestConfigPanel>
             <RequestConfigPanel
               id="request-config-panel-headers"
@@ -2079,7 +2097,15 @@ export function App() {
               inspector={(<><h3>Script API</h3><p className="hint">Use pb.setHeader, pb.removeHeader, pb.addQueryParam, pb.setUrl, pb.setMethod, or pb.setBody. Browser globals and network APIs are unavailable.</p></>)}
             >
               <div className="section-head"><span>Pre-request Script</span></div>
-              <CodeEditor value={editableRequest.pre_request_script || ''} onChange={updatePreRequestScript} wordWrap label="Pre-request script editor" />
+              <CodeEditor
+                value={editableRequest.pre_request_script || ''}
+                onChange={updatePreRequestScript}
+                wordWrap
+                label="Pre-request script editor"
+                editorId="pre-request-script"
+                onCursorChange={updateActiveEditorCursor}
+                onFocusChange={updateActiveEditorFocus}
+              />
             </RequestConfigPanel>
             {requestConfigTabs
               .filter((tab) => !['params', 'body', 'headers', 'authorization', 'scripts'].includes(tab.id))
@@ -2118,7 +2144,7 @@ export function App() {
         proxy={runtimeStatus.proxy}
         ssl={runtimeStatus.ssl}
         encoding={runtimeStatus.encoding}
-        cursorPosition={runtimeStatus.cursorPosition}
+        cursorPosition={activeEditorCursor}
         version={runtimeStatus.version}
         diagnostics={runtimeStatus.diagnostics}
         retry={runtimeStatus.retry}

@@ -22,10 +22,12 @@ function sslLabel(ssl = {}) {
   return `${verify ? '' : '⚠ '}SSL: ${ssl.label || (verify ? 'Enabled' : 'Disabled')}`;
 }
 
-function cursorLabel(cursorPosition = {}) {
+function cursorLabel(cursorPosition = null) {
+  if (!cursorPosition) return 'Ln -, Col -';
   const line = cursorPosition.line || 1;
   const column = cursorPosition.column || 1;
-  return `Ln ${line}, Col ${column}`;
+  const label = cursorPosition.label ? `${cursorPosition.label}: ` : '';
+  return `${label}Ln ${line}, Col ${column}`;
 }
 
 function versionLabel(version) {
@@ -51,7 +53,7 @@ export function StatusBar({
   proxy = {enabled: false, configured: false},
   ssl = {verify: true, label: 'Enabled'},
   encoding = 'UTF-8',
-  cursorPosition = {line: 1, column: 1},
+  cursorPosition = null,
   version = 'v0.1.0',
   diagnostics = [],
   retry = {},
