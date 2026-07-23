@@ -183,6 +183,7 @@ function renderApp(collections = testCollections, runtimeStatus = {
   ssl: {verify: true, label: 'Enabled'},
   encoding: 'UTF-8',
   version: '0.1.0',
+  versionMetadata: {version: '0.1.0', commitSha: 'testsha', buildDate: '2026-07-23T00:00:00Z', releaseChannel: 'development'},
 }) {
   apiClient.listCollections.mockResolvedValue(collections);
   apiClient.getSyncStatus.mockResolvedValue({status: 'synchronized', label: 'Synchronized', diagnostics: [], conflicts: [], retryable: false});
@@ -260,6 +261,7 @@ describe('App runtime status bar', () => {
       ssl: {verify: false, label: 'Disabled'},
       encoding: 'ISO-8859-1',
       version: '1.2.3',
+      versionMetadata: {version: '1.2.3', commitSha: 'abc1234def', buildDate: '2026-07-23T00:00:00Z', releaseChannel: 'production'},
     });
 
     const status = screen.getByLabelText(/runtime status/i);
@@ -273,6 +275,26 @@ describe('App runtime status bar', () => {
     expect(within(status).getByText('⚠ SSL: Disabled')).toBeInTheDocument();
     expect(within(status).getByText('ISO-8859-1')).toBeInTheDocument();
     expect(within(status).getByText('v1.2.3')).toBeInTheDocument();
+  });
+
+  test('renders backend-provided development build metadata instead of a hard-coded footer version', async () => {
+    renderApp(testCollections, {
+      connectionStatus: 'connected',
+      stage: 'Development',
+      stageLabel: 'Development (non-production)',
+      stageClassification: 'non-production',
+      proxy: {enabled: false, configured: false},
+      ssl: {verify: true, label: 'Enabled'},
+      encoding: 'UTF-8',
+      version: '9.8.7',
+      versionMetadata: {version: '9.8.7', commitSha: 'abcdef1234567890', buildDate: '2026-07-23T12:34:56Z', releaseChannel: 'development'},
+      diagnostics: ['Build 9.8.7 (development, abcdef1234567890, 2026-07-23T12:34:56Z)'],
+    });
+
+    const status = screen.getByLabelText(/runtime status/i);
+    await waitFor(() => expect(within(status).getByText('v9.8.7-development (abcdef1)')).toBeInTheDocument());
+    expect(within(status).queryByText('v0.1.0')).not.toBeInTheDocument();
+    expect(within(status).getByTitle(/Commit: abcdef1234567890/)).toBeInTheDocument();
   });
 
   test('shows active editor cursor metadata, switches editors, and resets on blur', async () => {

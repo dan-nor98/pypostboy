@@ -49,17 +49,37 @@ def _as_positive_int(value, default):
     return parsed if parsed > 0 else default
 
 
-def _build_version():
-    explicit = os.environ.get('POSTBOY_BUILD_VERSION') or os.environ.get('BUILD_VERSION')
-    if explicit:
-        return explicit
+def _read_build_metadata_file():
+    metadata_path = Path(__file__).resolve().parents[1] / 'build_metadata.json'
+    try:
+        return json.loads(metadata_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {}
 
+
+def _package_version():
     package_path = Path(__file__).resolve().parents[2] / 'package.json'
     try:
         package = json.loads(package_path.read_text(encoding='utf-8'))
         return package.get('version') or '0.1.0'
     except (OSError, json.JSONDecodeError):
         return '0.1.0'
+
+
+def build_version_metadata():
+    """Return build-generated release metadata with environment overrides."""
+    file_metadata = _read_build_metadata_file()
+    version = os.environ.get('POSTBOY_BUILD_VERSION') or os.environ.get('BUILD_VERSION') or file_metadata.get('version') or _package_version()
+    commit_sha = os.environ.get('POSTBOY_BUILD_COMMIT_SHA') or os.environ.get('GIT_COMMIT') or file_metadata.get('commitSha') or 'unknown'
+    build_date = os.environ.get('POSTBOY_BUILD_DATE') or os.environ.get('BUILD_DATE') or file_metadata.get('buildDate') or 'unknown'
+    release_channel = os.environ.get('POSTBOY_RELEASE_CHANNEL') or os.environ.get('RELEASE_CHANNEL') or file_metadata.get('releaseChannel') or 'development'
+
+    return {
+        'version': str(version),
+        'commitSha': str(commit_sha),
+        'buildDate': str(build_date),
+        'releaseChannel': str(release_channel).lower(),
+    }
 
 
 def normalize_connection_status(status=None, sync_status=None):
@@ -95,6 +115,8 @@ def build_runtime_status(connection_status=None, stage=None, diagnostics=None, s
     if not diagnostic_items and normalized_connection is not ConnectionStatus.CONNECTED:
         diagnostic_items = sync_status.get('diagnostics', [])
 
+    version_metadata = build_version_metadata()
+
     return {
         'connectionStatus': normalized_connection.value,
         'connectionLabel': CONNECTION_LABELS[normalized_connection],
@@ -124,7 +146,13 @@ def build_runtime_status(connection_status=None, stage=None, diagnostics=None, s
             'label': 'Enabled' if verify_ssl else 'Disabled',
         },
         'encoding': os.environ.get('POSTBOY_DEFAULT_ENCODING', 'UTF-8'),
-        'version': _build_version(),
+        'version': version_metadata['version'],
+        'versionMetadata': version_metadata,
+        'build': version_metadata,
+        'diagnosticPayload': {
+            'diagnostics': diagnostic_items,
+            'build': version_metadata,
+        },
         'server': {
             'debug': BaseConfig.DEBUG,
             'timeout': getattr(settings, 'PROXY_TIMEOUT', BaseConfig.PROXY_TIMEOUT) if settings.configured else BaseConfig.PROXY_TIMEOUT,
