@@ -160,6 +160,55 @@ def test_proxy_http_request_truncates_large_text_response(monkeypatch):
     assert result["truncatedSize"] == proxy_service.MAX_RESPONSE_BODY_BYTES
 
 
+def test_proxy_http_request_returns_binary_metadata_without_body_bytes(monkeypatch):
+    binary_body = b"\x89PNG\r\n\x1a\n" + (b"raw-bytes" * 4)
+
+    class BinaryResponse:
+        status_code = 200
+        reason = "OK"
+        headers = {"Content-Type": "application/octet-stream", "Content-Length": str(len(binary_body))}
+        encoding = None
+        content = binary_body
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", lambda **kwargs: BinaryResponse())
+
+    result = proxy_http_request({"url": "https://api.example.test/download", "method": "GET"})
+
+    assert result["headers"] == {"Content-Type": "application/octet-stream", "Content-Length": str(len(binary_body))}
+    assert result["body"] == ""
+    assert result["contentType"] == "application/octet-stream"
+    assert result["bodyType"] == "binary"
+    assert result["isBinary"] is True
+    assert result["isJsonValid"] is False
+    assert result["size"] == len(binary_body)
+    assert result["originalSize"] == len(binary_body)
+
+
+def test_proxy_http_request_truncates_large_json_as_raw_text_with_metadata(monkeypatch):
+    large_json = b'{"items":[' + (b'"payload",' * (proxy_service.MAX_RESPONSE_BODY_BYTES // 10)) + b'"tail"]}'
+
+    class LargeJsonResponse:
+        status_code = 200
+        reason = "OK"
+        headers = {"Content-Type": "application/json"}
+        encoding = "utf-8"
+        content = large_json
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", lambda **kwargs: LargeJsonResponse())
+
+    result = proxy_http_request({"url": "https://api.example.test/large", "method": "GET"})
+
+    assert result["body"] == large_json[:proxy_service.MAX_RESPONSE_BODY_BYTES].decode("utf-8", errors="replace")
+    assert result["contentType"] == "application/json"
+    assert result["bodyType"] == "json"
+    assert result["isBinary"] is False
+    assert result["isTruncated"] is True
+    assert result["isJsonValid"] is False
+    assert result["size"] == proxy_service.MAX_RESPONSE_BODY_BYTES
+    assert result["originalSize"] == len(large_json)
+    assert result["truncatedSize"] == proxy_service.MAX_RESPONSE_BODY_BYTES
+
+
 def test_proxy_http_request_does_not_forward_unsafe_transport_headers(monkeypatch):
     calls = []
 

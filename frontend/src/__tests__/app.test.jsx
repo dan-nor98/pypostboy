@@ -337,6 +337,28 @@ describe('ResponseViewer content-type rendering', () => {
   });
 
 
+  test('renders HTML containing script tags as inert source text', async () => {
+    const scriptSpy = vi.fn();
+    window.__pypostboyScriptResponseProbe = scriptSpy;
+    const body = '<main><h1>Hello</h1><script>window.__pypostboyScriptResponseProbe()</script></main>';
+
+    render(<ResponseViewer response={{
+      ...baseResponse,
+      bodyType: 'markup',
+      contentType: 'text/html; charset=utf-8',
+      body,
+      size: body.length,
+    }} />);
+
+    const editor = await screen.findByRole('textbox', {name: /response body viewer/i});
+    expect(editor).toHaveTextContent('<script>window.__pypostboyScriptResponseProbe()</script>');
+    expect(document.querySelector('.response-body script')).not.toBeInTheDocument();
+    expect(scriptSpy).not.toHaveBeenCalled();
+
+    delete window.__pypostboyScriptResponseProbe;
+  });
+
+
   test('formats raw JSON without coercing large integers, decimals, or Unicode text', async () => {
     const body = '{"large":900719925474099312345,"decimal":1234567890.1234567890123456789,"unicode":"café ☃️ こんにちは","items":[1,2]}';
     render(<ResponseViewer response={{
