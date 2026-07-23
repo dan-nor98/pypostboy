@@ -14,6 +14,27 @@ function hasJsonContentType(response) {
   return /(^|[/+])json($|[;\s])/i.test(String(contentType));
 }
 
+
+function responseHeaderValue(response, headerName) {
+  const headers = response?.headers || {};
+  const lowerHeaderName = headerName.toLowerCase();
+  const headerKey = Object.keys(headers).find((key) => key.toLowerCase() === lowerHeaderName);
+  return headerKey ? headers[headerKey] : undefined;
+}
+
+function hasEmptyResponseBody(response) {
+  if (!response) return false;
+
+  const body = response.body;
+  if (typeof body === 'string') return body.length === 0;
+  if (body !== undefined && body !== null) return false;
+  if (response.bodyType === 'empty') return true;
+  if (response.size === 0) return true;
+
+  const contentLength = responseHeaderValue(response, 'content-length');
+  return contentLength !== undefined && Number(contentLength) === 0;
+}
+
 function getResponseBodyDocument(response) {
   const body = response?.body;
   if (body === undefined || body === null) return {value: '', language: 'text'};
@@ -65,10 +86,12 @@ export function ResponseViewer({response, loading = false, error = ''}) {
 
   const renderResponseBody = () => {
     if (error) return <EmptyState tone="error">{error}</EmptyState>;
+    if (!response) return <EmptyState>No response yet.</EmptyState>;
     if (response?.isBinary) return <EmptyState>Binary response not displayed.</EmptyState>;
     if (response && !isRenderableResponse(response)) {
       return <EmptyState>Unsupported content type{response.contentType ? `: ${response.contentType}` : ''}. Response body not displayed.</EmptyState>;
     }
+    if (hasEmptyResponseBody(response)) return <EmptyState>Response body is empty.</EmptyState>;
     return (
       <CodeEditor
         value={responseBodyDocument.value}
