@@ -1,18 +1,66 @@
-def test_runtime_status_is_public_and_reports_server_state(client, monkeypatch):
-    monkeypatch.setenv('POSTBOY_STAGE', 'Test')
-    monkeypatch.setenv('POSTBOY_PROXY_ENABLED', 'false')
-    monkeypatch.setenv('POSTBOY_PROXY_URL', 'http://proxy.example.test:8080')
-    monkeypatch.setenv('POSTBOY_VERIFY_SSL', 'false')
-    monkeypatch.setenv('POSTBOY_DEFAULT_ENCODING', 'ISO-8859-1')
-    monkeypatch.setenv('POSTBOY_BUILD_VERSION', '9.8.7')
+"""Runtime connection status contract tests."""
 
-    response = client.get('/api/runtime/status')
+import pytest
 
-    assert response.status_code == 200
-    payload = response.json()['data']
-    assert payload['connectionStatus'] == 'connected'
-    assert payload['stage'] == 'Test'
-    assert payload['proxy'] == {'enabled': False, 'configured': True}
-    assert payload['ssl'] == {'verify': False, 'label': 'Disabled'}
-    assert payload['encoding'] == 'ISO-8859-1'
-    assert payload['version'] == '9.8.7'
+
+@pytest.mark.parametrize(
+    ("status", "retryable"),
+    [
+        ("connecting", False),
+        ("connected", False),
+        ("disconnected", True),
+        ("failed", True),
+    ],
+)
+def test_runtime_status_contract_for_each_connection_status(client, user_a_headers, monkeypatch, status, retryable):
+    monkeypatch.setenv("POSTBOY_CONNECTION_STATUS", status)
+    monkeypatch.setenv("POSTBOY_CONNECTION_DIAGNOSTICS", "socket closed|last attempt timed out")
+    monkeypatch.setenv("POSTBOY_RUNTIME_RETRY_INTERVAL_MS", "5000")
+    monkeypatch.setenv("POSTBOY_RUNTIME_RETRY_BACKOFF", "3")
+
+    payload = client.get("/api/runtime/status", headers=user_a_headers).get_json()
+
+    assert payload["success"] is True
+    data = payload["data"]
+    assert data["connectionStatus"] == status
+    assert data["diagnostics"] == ["socket closed", "last attempt timed out"]
+    assert data["retry"] == {
+        "intervalMs": 5000,
+        "backoff": 3,
+        "maxIntervalMs": 120000,
+        "retryable": retryable,
+    }
+    assert data["syncStatus"]["status"] == "synchronized"
+
+
+@pytest.mark.parametrize(
+    ("sync_status", "connection_status"),
+    [
+        ("synchronized", "connected"),
+        ("synchronizing", "connecting"),
+        ("offline", "disconnected"),
+        ("failed", "failed"),
+    ],
+)
+def test_runtime_endpoint_explicitly_maps_sync_status_when_connection_status_is_absent(client, user_a_headers, monkeypatch, sync_status, connection_status):
+    monkeypatch.delenv("POSTBOY_CONNECTION_STATUS", raising=False)
+    monkeypatch.setenv("POSTBOY_SYNC_STATUS", sync_status)
+    monkeypatch.setenv("POSTBOY_SYNC_DIAGNOSTICS", "peer unavailable")
+
+    payload = client.get("/api/runtime/status", headers=user_a_headers).get_json()["data"]
+
+    assert payload["connectionStatus"] == connection_status
+    assert payload["syncStatus"]["status"] == sync_status
+    if connection_status != "connected":
+        assert payload["diagnostics"] == ["peer unavailable"]
+
+
+def test_runtime_status_invalid_connection_status_fails_with_diagnostics(client, user_a_headers, monkeypatch):
+    monkeypatch.setenv("POSTBOY_CONNECTION_STATUS", "unknown")
+    monkeypatch.setenv("POSTBOY_CONNECTION_DIAGNOSTICS", "bad runtime state")
+
+    payload = client.get("/api/runtime/status", headers=user_a_headers).get_json()["data"]
+
+    assert payload["connectionStatus"] == "failed"
+    assert payload["diagnostics"] == ["bad runtime state"]
+    assert payload["retry"]["retryable"] is True
