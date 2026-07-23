@@ -2817,6 +2817,101 @@ describe('App shell', () => {
   });
 
 
+
+  test('keeps a pending response associated with its original request tab after switching tabs', async () => {
+    const user = userEvent.setup();
+    let resolveHealth;
+    apiClient.proxyRequest.mockImplementationOnce(() => new Promise((resolve) => { resolveHealth = resolve; }));
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /send/i}));
+    expect(screen.getByText(/sending request/i)).toBeInTheDocument();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+    await waitFor(() => expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true'));
+    expect(screen.queryByText(/sending request/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/send a request to view the response/i)).toBeInTheDocument();
+
+    resolveHealth({
+      status: 202,
+      statusText: 'Accepted',
+      time: 55,
+      headers: {'content-type': 'application/json'},
+      body: {tab: 'health'},
+    });
+
+    await waitFor(() => expect(apiClient.createRequestInstance).toHaveBeenCalledWith('request-1', expect.objectContaining({response_status: 202})));
+    expect(screen.queryByText('202 Accepted')).not.toBeInTheDocument();
+    expect(screen.queryByText(/"tab": "health"/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', {name: /^health check$/i}));
+    expect(await screen.findByText('202 Accepted')).toBeInTheDocument();
+    expect(screen.getByText(/"tab": "health"/i)).toBeInTheDocument();
+  });
+
+  test('does not leak loading or error state across request tabs', async () => {
+    const user = userEvent.setup();
+    let rejectHealth;
+    apiClient.proxyRequest.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectHealth = reject; }));
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /send/i}));
+    expect(screen.getByText(/sending request/i)).toBeInTheDocument();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+    await waitFor(() => expect(screen.getByRole('tab', {name: /status check/i})).toHaveAttribute('aria-selected', 'true'));
+    expect(screen.queryByText(/sending request/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gateway timeout/i)).not.toBeInTheDocument();
+
+    rejectHealth(new Error('Gateway timeout'));
+    await waitFor(() => expect(apiClient.createRequestInstance).toHaveBeenCalledWith('request-1', expect.objectContaining({response_status_text: 'Error'})));
+    expect(screen.queryByText(/gateway timeout/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/proxy error/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', {name: /^health check$/i}));
+    expect(await screen.findByText(/gateway timeout/i)).toBeInTheDocument();
+    expect(screen.getByText(/proxy error/i)).toBeInTheDocument();
+  });
+
+  test('saves a snapshot with the active request tab scoped latest response', async () => {
+    const user = userEvent.setup();
+    apiClient.proxyRequest
+      .mockResolvedValueOnce({
+        status: 201,
+        statusText: 'Created',
+        time: 61,
+        headers: {'content-type': 'application/json'},
+        body: {tab: 'health'},
+      })
+      .mockResolvedValueOnce({
+        status: 204,
+        statusText: 'No Content',
+        time: 12,
+        headers: {'x-status': 'empty'},
+        body: '',
+      });
+    renderApp();
+
+    await user.click(await screen.findByRole('button', {name: /send/i}));
+    expect(await screen.findByText('201 Created')).toBeInTheDocument();
+
+    await user.click(await screen.findByRole('treeitem', {name: /get status check/i}));
+    await user.click(screen.getByRole('button', {name: /send/i}));
+    expect(await screen.findByText('204 No Content')).toBeInTheDocument();
+    apiClient.createRequestInstance.mockClear();
+
+    await user.click(screen.getByRole('button', {name: /save snapshot/i}));
+
+    await waitFor(() => expect(apiClient.createRequestInstance).toHaveBeenCalledTimes(1));
+    expect(apiClient.createRequestInstance).toHaveBeenCalledWith('request-3', expect.objectContaining({
+      response_status: 204,
+      response_status_text: 'No Content',
+      response_headers: {'x-status': 'empty'},
+      response_body: '',
+      response_time_ms: 12,
+    }));
+  });
+
   test('resolves environment variables before sending a request', async () => {
     const user = userEvent.setup();
     renderApp();
