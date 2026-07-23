@@ -3,6 +3,11 @@ import {AlertTriangle, CheckCircle2, Copy} from 'lucide-react';
 import {CodeEditor} from './CodeEditor';
 import {IconButton} from './IconButton';
 
+// Keep inline rendering below CodeMirror stress thresholds. Larger proxy bodies
+// receive a lightweight preview plus metadata so the UI remains responsive.
+export const MAX_INLINE_RENDERED_RESPONSE_BYTES = 64_000;
+export const MAX_COPIED_RESPONSE_BYTES = 1_000_000;
+
 function isRenderableResponse(response) {
   if (!response) return true;
   if (response.isBinary) return false;
@@ -13,8 +18,6 @@ function hasJsonContentType(response) {
   const contentType = response?.contentType || response?.headers?.['content-type'] || response?.headers?.['Content-Type'] || '';
   return /(^|[/+])json($|[;\s])/i.test(String(contentType));
 }
-
-
 
 function formatJsonPreservingLexemes(source) {
   const text = String(source);
@@ -89,6 +92,23 @@ function responseHeaderValue(response, headerName) {
   return headerKey ? headers[headerKey] : undefined;
 }
 
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return 'unknown size';
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = -1;
+  do {
+    value /= 1024;
+    unitIndex += 1;
+  } while (value >= 1024 && unitIndex < units.length - 1);
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function responseOriginalSize(response, fallbackSize) {
+  return typeof response?.originalSize === 'number' ? response.originalSize : fallbackSize;
+}
+
 function hasEmptyResponseBody(response) {
   if (!response) return false;
 
@@ -127,13 +147,15 @@ function EmptyState({children, tone = ''}) {
 export function ResponseViewer({response, loading = false, error = ''}) {
   const headers = response?.headers ? Object.entries(response.headers) : [];
   const size = typeof response?.size === 'number' ? response.size : (response?.body ? new Blob([typeof response.body === 'string' ? response.body : JSON.stringify(response.body)]).size : 0);
+  const originalSize = responseOriginalSize(response, size);
   const [activeTab, setActiveTab] = useState('Body');
   const [copyStatus, setCopyStatus] = useState('');
   const tabRefs = useRef({});
   const responseBodyDocument = useMemo(() => getResponseBodyDocument(response), [response]);
   const rawResponseBody = typeof response?.body === 'string' ? response.body : responseBodyDocument.value;
   const copyableResponseBody = isRenderableResponse(response) ? rawResponseBody : '';
-  const canCopyResponseBody = copyableResponseBody.length > 0;
+  const copyableResponseBytes = copyableResponseBody ? new Blob([copyableResponseBody]).size : 0;
+  const canCopyResponseBody = copyableResponseBody.length > 0 && copyableResponseBytes <= MAX_COPIED_RESPONSE_BYTES;
 
   const focusTab = useCallback((tab) => {
     setActiveTab(tab);
@@ -162,6 +184,19 @@ export function ResponseViewer({response, loading = false, error = ''}) {
       return <EmptyState>Unsupported content type{response.contentType ? `: ${response.contentType}` : ''}. Response body not displayed.</EmptyState>;
     }
     if (hasEmptyResponseBody(response)) return <EmptyState>Response body is empty.</EmptyState>;
+    const displayedSize = new Blob([responseBodyDocument.value]).size;
+    if (displayedSize > MAX_INLINE_RENDERED_RESPONSE_BYTES || response?.isTruncated) {
+      const preview = responseBodyDocument.value.slice(0, MAX_INLINE_RENDERED_RESPONSE_BYTES);
+      return (
+        <div className="large-response-fallback">
+          <EmptyState tone="warning">
+            Response body preview truncated for responsiveness. Showing up to {formatBytes(MAX_INLINE_RENDERED_RESPONSE_BYTES)} of {formatBytes(originalSize)}.
+            {response?.isTruncated ? ' The backend also truncated the copied/displayed payload.' : ''}
+          </EmptyState>
+          {preview && <pre className="response-preview" aria-label="Truncated response body preview">{preview}</pre>}
+        </div>
+      );
+    }
     return (
       <CodeEditor
         value={responseBodyDocument.value}
@@ -190,7 +225,7 @@ export function ResponseViewer({response, loading = false, error = ''}) {
         {error && <strong className="status-error"><AlertTriangle size={14} /> Proxy error</strong>}
         {!loading && !error && response && <strong className="status-ok"><CheckCircle2 size={14} /> {response.status} {response.statusText}</strong>}
         {!loading && !error && !response && <span className="muted">Send a request to view the response.</span>}
-        {response && <><span>{response.time} ms</span><span>{size} B</span><span>{headers.length} headers</span></>}
+        {response && <><span>{response.time} ms</span><span>{formatBytes(originalSize)}</span>{response.isTruncated && <span>truncated</span>}<span>{headers.length} headers</span></>}
       </div>
       <div className="panel-tabs" role="tablist" aria-label="Response tabs" id="response-tabs-label" onKeyDown={handleResponseTabsKeyDown}>
         {responseTabs.map((tab) => {
