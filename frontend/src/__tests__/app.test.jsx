@@ -312,6 +312,92 @@ describe('ResponseViewer content-type rendering', () => {
 });
 
 
+describe('ResponseViewer copy response body', () => {
+  const baseResponse = {
+    status: 200,
+    statusText: 'OK',
+    time: 12,
+    headers: {},
+    size: 0,
+    isTruncated: false,
+  };
+
+  beforeEach(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {writeText: vi.fn().mockResolvedValue(undefined)},
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('copies the displayed response body after a deliberate user action', async () => {
+    const user = userEvent.setup();
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain', body: 'hello world', size: 11}} />);
+
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', {name: /copy response body/i}));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('hello world');
+    expect(await screen.findByRole('status')).toHaveTextContent('Response body copied to clipboard.');
+  });
+
+  test('shows a clear failure message when clipboard writing fails', async () => {
+    const user = userEvent.setup();
+    navigator.clipboard.writeText.mockRejectedValueOnce(new Error('Clipboard denied'));
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain', body: 'copy me', size: 7}} />);
+
+    await user.click(screen.getByRole('button', {name: /copy response body/i}));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('copy me');
+    expect(await screen.findByRole('status')).toHaveTextContent('Unable to copy response body to clipboard.');
+  });
+
+  test('preserves Unicode response text when copying', async () => {
+    const user = userEvent.setup();
+    const body = 'snowman ☃️ — café — こんにちは — emoji 🚀';
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'text', contentType: 'text/plain; charset=utf-8', body, size: body.length}} />);
+
+    await user.click(screen.getByRole('button', {name: /copy response body/i}));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(body);
+  });
+
+  test('copies the same formatted JSON shown in the response viewer without mutating the response', async () => {
+    const user = userEvent.setup();
+    const response = {...baseResponse, bodyType: 'json', contentType: 'application/json', body: '{"ok":true,"items":[1,2]}', size: 27};
+    render(<ResponseViewer response={response} />);
+
+    await user.click(screen.getByRole('button', {name: /copy response body/i}));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`{
+  "ok": true,
+  "items": [
+    1,
+    2
+  ]
+}`);
+    expect(response.body).toBe('{"ok":true,"items":[1,2]}');
+  });
+
+  test('disables copying when there is no response body to copy', async () => {
+    const user = userEvent.setup();
+    render(<ResponseViewer response={{...baseResponse, bodyType: 'empty', contentType: 'application/json', body: '', size: 0}} />);
+
+    const copyButton = screen.getByRole('button', {name: /copy response body/i});
+    expect(copyButton).toBeDisabled();
+
+    await user.click(copyButton);
+
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+  });
+});
+
+
 describe('CodeEditor', () => {
   test('preserves focus and content when word wrap is toggled externally', async () => {
     const user = userEvent.setup();

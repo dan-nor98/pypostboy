@@ -1,4 +1,4 @@
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {AlertTriangle, CheckCircle2, Copy} from 'lucide-react';
 import {CodeEditor} from './CodeEditor';
 import {IconButton} from './IconButton';
@@ -38,7 +38,11 @@ export function ResponseViewer({response, loading = false, error = ''}) {
   const headers = response?.headers ? Object.entries(response.headers) : [];
   const size = typeof response?.size === 'number' ? response.size : (response?.body ? new Blob([typeof response.body === 'string' ? response.body : JSON.stringify(response.body)]).size : 0);
   const [activeTab, setActiveTab] = useState('Body');
+  const [copyStatus, setCopyStatus] = useState('');
   const tabRefs = useRef({});
+  const responseBodyDocument = useMemo(() => getResponseBodyDocument(response), [response]);
+  const copyableResponseBody = isRenderableResponse(response) ? responseBodyDocument.value : '';
+  const canCopyResponseBody = copyableResponseBody.length > 0;
 
   const focusTab = useCallback((tab) => {
     setActiveTab(tab);
@@ -65,16 +69,26 @@ export function ResponseViewer({response, loading = false, error = ''}) {
     if (response && !isRenderableResponse(response)) {
       return <EmptyState>Unsupported content type{response.contentType ? `: ${response.contentType}` : ''}. Response body not displayed.</EmptyState>;
     }
-    const {value, language} = getResponseBodyDocument(response);
     return (
       <CodeEditor
-        value={value}
+        value={responseBodyDocument.value}
         readOnly
-        language={language}
+        language={responseBodyDocument.language}
         label="Response body viewer"
       />
     );
   };
+
+  const handleCopyResponseBody = useCallback(async () => {
+    if (!canCopyResponseBody) return;
+
+    try {
+      await navigator.clipboard.writeText(copyableResponseBody);
+      setCopyStatus('Response body copied to clipboard.');
+    } catch (_error) {
+      setCopyStatus('Unable to copy response body to clipboard.');
+    }
+  }, [canCopyResponseBody, copyableResponseBody]);
 
   return (
     <section className="response" aria-labelledby="response-tabs-label">
@@ -107,8 +121,9 @@ export function ResponseViewer({response, loading = false, error = ''}) {
           );
         })}
         <span className="spacer" />
-        <IconButton label="Copy response body"><Copy size={14} /></IconButton>
+        <IconButton label="Copy response body" onClick={handleCopyResponseBody} disabled={!canCopyResponseBody}><Copy size={14} /></IconButton>
       </div>
+      {copyStatus && <div className={`toast${copyStatus.startsWith('Unable') ? ' error' : ''}`} role="status">{copyStatus}</div>}
       <div className="response-panels">
         <div className="response-body" id="response-panel-body" role="tabpanel" aria-labelledby="response-tab-body" tabIndex={0} hidden={activeTab !== 'Body'}>
           {renderResponseBody()}
