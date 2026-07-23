@@ -20,6 +20,7 @@ PUBLIC_API_PATHS = {
     '/api/auth/recover/verify',
     '/api/auth/recover/reset',
     '/api/proxy',
+    '/api/runtime/status',
 }
 
 

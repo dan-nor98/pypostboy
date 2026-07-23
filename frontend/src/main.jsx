@@ -40,6 +40,17 @@ const DEFAULT_RESPONSE_PANE_RATIO = 40;
 const MIN_RESPONSE_PANE_RATIO = 25;
 const MAX_RESPONSE_PANE_RATIO = 75;
 const PANEL_SPLIT_KEYBOARD_STEP = 5;
+const RUNTIME_STATUS_REFRESH_MS = 30_000;
+
+const DEFAULT_RUNTIME_STATUS = {
+  connectionStatus: 'connecting',
+  stage: 'Loading',
+  proxy: {enabled: false, configured: false},
+  ssl: {verify: true, label: 'Enabled'},
+  encoding: 'UTF-8',
+  version: 'v0.1.0',
+};
+
 const BODY_TYPES = [
   {value: 'application/json', label: 'JSON'},
   {value: 'text/plain', label: 'Raw'},
@@ -713,6 +724,7 @@ export function App() {
   const [sending, setSending] = useState(false);
   const [collections, setCollections] = useState([]);
   const [syncStatus, setSyncStatus] = useState({status: 'synchronized', label: 'Synchronized', diagnostics: [], conflicts: [], retryable: false});
+  const [runtimeStatus, setRuntimeStatus] = useState(DEFAULT_RUNTIME_STATUS);
   const [collectionsLoading, setCollectionsLoading] = useState(true);
   const [collectionsError, setCollectionsError] = useState('');
   const [authMode, setAuthMode] = useState('login');
@@ -1120,6 +1132,29 @@ export function App() {
 
   const toggleTheme = useCallback(() => {
     setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRuntimeStatus() {
+      setRuntimeStatus((current) => ({...current, connectionStatus: current.connectionStatus === 'connected' ? 'connected' : 'connecting'}));
+      try {
+        const status = await apiClient.getRuntimeStatus?.();
+        if (!cancelled) setRuntimeStatus({...DEFAULT_RUNTIME_STATUS, ...status, connectionStatus: status?.connectionStatus || 'connected'});
+      } catch (error) {
+        if (!cancelled) {
+          setRuntimeStatus((current) => ({
+            ...current,
+            connectionStatus: current.connectionStatus === 'connecting' ? 'failed' : 'disconnected',
+            error: error.message,
+          }));
+        }
+      }
+    }
+
+    loadRuntimeStatus();
+    const intervalId = window.setInterval(loadRuntimeStatus, RUNTIME_STATUS_REFRESH_MS);
+    return () => { cancelled = true; window.clearInterval(intervalId); };
   }, []);
 
   useEffect(() => {
@@ -2047,7 +2082,15 @@ export function App() {
         </section>
       </main>
 
-      <StatusBar />
+      <StatusBar
+        connectionStatus={runtimeStatus.connectionStatus}
+        stage={runtimeStatus.stage}
+        proxy={runtimeStatus.proxy}
+        ssl={runtimeStatus.ssl}
+        encoding={runtimeStatus.encoding}
+        cursorPosition={runtimeStatus.cursorPosition}
+        version={runtimeStatus.version}
+      />
       {palette && <CommandPalette onClose={closePalette} onImportCurl={() => { closePalette(); setImportCurlOpen(true); }} onImportPostman={() => { closePalette(); setImportPostmanOpen(true); }} />}
       {pendingDirtyCloseRequestId && (
         <div className="modal-backdrop" onClick={cancelDirtyClose}>
