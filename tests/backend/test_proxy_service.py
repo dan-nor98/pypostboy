@@ -209,6 +209,39 @@ def test_proxy_http_request_truncates_large_json_as_raw_text_with_metadata(monke
     assert result["truncatedSize"] == proxy_service.MAX_RESPONSE_BODY_BYTES
 
 
+def test_proxy_http_request_preserves_duplicate_and_multiline_response_headers(monkeypatch):
+    from urllib3._collections import HTTPHeaderDict
+
+    class RawHeadersResponse:
+        status_code = 200
+        reason = "OK"
+        headers = {"Content-Type": "text/plain", "Set-Cookie": "session=abc"}
+        encoding = "utf-8"
+        content = b"ok"
+
+        class Raw:
+            headers = HTTPHeaderDict([
+                ("Content-Type", "text/plain"),
+                ("Set-Cookie", "session=abc; HttpOnly"),
+                ("Set-Cookie", "theme=dark; Path=/"),
+                ("X-Multiline", "first\r\n second"),
+            ])
+
+        raw = Raw()
+
+    monkeypatch.setattr(proxy_service.http_requests, "request", lambda **kwargs: RawHeadersResponse())
+
+    result = proxy_http_request({"url": "https://api.example.test", "method": "GET"})
+
+    assert result["headers"] == {"Content-Type": "text/plain", "Set-Cookie": "session=abc"}
+    assert result["headerList"] == [
+        {"name": "Content-Type", "value": "text/plain"},
+        {"name": "Set-Cookie", "value": "session=abc; HttpOnly"},
+        {"name": "Set-Cookie", "value": "theme=dark; Path=/"},
+        {"name": "X-Multiline", "value": "first second"},
+    ]
+
+
 def test_proxy_http_request_does_not_forward_unsafe_transport_headers(monkeypatch):
     calls = []
 

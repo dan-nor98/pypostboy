@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
@@ -305,6 +306,7 @@ def proxy_http_request(body):
         'status': response.status_code,
         'statusText': response.reason,
         'headers': dict(response.headers),
+        'headerList': _serialize_response_headers(response),
         'body': body_payload['body'],
         'contentType': body_payload['contentType'],
         'bodyType': body_payload['bodyType'],
@@ -316,6 +318,31 @@ def proxy_http_request(body):
         'truncatedSize': body_payload['truncatedSize'],
         'time': int(elapsed)
     }
+
+
+def _serialize_response_headers(response):
+    """Return response headers as ordered rows while preserving duplicates."""
+    raw_headers = getattr(getattr(response, 'raw', None), 'headers', None)
+    rows = []
+
+    if raw_headers is not None:
+        for name in raw_headers.keys():
+            values = raw_headers.getlist(name) if hasattr(raw_headers, 'getlist') else [raw_headers.get(name)]
+            for value in values:
+                rows.append({'name': str(name), 'value': _normalize_header_value(value)})
+
+    if not rows:
+        rows = [
+            {'name': str(name), 'value': _normalize_header_value(value)}
+            for name, value in (getattr(response, 'headers', {}) or {}).items()
+        ]
+
+    return rows
+
+
+def _normalize_header_value(value):
+    """Unfold multiline header values and keep them safe for single-row display."""
+    return re.sub(r'\r?\n[ \t]*', ' ', str(value or ''))
 
 
 def _serialize_response_body(response):
