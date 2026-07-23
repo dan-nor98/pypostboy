@@ -275,6 +275,25 @@ describe('App runtime status bar', () => {
     expect(within(status).getByText('v1.2.3')).toBeInTheDocument();
   });
 
+  test('shows active editor cursor metadata, switches editors, and resets on blur', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole('tab', {name: 'Body'}));
+    const status = screen.getByLabelText(/runtime status/i);
+    expect(within(status).getByText('Ln -, Col -')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('textbox', {name: /request json body editor/i}));
+    expect(within(status).getByText('Request JSON body editor: Ln 1, Col 1')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', {name: 'Scripts'}));
+    await user.click(screen.getByRole('textbox', {name: /pre-request script editor/i}));
+    expect(within(status).getByText('Pre-request script editor: Ln 1, Col 1')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('textbox', {name: /request url/i}));
+    expect(within(status).getByText('Ln -, Col -')).toBeInTheDocument();
+  });
+
   test('renders footer stage from backend response instead of stored or editable environments', async () => {
     localStorage.setItem('pypostboy.environments', JSON.stringify([
       {id: 'prod-env', name: 'Local Production Environment', variables: [{key: 'stage', value: 'Production'}]},
@@ -716,6 +735,35 @@ describe('ResponseViewer copy response body', () => {
 
 
 describe('CodeEditor', () => {
+  test('reports one-based cursor positions and focus changes', async () => {
+    const user = userEvent.setup();
+    const onCursorChange = vi.fn();
+    const onFocusChange = vi.fn();
+    render(
+      <CodeEditor
+        value={'first\nsecond'}
+        onChange={vi.fn()}
+        label="Request JSON body editor"
+        editorId="body-editor"
+        onCursorChange={onCursorChange}
+        onFocusChange={onFocusChange}
+      />,
+    );
+
+    const editor = screen.getByRole('textbox', {name: /request json body editor/i});
+    await user.click(editor);
+
+    expect(onFocusChange).toHaveBeenCalledWith({id: 'body-editor', label: 'Request JSON body editor', focused: true});
+    expect(onCursorChange).toHaveBeenLastCalledWith({id: 'body-editor', label: 'Request JSON body editor', line: 1, column: 1});
+
+    await user.keyboard('{ArrowDown}{End}');
+
+    await waitFor(() => expect(onCursorChange).toHaveBeenLastCalledWith({id: 'body-editor', label: 'Request JSON body editor', line: 2, column: 7}));
+
+    await user.tab();
+    expect(onFocusChange).toHaveBeenLastCalledWith({id: 'body-editor', label: 'Request JSON body editor', focused: false});
+  });
+
   test('preserves focus and content when word wrap is toggled externally', async () => {
     const user = userEvent.setup();
     const {rerender} = render(
