@@ -23,4 +23,5 @@ urlpatterns = [
     path('api/import', include('pypostboy.apps.imports.urls')),
     path('api/proxy', include('pypostboy.apps.proxy.urls')),
     path('api/sync/', include('pypostboy.apps.sync.urls')),
+    path('api/runtime/', include('pypostboy.apps.runtime.urls')),
 ]

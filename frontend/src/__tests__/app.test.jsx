@@ -14,6 +14,7 @@ vi.mock('../api/client', () => ({
   apiClient: {
     listCollections: vi.fn(),
     getSyncStatus: vi.fn(),
+    getRuntimeStatus: vi.fn(),
     retrySync: vi.fn(),
     getRequest: vi.fn(),
     proxyRequest: vi.fn(),
@@ -175,9 +176,17 @@ function flattenTestRequests(collections) {
   ]);
 }
 
-function renderApp(collections = testCollections) {
+function renderApp(collections = testCollections, runtimeStatus = {
+  connectionStatus: 'connected',
+  stage: 'Development',
+  proxy: {enabled: false, configured: false},
+  ssl: {verify: true, label: 'Enabled'},
+  encoding: 'UTF-8',
+  version: '0.1.0',
+}) {
   apiClient.listCollections.mockResolvedValue(collections);
   apiClient.getSyncStatus.mockResolvedValue({status: 'synchronized', label: 'Synchronized', diagnostics: [], conflicts: [], retryable: false});
+  if (runtimeStatus !== undefined) apiClient.getRuntimeStatus.mockResolvedValue(runtimeStatus);
   apiClient.retrySync.mockResolvedValue({status: 'synchronizing', label: 'Synchronizing', diagnostics: ['Retry requested by client'], conflicts: [], retryable: false});
   apiClient.getRequest.mockImplementation((id) => Promise.resolve(flattenTestRequests(collections).find((request) => request.id === id)));
   apiClient.updateRequest.mockImplementation((id, data) => Promise.resolve({...data, id}));
@@ -233,6 +242,58 @@ function renderApp(collections = testCollections) {
 
   return render(<App />);
 }
+
+
+describe('App runtime status bar', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('renders loading status then server-provided runtime status', async () => {
+    renderApp(testCollections, {
+      connectionStatus: 'connected',
+      stage: 'Production',
+      proxy: {enabled: true, configured: true},
+      ssl: {verify: false, label: 'Disabled'},
+      encoding: 'ISO-8859-1',
+      version: '1.2.3',
+    });
+
+    const status = screen.getByLabelText(/runtime status/i);
+    expect(within(status).getByText('Connecting…')).toBeInTheDocument();
+
+    await waitFor(() => expect(within(status).getByText('Connected')).toBeInTheDocument());
+    expect(within(status).getByText('Production')).toBeInTheDocument();
+    expect(within(status).getByText('Proxy: On')).toBeInTheDocument();
+    expect(within(status).getByText('⚠ SSL: Disabled')).toBeInTheDocument();
+    expect(within(status).getByText('ISO-8859-1')).toBeInTheDocument();
+    expect(within(status).getByText('v1.2.3')).toBeInTheDocument();
+  });
+
+  test('updates runtime status on the refresh cadence and shows disconnected after a failed refresh', async () => {
+    vi.useFakeTimers();
+    apiClient.getRuntimeStatus
+      .mockResolvedValueOnce({
+        connectionStatus: 'connected',
+        stage: 'Development',
+        proxy: {enabled: false, configured: true},
+        ssl: {verify: true, label: 'Enabled'},
+        encoding: 'UTF-8',
+        version: '0.1.0',
+      })
+      .mockRejectedValueOnce(new Error('offline'));
+
+    renderApp(testCollections, undefined);
+    const status = screen.getByLabelText(/runtime status/i);
+
+    await waitFor(() => expect(within(status).getByText('Connected')).toBeInTheDocument());
+    expect(within(status).getByText('Proxy: Configured')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    await waitFor(() => expect(within(status).getByText('Disconnected')).toBeInTheDocument());
+  });
+});
 
 
 describe('ResponseViewer content-type rendering', () => {
