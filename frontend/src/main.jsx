@@ -726,7 +726,7 @@ export function App() {
   const [importCurlOpen, setImportCurlOpen] = useState(false);
   const [importPostmanOpen, setImportPostmanOpen] = useState(false);
   const [theme, setTheme] = useState('dark');
-  const [sending, setSending] = useState(false);
+  const [sendingByRequestId, setSendingByRequestId] = useState({});
   const [collections, setCollections] = useState([]);
   const [syncStatus, setSyncStatus] = useState({status: 'synchronized', label: 'Synchronized', diagnostics: [], conflicts: [], retryable: false});
   const [runtimeStatus, setRuntimeStatus] = useState(DEFAULT_RUNTIME_STATUS);
@@ -738,8 +738,8 @@ export function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeRequestId, setActiveRequestId] = useState(null);
   const [openRequestIds, setOpenRequestIds] = useState([]);
-  const [proxyResult, setProxyResult] = useState(null);
-  const [proxyError, setProxyError] = useState('');
+  const [proxyResultsByRequestId, setProxyResultsByRequestId] = useState({});
+  const [proxyErrorsByRequestId, setProxyErrorsByRequestId] = useState({});
   const [draftBodies, setDraftBodies] = useState({});
   const [requestDrafts, setRequestDrafts] = useState({});
   const [requestDetails, setRequestDetails] = useState({});
@@ -764,6 +764,7 @@ export function App() {
   const mainPanelRef = useRef(null);
   const collectionResizeRef = useRef({startX: 0, startWidth: DEFAULT_COLLECTION_PANEL_WIDTH});
   const inspectorResizeRef = useRef({startX: 0, startWidth: DEFAULT_INSPECTOR_PANE_WIDTH});
+  const proxyExecutionIdsRef = useRef({});
   const configTabRefs = useRef({});
   const paletteTriggerRef = useRef(null);
   const activeEnvironment = environments.find((environment) => environment.id === activeEnvironmentId) || environments[0] || defaultEnvironments[0];
@@ -778,6 +779,9 @@ export function App() {
     );
   }, [collections, draftBodies, requestDrafts]);
   const dirtyRequestIds = useMemo(() => openRequestIds.filter(isRequestDirty), [isRequestDirty, openRequestIds]);
+  const activeProxyResult = proxyResultsByRequestId[activeRequestId] || null;
+  const activeProxyError = proxyErrorsByRequestId[activeRequestId] || '';
+  const activeSending = Boolean(sendingByRequestId[activeRequestId]);
   const hasDirtyRequests = dirtyRequestIds.length > 0;
 
   useEffect(() => { localStorage.setItem('pypostboy.environments', JSON.stringify(environments)); }, [environments]);
@@ -1457,19 +1461,24 @@ export function App() {
 
   const sendRequest = useCallback(async () => {
     if (!editableRequest.url) {
-      setProxyError('Select a request with a URL before sending.');
+      if (activeRequest.id) setProxyErrorsByRequestId((current) => ({...current, [activeRequest.id]: 'Select a request with a URL before sending.'}));
       return;
     }
 
     if (bodyValidationError) {
-      setProxyError(bodyValidationError);
+      if (activeRequest.id) setProxyErrorsByRequestId((current) => ({...current, [activeRequest.id]: bodyValidationError}));
       selectConfigTab('body');
       return;
     }
 
-    setSending(true);
-    setProxyError('');
-    setProxyResult(null);
+    const requestId = activeRequest.id;
+    const executionId = `${requestId}-${Date.now()}-${Math.random()}`;
+    proxyExecutionIdsRef.current[requestId] = executionId;
+    const isCurrentExecution = () => proxyExecutionIdsRef.current[requestId] === executionId;
+
+    setSendingByRequestId((current) => ({...current, [requestId]: true}));
+    setProxyErrorsByRequestId((current) => ({...current, [requestId]: ''}));
+    setProxyResultsByRequestId((current) => ({...current, [requestId]: null}));
     try {
       const resolvedRequest = resolveRequestVariables({
         url: editableRequest.url,
@@ -1479,7 +1488,7 @@ export function App() {
       if (resolvedRequest.unresolved.length) {
         const message = `Unresolved environment variables: ${resolvedRequest.unresolved.join(', ')}`;
         setEnvironmentWarnings(resolvedRequest.unresolved);
-        setProxyError(message);
+        if (isCurrentExecution()) setProxyErrorsByRequestId((current) => ({...current, [requestId]: message}));
         return;
       }
       setEnvironmentWarnings([]);
@@ -1496,20 +1505,20 @@ export function App() {
       let result;
       try {
         result = await apiClient.proxyRequest(outboundRequest);
-        setProxyResult(result);
+        if (isCurrentExecution()) setProxyResultsByRequestId((current) => ({...current, [requestId]: result}));
         return;
       } catch (requestError) {
-        await recordRequestHistory(activeRequest.id, buildHistoryPayload({request: outboundRequest, error: requestError}));
+        await recordRequestHistory(requestId, buildHistoryPayload({request: outboundRequest, error: requestError}));
         throw requestError;
       } finally {
-        if (result) await recordRequestHistory(activeRequest.id, buildHistoryPayload({request: outboundRequest, response: result}));
+        if (result) await recordRequestHistory(requestId, buildHistoryPayload({request: outboundRequest, response: result}));
       }
     } catch (error) {
-      setProxyError(error.message);
+      if (isCurrentExecution()) setProxyErrorsByRequestId((current) => ({...current, [requestId]: error.message}));
     } finally {
-      setSending(false);
+      if (isCurrentExecution()) setSendingByRequestId((current) => ({...current, [requestId]: false}));
     }
-  }, [activeEnvironment, bodyValidationError, editableRequest, requestBody, selectConfigTab]);
+  }, [activeEnvironment, activeRequest.id, bodyValidationError, editableRequest, requestBody, selectConfigTab]);
 
 
   const updateRequestDraft = useCallback((field, value) => {
@@ -1756,12 +1765,12 @@ export function App() {
       headers: editableRequest.headers || [],
       body_content: requestBody,
       body_raw_type: editableRequest.body_raw_type || 'application/json',
-      response_status: proxyResult?.status,
-      response_status_text: proxyResult?.statusText,
-      response_headers: proxyResult?.headers || {},
-      response_body: proxyResult?.body ?? '',
-      response_time_ms: proxyResult?.time,
-      response_size: proxyResult?.size,
+      response_status: activeProxyResult?.status,
+      response_status_text: activeProxyResult?.statusText,
+      response_headers: activeProxyResult?.headers || {},
+      response_body: activeProxyResult?.body ?? '',
+      response_time_ms: activeProxyResult?.time,
+      response_size: activeProxyResult?.size,
     };
 
     setSavingSnapshot(true);
@@ -1776,7 +1785,7 @@ export function App() {
     } finally {
       setSavingSnapshot(false);
     }
-  }, [activeRequest.id, activeRequest.name, editableRequest, proxyResult, requestBody]);
+  }, [activeProxyResult, activeRequest.id, activeRequest.name, editableRequest, requestBody]);
 
   const restoreSnapshot = useCallback((snapshot) => {
     if (!activeRequest.id) return;
@@ -1943,7 +1952,7 @@ export function App() {
             className="request-panel"
           >
             <RequestToolbar
-              sending={sending}
+              sending={activeSending}
               onSend={sendRequest}
               request={editableRequest}
               disabled={!editableRequest.url}
@@ -2138,7 +2147,7 @@ export function App() {
             onKeyDown={handleMainDividerKeyDown}
             onDoubleClick={handleMainDividerDoubleClick}
           />
-          <ResponseViewer response={proxyResult} loading={sending} error={requestLoadError || proxyError} />
+          <ResponseViewer response={activeProxyResult} loading={activeSending} error={requestLoadError || activeProxyError} />
         </section>
       </main>
 
@@ -2195,7 +2204,7 @@ export function App() {
           <button className="auth-close" type="button" onClick={() => setAuthOpen(false)} aria-label="Close authentication dialog">×</button>
         </div>
       )}
-      {proxyError && <div className="toast error" role="status">{proxyError}</div>}
+      {activeProxyError && <div className="toast error" role="status">{activeProxyError}</div>}
     </div>
   );
 }
