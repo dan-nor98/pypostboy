@@ -128,3 +128,22 @@ def test_runtime_status_reports_disabled_proxy_policy(client, user_a_headers, mo
     assert proxy["enabled"] is False
     assert proxy["mode"] == "disabled"
     assert "disabled by backend configuration" in proxy["diagnostics"][0]
+
+
+def test_runtime_status_exposes_build_metadata_and_diagnostics(client, user_a_headers, monkeypatch):
+    monkeypatch.setenv("POSTBOY_BUILD_VERSION", "9.8.7")
+    monkeypatch.setenv("POSTBOY_BUILD_COMMIT_SHA", "abcdef1234567890")
+    monkeypatch.setenv("POSTBOY_BUILD_DATE", "2026-07-23T12:34:56Z")
+    monkeypatch.setenv("POSTBOY_RELEASE_CHANNEL", "production")
+
+    data = client.get("/api/runtime/status", headers=user_a_headers).get_json()["data"]
+
+    assert data["version"] == "9.8.7"
+    assert data["versionMetadata"] == {
+        "version": "9.8.7",
+        "commitSha": "abcdef1234567890",
+        "buildDate": "2026-07-23T12:34:56Z",
+        "releaseChannel": "production",
+    }
+    assert data["build"] == data["versionMetadata"]
+    assert data["diagnosticPayload"]["build"] == data["versionMetadata"]

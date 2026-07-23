@@ -30,9 +30,24 @@ function cursorLabel(cursorPosition = null) {
   return `${label}Ln ${line}, Col ${column}`;
 }
 
-function versionLabel(version) {
-  if (!version) return 'v0.1.0';
-  return String(version).startsWith('v') ? version : `v${version}`;
+function versionLabel(versionMetadata = {}, fallbackVersion = '') {
+  const version = versionMetadata.version || fallbackVersion;
+  if (!version) return 'Version loading';
+  const base = String(version).startsWith('v') ? String(version) : `v${version}`;
+  const channel = String(versionMetadata.releaseChannel || 'development').toLowerCase();
+  if (channel === 'production' || channel === 'release' || channel === 'stable') return base;
+  const shortSha = versionMetadata.commitSha && versionMetadata.commitSha !== 'unknown' ? ` (${String(versionMetadata.commitSha).slice(0, 7)})` : '';
+  return `${base}-${channel}${shortSha}`;
+}
+
+function versionTitle(versionMetadata = {}, diagnostics = []) {
+  return [
+    `Version: ${versionMetadata.version || 'loading'}`,
+    `Channel: ${versionMetadata.releaseChannel || 'development'}`,
+    `Commit: ${versionMetadata.commitSha || 'unknown'}`,
+    `Build date: ${versionMetadata.buildDate || 'unknown'}`,
+    ...diagnostics,
+  ].join('; ');
 }
 
 function stageText(stage, stageLabel, stageClassification) {
@@ -54,7 +69,8 @@ export function StatusBar({
   ssl = {verify: true, label: 'Enabled'},
   encoding = 'UTF-8',
   cursorPosition = null,
-  version = 'v0.1.0',
+  version = '',
+  versionMetadata = {},
   diagnostics = [],
   retry = {},
 }) {
@@ -68,7 +84,7 @@ export function StatusBar({
       <span>{cursorLabel(cursorPosition)}</span>
       {diagnostics.length > 0 && <span>{diagnostics[0]}</span>}
       {retry.retryable && retry.nextRetryMs && <span>{`Retry in ${Math.round(retry.nextRetryMs / 1000)}s`}</span>}
-      <span>{versionLabel(version)}</span>
+      <span title={versionTitle(versionMetadata, diagnostics)}>{versionLabel(versionMetadata, version)}</span>
     </footer>
   );
 }

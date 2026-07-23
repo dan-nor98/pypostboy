@@ -41,10 +41,18 @@ async function request(path, options = {}) {
   return payload;
 }
 
+function normalizeRuntimeStatus(status = {}) {
+  const versionMetadata = {
+    ...(status.versionMetadata || status.build || {}),
+    version: status.version || status.versionMetadata?.version || status.build?.version || '',
+  };
+  return {...status, version: versionMetadata.version, versionMetadata};
+}
+
 export const apiClient = {
   listCollections: () => request('/api/collections'),
   getSyncStatus: () => request('/api/sync/status'),
-  getRuntimeStatus: () => request('/api/runtime/status'),
+  getRuntimeStatus: async () => normalizeRuntimeStatus(await request('/api/runtime/status')),
   retrySync: () => request('/api/sync/retry', {method: 'POST'}),
   getCollection: (id) => request(`/api/collections/${id}`),
   createCollection: (data) => request('/api/collections', {method: 'POST', body: JSON.stringify(data)}),

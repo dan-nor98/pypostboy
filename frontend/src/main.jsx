@@ -50,7 +50,8 @@ const DEFAULT_RUNTIME_STATUS = {
   proxy: {enabled: false, configured: false},
   ssl: {verify: true, label: 'Enabled'},
   encoding: 'UTF-8',
-  version: 'v0.1.0',
+  version: '',
+  versionMetadata: {version: '', commitSha: 'unknown', buildDate: 'unknown', releaseChannel: 'development'},
   diagnostics: [],
   retry: {intervalMs: RUNTIME_STATUS_REFRESH_MS, backoff: 2, maxIntervalMs: 120_000, retryable: false},
 };
@@ -1165,7 +1166,12 @@ export function App() {
       try {
         const status = await apiClient.getRuntimeStatus?.();
         if (cancelled) return;
-        const nextStatus = {...DEFAULT_RUNTIME_STATUS, ...status, connectionStatus: status?.connectionStatus || 'connected'};
+        const versionMetadata = {
+          ...DEFAULT_RUNTIME_STATUS.versionMetadata,
+          ...(status?.versionMetadata || status?.build || {}),
+          version: status?.version || status?.versionMetadata?.version || status?.build?.version || DEFAULT_RUNTIME_STATUS.versionMetadata.version,
+        };
+        const nextStatus = {...DEFAULT_RUNTIME_STATUS, ...status, versionMetadata, version: versionMetadata.version, connectionStatus: status?.connectionStatus || 'connected'};
         const retry = {...DEFAULT_RUNTIME_STATUS.retry, ...(status?.retry || {})};
         nextStatus.retry = retry;
         retryDelayMs = retry.intervalMs || RUNTIME_STATUS_REFRESH_MS;
@@ -2146,6 +2152,7 @@ export function App() {
         encoding={runtimeStatus.encoding}
         cursorPosition={activeEditorCursor}
         version={runtimeStatus.version}
+        versionMetadata={runtimeStatus.versionMetadata}
         diagnostics={runtimeStatus.diagnostics}
         retry={runtimeStatus.retry}
       />
