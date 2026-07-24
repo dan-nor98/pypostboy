@@ -26,11 +26,15 @@ function writeStoredExpandedIds(expandedIds) {
   localStorage.setItem(COLLECTION_EXPANSION_STORAGE_KEY, JSON.stringify([...expandedIds]));
 }
 
+function arrayOrEmpty(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function collectVisibleItems(nodes, expandedIds, depth = 0, parentId = null) {
-  return nodes.flatMap((node) => {
+  return arrayOrEmpty(nodes).flatMap((node) => {
     const nodeId = `collection-${node.id}`;
-    const requests = node.requests || [];
-    const children = node.children || [];
+    const requests = arrayOrEmpty(node.requests);
+    const children = arrayOrEmpty(node.children);
     const expanded = expandedIds.has(nodeId);
     const item = {type: 'collection', id: nodeId, rawId: node.id, node, depth, parentId, parentRawId: parentId?.replace('collection-', '') || null, expandable: true, expanded};
 
@@ -50,15 +54,15 @@ function collectVisibleItems(nodes, expandedIds, depth = 0, parentId = null) {
 
 
 function collectionIds(nodes) {
-  return nodes.flatMap((node) => [`collection-${node.id}`, ...collectionIds(node.children || [])]);
+  return arrayOrEmpty(nodes).flatMap((node) => [`collection-${node.id}`, ...collectionIds(node.children)]);
 }
 
 export const MAX_COLLECTION_NESTING_DEPTH = Infinity;
 
 function flattenCollectionOptions(nodes, depth = 0) {
-  return nodes.flatMap((node) => [
+  return arrayOrEmpty(nodes).flatMap((node) => [
     {id: node.id, name: `${'— '.repeat(depth)}${node.name}`, depth},
-    ...flattenCollectionOptions(node.children || [], depth + 1),
+    ...flattenCollectionOptions(node.children, depth + 1),
   ]);
 }
 
@@ -76,18 +80,19 @@ function collectionMatchesFilter(collection, normalizedFilter) {
 
 function filterCollections(collections, filterValue) {
   const normalizedFilter = normalizeFilter(filterValue);
-  if (!normalizedFilter) return collections;
+  if (!normalizedFilter) return arrayOrEmpty(collections);
 
-  return collections.flatMap((collection) => {
-    const matchingRequests = (collection.requests || []).filter((request) => requestMatchesFilter(request, normalizedFilter));
-    const matchingChildren = filterCollections(collection.children || [], filterValue);
+  return arrayOrEmpty(collections).flatMap((collection) => {
+    const requests = arrayOrEmpty(collection.requests);
+    const matchingRequests = requests.filter((request) => requestMatchesFilter(request, normalizedFilter));
+    const matchingChildren = filterCollections(collection.children, filterValue);
     const matched = collectionMatchesFilter(collection, normalizedFilter);
 
     if (!matched && matchingRequests.length === 0 && matchingChildren.length === 0) return [];
 
     return [{
       ...collection,
-      requests: matched ? [...(collection.requests || [])] : matchingRequests,
+      requests: matched ? [...requests] : matchingRequests,
       children: matchingChildren,
       filterMatched: matched,
       filterValue,

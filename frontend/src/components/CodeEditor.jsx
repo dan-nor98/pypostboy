@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting} from '@codemirror/language';
 import {json} from '@codemirror/lang-json';
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands';
@@ -11,7 +11,9 @@ import {variablePattern} from '../environment';
 
 function buildVariableDecorations(view) {
   const builder = new RangeSetBuilder();
-  for (const {from, to, text} of view.visibleRanges.map((range) => ({...range, text: view.state.doc.sliceString(range.from, range.to)}))) {
+  for (const range of view.visibleRanges) {
+    const {from, to} = range;
+    const text = view.state.doc.sliceString(from, to);
     variablePattern.lastIndex = 0;
     let match;
     while ((match = variablePattern.exec(text)) !== null) {

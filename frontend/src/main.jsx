@@ -147,10 +147,28 @@ function safeFilename(name) {
   return `${String(name || 'collection').trim().replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'collection'}.postman_collection.json`;
 }
 
+function arrayOrEmpty(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function objectEntriesToRows(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.entries(value).map(([key, value]) => ({enabled: true, key, value: value == null ? '' : String(value), description: ''}))
+    : [];
+}
+
+function collectionRequests(collection) {
+  return arrayOrEmpty(collection?.requests);
+}
+
+function collectionChildren(collection) {
+  return arrayOrEmpty(collection?.children);
+}
+
 function flattenRequests(collections) {
-  return collections.flatMap((collection) => [
-    ...(collection.requests || []),
-    ...flattenRequests(collection.children || []),
+  return arrayOrEmpty(collections).flatMap((collection) => [
+    ...collectionRequests(collection),
+    ...flattenRequests(collectionChildren(collection)),
   ]);
 }
 
@@ -160,28 +178,28 @@ function normalizeCollectionsPayload(payload) {
 }
 
 function updateRequestInCollections(collections, requestId, nextRequest) {
-  return collections.map((collection) => ({
+  return arrayOrEmpty(collections).map((collection) => ({
     ...collection,
-    requests: (collection.requests || []).map((request) => (request.id === requestId ? {...request, ...nextRequest} : request)),
-    children: updateRequestInCollections(collection.children || [], requestId, nextRequest),
+    requests: collectionRequests(collection).map((request) => (request.id === requestId ? {...request, ...nextRequest} : request)),
+    children: updateRequestInCollections(collectionChildren(collection), requestId, nextRequest),
   }));
 }
 
 function addRequestToCollection(collections, collectionId, request) {
-  return collections.map((collection) => {
+  return arrayOrEmpty(collections).map((collection) => {
     if (collection.id === collectionId) {
-      return {...collection, requests: [...(collection.requests || []), request]};
+      return {...collection, requests: [...collectionRequests(collection), request]};
     }
 
-    return {...collection, children: addRequestToCollection(collection.children || [], collectionId, request)};
+    return {...collection, children: addRequestToCollection(collectionChildren(collection), collectionId, request)};
   });
 }
 
 function replaceRequestInCollections(collections, requestId, nextRequest) {
-  return collections.map((collection) => ({
+  return arrayOrEmpty(collections).map((collection) => ({
     ...collection,
-    requests: (collection.requests || []).map((request) => (request.id === requestId ? nextRequest : request)),
-    children: replaceRequestInCollections(collection.children || [], requestId, nextRequest),
+    requests: collectionRequests(collection).map((request) => (request.id === requestId ? nextRequest : request)),
+    children: replaceRequestInCollections(collectionChildren(collection), requestId, nextRequest),
   }));
 }
 
@@ -201,23 +219,23 @@ function moveItemInArray(items, itemId, direction) {
 
 
 function siblingReorderToken(items) {
-  return items.map((item) => `${item.id}:${item.updated_at || ''}`).join('|');
+  return arrayOrEmpty(items).map((item) => `${item.id}:${item.updated_at || ''}`).join('|');
 }
 
 function collectionSiblings(collections, parentId) {
   if (parentId === null || parentId === undefined) return collections;
-  for (const collection of collections) {
-    if (collection.id === parentId) return collection.children || [];
-    const match = collectionSiblings(collection.children || [], parentId);
+  for (const collection of arrayOrEmpty(collections)) {
+    if (collection.id === parentId) return collectionChildren(collection);
+    const match = collectionSiblings(collectionChildren(collection), parentId);
     if (match) return match;
   }
   return null;
 }
 
 function requestSiblings(collections, collectionId) {
-  for (const collection of collections) {
-    if (collection.id === collectionId) return collection.requests || [];
-    const match = requestSiblings(collection.children || [], collectionId);
+  for (const collection of arrayOrEmpty(collections)) {
+    if (collection.id === collectionId) return collectionRequests(collection);
+    const match = requestSiblings(collectionChildren(collection), collectionId);
     if (match) return match;
   }
   return null;
@@ -226,38 +244,38 @@ function requestSiblings(collections, collectionId) {
 function reorderCollectionSiblings(collections, parentId, collectionId, direction) {
   if (!parentId) return moveItemInArray(collections, collectionId, direction);
 
-  return collections.map((collection) => {
+  return arrayOrEmpty(collections).map((collection) => {
     if (collection.id === parentId) {
-      return {...collection, children: moveItemInArray(collection.children || [], collectionId, direction)};
+      return {...collection, children: moveItemInArray(collectionChildren(collection), collectionId, direction)};
     }
 
-    return {...collection, children: reorderCollectionSiblings(collection.children || [], parentId, collectionId, direction)};
+    return {...collection, children: reorderCollectionSiblings(collectionChildren(collection), parentId, collectionId, direction)};
   });
 }
 
 function reorderRequestsInCollection(collections, collectionId, requestId, direction) {
-  return collections.map((collection) => {
+  return arrayOrEmpty(collections).map((collection) => {
     if (collection.id === collectionId) {
-      return {...collection, requests: moveItemInArray(collection.requests || [], requestId, direction)};
+      return {...collection, requests: moveItemInArray(collectionRequests(collection), requestId, direction)};
     }
 
-    return {...collection, children: reorderRequestsInCollection(collection.children || [], collectionId, requestId, direction)};
+    return {...collection, children: reorderRequestsInCollection(collectionChildren(collection), collectionId, requestId, direction)};
   });
 }
 
 function collectionSiblingIds(collections, parentId) {
-  const siblings = parentId ? findCollectionById(collections, parentId)?.children || [] : collections;
+  const siblings = parentId ? collectionChildren(findCollectionById(collections, parentId)) : arrayOrEmpty(collections);
   return siblings.map((collection) => collection.id);
 }
 
 function requestSiblingIds(collections, collectionId) {
-  return (findCollectionById(collections, collectionId)?.requests || []).map((request) => request.id);
+  return (collectionRequests(findCollectionById(collections, collectionId))).map((request) => request.id);
 }
 
 function findCollectionById(collections, collectionId) {
-  for (const collection of collections) {
+  for (const collection of arrayOrEmpty(collections)) {
     if (collection.id === collectionId) return collection;
-    const childMatch = findCollectionById(collection.children || [], collectionId);
+    const childMatch = findCollectionById(collectionChildren(collection), collectionId);
     if (childMatch) return childMatch;
   }
   return null;
@@ -265,8 +283,8 @@ function findCollectionById(collections, collectionId) {
 
 function firstRequestInCollection(collection) {
   if (!collection) return null;
-  if (collection.requests?.[0]) return collection.requests[0];
-  for (const child of collection.children || []) {
+  if (collectionRequests(collection)[0]) return collectionRequests(collection)[0];
+  for (const child of collectionChildren(collection)) {
     const request = firstRequestInCollection(child);
     if (request) return request;
   }
@@ -294,7 +312,7 @@ function objectToGridRow(row = {}) {
 }
 
 function normalizeQueryParams(rows = []) {
-  return (rows || []).map(rowArrayToObject).filter((row) => row.key || row.value || row.description).map((row) => ({
+  return (Array.isArray(rows) ? rows : objectEntriesToRows(rows)).map(rowArrayToObject).filter((row) => row.key || row.value || row.description).map((row) => ({
     enabled: row.enabled !== false,
     key: row.key || '',
     value: row.value || '',
@@ -417,11 +435,11 @@ function updateUrlQueryParams(url, rows) {
 }
 
 function headersToGridRows(headers = []) {
-  return headers.map((header) => objectToGridRow(rowArrayToObject(header)));
+  return headersArrayToRows(headers).map((header) => objectToGridRow(rowArrayToObject(header)));
 }
 
 function gridRowsToHeaders(rows = []) {
-  return rows.map(rowArrayToObject).filter((row) => row.key).map((row) => ({
+  return arrayOrEmpty(rows).map(rowArrayToObject).filter((row) => row.key).map((row) => ({
     enabled: row.enabled !== false,
     key: row.key,
     value: row.value,
@@ -575,7 +593,7 @@ function buildHistoryPayload({request, response, error}) {
 }
 
 export function headersArrayToObject(headers = []) {
-  return headers.reduce((result, header) => {
+  return headersArrayToRows(headers).reduce((result, header) => {
     if (Array.isArray(header)) {
       const [enabled, key, value] = header.length > 2 ? header : ['✓', header[0], header[1]];
       if (enabled && key) result[key] = value;
@@ -587,7 +605,8 @@ export function headersArrayToObject(headers = []) {
 }
 
 export function headersArrayToRows(headers = []) {
-  return headers.flatMap((header) => {
+  const headerRows = Array.isArray(headers) ? headers : objectEntriesToRows(headers);
+  return headerRows.flatMap((header) => {
     if (Array.isArray(header)) {
       const [enabled, key, value] = header.length > 2 ? header : [true, header[0], header[1]];
       return [{enabled: enabled !== false && enabled !== '', key: key || '', value: value || ''}];
