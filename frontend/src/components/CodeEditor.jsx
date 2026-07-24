@@ -104,6 +104,23 @@ export function CodeEditor({
       padding: '6px',
     },
     '.cm-search input': {backgroundColor: 'var(--color-bg-input)', color: 'var(--color-text-primary)'},
+    '.cm-search button, .cm-button': {
+      backgroundColor: 'var(--color-bg-input)',
+      border: '1px solid var(--color-border-default)',
+      borderRadius: 'var(--radius-sm)',
+      color: 'var(--color-text-primary)',
+      font: 'inherit',
+    },
+    '.cm-search button:hover, .cm-button:hover': {
+      backgroundColor: 'var(--color-bg-hover)',
+      color: 'var(--color-text-primary)',
+    },
+    '.cm-search button:active, .cm-button:active': {backgroundColor: 'var(--color-bg-active)'},
+    '.cm-search button:disabled, .cm-button:disabled': {
+      color: 'var(--color-text-disabled)',
+      cursor: 'not-allowed',
+      opacity: '.8',
+    },
     '.cm-matchingBracket': {backgroundColor: 'var(--color-accent-muted)', outline: '1px solid var(--color-accent-border)'},
     '.cm-env-variable-token': {backgroundColor: 'var(--color-accent-muted)', color: 'var(--color-accent)', borderRadius: '3px', padding: '0 1px'},
   }), []);
