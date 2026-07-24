@@ -2514,11 +2514,15 @@ describe('App shell', () => {
     const bodyTab = within(screen.getByRole('tablist', {name: /request configuration tabs/i})).getByRole('tab', {name: 'Body'});
 
     expect(paramsTab).toHaveAttribute('aria-selected', 'true');
-    expect(document.getElementById('request-config-panel-params')).not.toHaveAttribute('hidden');
+    const paramsPanel = document.getElementById('request-config-panel-params');
+    expect(paramsPanel).not.toHaveAttribute('hidden');
+    expect(getComputedStyle(paramsPanel).display).toBe('grid');
     expect(screen.queryByRole('textbox', {name: /request json body editor/i})).not.toBeInTheDocument();
 
     await user.click(bodyTab);
 
+    expect(paramsPanel).toHaveAttribute('hidden');
+    expect(getComputedStyle(paramsPanel).display).toBe('none');
     expect(bodyTab).toHaveAttribute('aria-selected', 'true');
     expect(bodyTab).toHaveAttribute('tabIndex', '0');
     expect(paramsTab).toHaveAttribute('aria-selected', 'false');
